@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#22C55E" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="KazaJob" />
+  <meta name="description" content="Plateforme de placement rapide sécurisé — Libreville, Gabon" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <title>KazaJob</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { 
+      height: 100%; width: 100%; overflow: hidden;
+      font-family: 'DM Sans', 'Nunito', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      background: #F7F6F3;
+    }
+    body { 
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+    }
+    input, textarea, button { font-family: inherit; }
+    input:focus, textarea:focus { outline: none; border-color: #22C55E !important; }
+    ::-webkit-scrollbar { width: 0; background: transparent; }
+
+    /* Splash screen */
+    #splash {
+      position: fixed; inset: 0; z-index: 9999;
+      background: linear-gradient(135deg, #22C55E, #15803D);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: opacity 0.4s ease;
+    }
+    #splash.hide { opacity: 0; pointer-events: none; }
+    #splash h1 { font-size: 42px; font-weight: 800; color: #fff; letter-spacing: -1px; }
+    #splash h1 span:first-child { color: #fff; }
+    #splash h1 span:last-child { color: #bbf7d0; }
+    #splash p { color: rgba(255,255,255,0.8); font-size: 14px; margin-top: 8px; font-weight: 500; }
+    .splash-dot { 
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%; 
+      background: rgba(255,255,255,0.6); margin: 0 4px; 
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .splash-dot:nth-child(2) { animation-delay: 0.2s; }
+    .splash-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse { 0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
+
+    /* Install banner */
+    .install-banner {
+      position: fixed; bottom: 80px; left: 16px; right: 16px; z-index: 100;
+      background: #fff; border-radius: 20px; padding: 16px 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      display: flex; align-items: center; gap: 14;
+      animation: slideUp 0.4s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  </style>
+</head>
+<body>
+
+<div id="splash">
+  <h1><span>Kaza</span><span>Job</span></h1>
+  <p>Placement rapide sécurisé</p>
+  <div style="margin-top: 24px;">
+    <span class="splash-dot"></span>
+    <span class="splash-dot"></span>
+    <span class="splash-dot"></span>
+  </div>
+</div>
+
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
+<script>
+// ====== PWA Registration ======
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+
+// ====== Install prompt handling ======
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  window.dispatchEvent(new Event('kazajob-installable'));
+});
+
+// ====== Hide splash ======
+setTimeout(() => {
+  const splash = document.getElementById('splash');
+  if (splash) { splash.classList.add('hide'); setTimeout(() => splash.remove(), 500); }
+}, 1200);
+
+// ====== React aliases ======
+const { useState, useEffect, useRef, useCallback, createContext, useContext, createElement: h, Fragment } = React;
+
+// ====== STATE MANAGEMENT ======
+const AppContext = createContext();
+
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+function generateCode() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function loadState() {
+  try { 
+    const s = localStorage.getItem('kazajob_state');
+    return s ? JSON.parse(s) : null;
+  } catch { return null; }
+}
+function saveState(state) {
+  try { localStorage.setItem('kazajob_state', JSON.stringify(state)); } catch {}
+}
+
+function getInitialState() {
+  return loadState() || {
+    employers: [], workers: [], missions: [], applications: [],
+    missionCodes: {}, payments: [], ratings: [], incidents: [],
+    eventLog: [], currentEmployer: null, currentWorker: null,
+  };
+}
+
+function useAppState() {
+  const [state, setState] = useState(getInitialState);
+
+  const dispatch = useCallback((action) => {
+    setState(prev => {
+      let next = { ...prev };
+      switch (action.type) {
+        case "REGISTER_EMPLOYER": {
+          const emp = { id: generateId(), ...action.payload, avgRating: 0, ratingsCount: 0, status: "verified", createdAt: new Date().toISOString() };
+          next.employers = [...prev.employers, emp];
+          next.currentEmployer = emp;
+          break;
+        }
+        case "REGISTER_WORKER": {
+          const w = { id: generateId(), ...action.payload, avgRating: 0, ratingsCount: 0, missionsDone: 0, createdAt: new Date().toISOString() };
+          next.workers = [...prev.workers, w];
+          next.currentWorker = w;
+          break;
+        }
+        case "SET_EMPLOYER": next.currentEmployer = action.payload; break;
+        case "SET_WORKER": next.currentWorker = action.payload; break;
+        case "PUBLISH_MISSION": {
+          const codeStart = generateCode();
+          const codeEnd = generateCode();
+          const mission = {
+            id: generateId(), employerId: prev.currentEmployer?.id,
+            employerName: prev.currentEmployer?.companyName || "Entreprise",
+            employerRating: prev.currentEmployer?.avgRating || 0,
+            ...action.payload, status: "published", publishedAt: new Date().toISOString(),
+            startedAt: null, completedAt: null,
+          };
+          next.missions = [...prev.missions, mission];
+          next.missionCodes = { ...prev.missionCodes, [mission.id]: { codeStart, codeEnd, workers: {} } };
+          next.eventLog = [...prev.eventLog, { id: generateId(), missionId: mission.id, type: "mission_published", payload: { title: mission.title }, createdAt: new Date().toISOString() }];
+          break;
+        }
+        case "APPLY_MISSION": {
+          const app = { id: generateId(), missionId: action.payload.missionId, workerId: prev.currentWorker?.id, workerName: prev.currentWorker?.fullName || "Travailleur", workerSkills: prev.currentWorker?.skills || [], workerRating: prev.currentWorker?.avgRating || 0, workerMissions: prev.currentWorker?.missionsDone || 0, status: "pending", appliedAt: new Date().toISOString() };
+          next.applications = [...prev.applications, app];
+          next.eventLog = [...prev.eventLog, { id: generateId(), missionId: action.payload.missionId, type: "application_submitted", payload: { workerName: app.workerName }, createdAt: new Date().toISOString() }];
+          break;
+        }
+        case "SELECT_WORKER": {
+          const { applicationId, missionId, workerId } = action.payload;
+          next.applications = prev.applications.map(a => a.id === applicationId ? { ...a, status: "selected", selectedAt: new Date().toISOString() } : (a.missionId === missionId && a.id !== applicationId ? { ...a, status: "rejected" } : a));
+          const mission = prev.missions.find(m => m.id === missionId);
+          const payment = { id: generateId(), missionId, employerId: prev.currentEmployer?.id, workerId, amountFcfa: parseInt(mission?.payFcfa || 0), commissionFcfa: Math.round(parseInt(mission?.payFcfa || 0) * 0.15), status: "preauthorized", preauthAt: new Date().toISOString(), releasedAt: null };
+          next.payments = [...prev.payments, payment];
+          next.missions = prev.missions.map(m => m.id === missionId ? { ...m, status: "worker_selected", selectedWorkerId: workerId } : m);
+          const codes = prev.missionCodes[missionId];
+          if (codes) { next.missionCodes = { ...prev.missionCodes, [missionId]: { ...codes, workers: { ...codes.workers, [workerId]: { startValidated: false, endValidated: false } } } }; }
+          next.eventLog = [...prev.eventLog, { id: generateId(), missionId, type: "worker_selected", payload: { workerId }, createdAt: new Date().toISOString() }];
+          break;
+        }
+        case "VALIDATE_CODE_START": {
+          const { missionId, workerId, code } = action.payload;
+          const codes = prev.missionCodes[missionId];
+          if (codes && code === codes.codeStart) {
+            next.missionCodes = { ...prev.missionCodes, [missionId]: { ...codes, workers: { ...codes.workers, [workerId]: { ...codes.workers[workerId], startValidated: true, startTime: new Date().toISOString() } } } };
+            next.missions = prev.missions.map(m => m.id === missionId ? { ...m, status: "in_progress", startedAt: new Date().toISOString() } : m);
+            next.eventLog = [...prev.eventLog, { id: generateId(), missionId, type: "code_start_validated", payload: { workerId, time: new Date().toISOString() }, createdAt: new Date().toISOString() }];
+            saveState(next);
+            return next;
+          }
+          return prev;
+        }
+        case "VALIDATE_CODE_END": {
+          const { missionId, workerId, code } = action.payload;
+          const codes = prev.missionCodes[missionId];
+          if (codes && code === codes.codeEnd) {
+            next.missionCodes = { ...prev.missionCodes, [missionId]: { ...codes, workers: { ...codes.workers, [workerId]: { ...codes.workers[workerId], endValidated: true, endTime: new Date().toISOString() } } } };
+            next.missions = prev.missions.map(m => m.id === missionId ? { ...m, status: "completed", completedAt: new Date().toISOString() } : m);
+            const hasIncident = prev.incidents.some(i => i.missionId === missionId && i.status === "open");
+            if (!hasIncident) { next.payments = prev.payments.map(p => p.missionId === missionId ? { ...p, status: "released", releasedAt: new Date().toISOString() } : p); }
+            next.workers = prev.workers.map(w => w.id === workerId ? { ...w, missionsDone: (w.missionsDone || 0) + 1 } : w);
+            if (next.currentWorker?.id === workerId) next.currentWorker = { ...next.currentWorker, missionsDone: (next.currentWorker.missionsDone || 0) + 1 };
+            next.eventLog = [...prev.eventLog, { id: generateId(), missionId, type: "mission_completed", payload: { workerId }, createdAt: new Date().toISOString() }];
+            saveState(next);
+            return next;
+          }
+          return prev;
+        }
+        case "SUBMIT_RATING": {
+          const r = { id: generateId(), ...action.payload, createdAt: new Date().toISOString() };
+          next.ratings = [...prev.ratings, r];
+          if (action.payload.toRole === "employer") {
+            const empRatings = [...prev.ratings.filter(x => x.toUser === action.payload.toUser && x.toRole === "employer"), r];
+            const avg = empRatings.reduce((s, x) => s + x.moodScore, 0) / empRatings.length;
+            next.employers = prev.employers.map(e => e.id === action.payload.toUser ? { ...e, avgRating: Math.round(avg * 10) / 10, ratingsCount: empRatings.length } : e);
+          } else {
+            const wRatings = [...prev.ratings.filter(x => x.toUser === action.payload.toUser && x.toRole === "worker"), r];
+            const avg = wRatings.reduce((s, x) => s + x.moodScore, 0) / wRatings.length;
+            next.workers = prev.workers.map(w => w.id === action.payload.toUser ? { ...w, avgRating: Math.round(avg * 10) / 10, ratingsCount: wRatings.length } : w);
+          }
+          break;
+        }
+        case "REPORT_INCIDENT": {
+          const inc = { id: generateId(), ...action.payload, status: "open", resolution: null, createdAt: new Date().toISOString() };
+          next.incidents = [...prev.incidents, inc];
+          next.payments = prev.payments.map(p => p.missionId === action.payload.missionId ? { ...p, status: "blocked" } : p);
+          next.eventLog = [...prev.eventLog, { id: generateId(), missionId: action.payload.missionId, type: "incident_reported", payload: { type: action.payload.incidentType }, createdAt: new Date().toISOString() }];
+          break;
+        }
+        case "RESOLVE_INCIDENT": {
+          const { incidentId, resolution, paymentAction } = action.payload;
+          next.incidents = prev.incidents.map(i => i.id === incidentId ? { ...i, status: "resolved", resolution, resolvedAt: new Date().toISOString() } : i);
+          const inc = prev.incidents.find(i => i.id === incidentId);
+          if (inc && paymentAction === "release") { next.payments = prev.payments.map(p => p.missionId === inc.missionId ? { ...p, status: "released", releasedAt: new Date().toISOString() } : p); }
+          else if (inc && paymentAction === "cancel") { next.payments = prev.payments.map(p => p.missionId === inc.missionId ? { ...p, status: "cancelled" } : p); }
+          break;
+        }
+        case "RESET": return (() => { localStorage.removeItem('kazajob_state'); return getInitialState(); })();
+        default: return prev;
+      }
+      saveState(next);
+      return next;
+    });
+  }, []);
+
+  return { state, dispatch };
+}
+
+// ====== DESIGN SYSTEM ======
+const C = {
+  bg: "#F7F6F3", white: "#FFFFFF", green: "#22C55E", greenDark: "#15803D", greenLight: "#F0FDF4",
+  blue: "#3B82F6", blueDark: "#1D4ED8", blueLight: "#EFF6FF",
+  orange: "#F59E0B", orangeLight: "#FFF7ED",
+  red: "#EF4444", redLight: "#FEF2F2",
+  text: "#2D2D2D", textSec: "#8C8C8C", textTri: "#B5B5B5", border: "#ECECEC",
+  pinkLight: "#FDF2F8", pink: "#EC4899",
+};
+const CATEGORIES = ["Manutention", "Logistique", "Inventaire", "\u00C9v\u00E9nementiel", "H\u00F4tellerie", "Accueil"];
+const CAT_EMOJIS = { "Manutention": "\uD83D\uDCE6", "Logistique": "\uD83D\uDE9B", "Inventaire": "\uD83D\uDCCB", "\u00C9v\u00E9nementiel": "\uD83C\uDFAA", "H\u00F4tellerie": "\uD83C\uDFE8", "Accueil": "\uD83D\uDC4B" };
+const RISK_LEVELS = ["Faible", "Moyen", "\u00C9lev\u00E9"];
+const EQUIP_OPTIONS = ["Casque", "Gants", "Gilet", "Lunettes", "Chaussures de s\u00E9curit\u00E9", "Tablier", "Badge", "Polo"];
+
+// ====== UI COMPONENTS ======
+function Card({ children, style, onClick }) {
+  return h('div', { onClick, style: { background: C.white, borderRadius: 20, padding: 16, cursor: onClick ? "pointer" : "default", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", transition: "all 0.15s", ...style } }, children);
+}
+function Badge({ text, color, bg }) {
+  return h('span', { style: { display: "inline-block", padding: "4px 10px", borderRadius: 50, fontSize: 11, fontWeight: 600, color, background: bg, letterSpacing: 0.5 } }, text);
+}
+function StatCard({ emoji, value, label }) {
+  return h('div', { style: { background: C.white, borderRadius: 16, padding: "14px 16px", flex: 1, textAlign: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" } },
+    h('div', { style: { fontSize: 24 } }, emoji),
+    h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text, marginTop: 2 } }, value),
+    h('div', { style: { fontSize: 10, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1, marginTop: 2 } }, label)
+  );
+}
+function BackBtn({ onClick }) {
+  return h('button', { onClick, style: { background: "none", border: "none", color: C.textSec, fontSize: 14, fontWeight: 600, cursor: "pointer", padding: "12px 16px" } }, "\u2190 Retour");
+}
+function Btn({ children, color, onClick, disabled, full, outline, style: s }) {
+  color = color || C.green; full = full !== false;
+  return h('button', { onClick: disabled ? undefined : onClick, style: { width: full ? "100%" : "auto", padding: "14px 20px", borderRadius: 26, background: outline ? "transparent" : (disabled ? C.border : color), color: outline ? C.textSec : (disabled ? C.textTri : "#fff"), border: outline ? "1.5px solid " + C.border : "none", fontSize: 15, fontWeight: 700, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.6 : 1, ...s } }, children);
+}
+function Input({ label, emoji, value, onChange, placeholder, multiline, type }) {
+  type = type || "text";
+  const common = { width: "100%", padding: "12px 14px", borderRadius: 14, border: "1.5px solid " + C.border, fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", background: C.white };
+  return h('div', { style: { marginBottom: 14 } },
+    h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 6 } }, emoji + " " + label),
+    multiline
+      ? h('textarea', { value, onChange: e => onChange(e.target.value), placeholder, rows: 3, style: { ...common, resize: "none" } })
+      : h('input', { type, value, onChange: e => onChange(e.target.value), placeholder, style: common })
+  );
+}
+function EmptyState({ emoji, title, sub }) {
+  return h('div', { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" } },
+    h('div', { style: { fontSize: 44, marginBottom: 10 } }, emoji),
+    h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 } }, title),
+    h('div', { style: { fontSize: 13, color: C.textSec, lineHeight: 1.5 } }, sub)
+  );
+}
+function Stars({ rating, size }) {
+  size = size || 13;
+  if (!rating) return h('span', { style: { fontSize: 12, color: C.textTri } }, "Nouveau");
+  const r = Math.round(rating * 10) / 10;
+  return h('span', { style: { color: C.orange, fontSize: size } },
+    "\u2605".repeat(Math.floor(r)), "\u2606".repeat(5 - Math.floor(r)),
+    h('span', { style: { color: C.textSec, fontSize: size - 1, marginLeft: 3 } }, r)
+  );
+}
+function StatusBadge({ status }) {
+  const map = { published: { t: "Publi\u00E9e", c: C.blueDark, b: C.blueLight }, worker_selected: { t: "Assign\u00E9e", c: "#92400E", b: C.orangeLight }, in_progress: { t: "En cours", c: C.greenDark, b: C.greenLight }, completed: { t: "Termin\u00E9e", c: C.greenDark, b: C.greenLight }, cancelled: { t: "Annul\u00E9e", c: "#991B1B", b: C.redLight } };
+  const s = map[status] || { t: status, c: C.textSec, b: "#f3f4f6" };
+  return h(Badge, { text: s.t, color: s.c, bg: s.b });
+}
+function RiskBadge({ level }) {
+  const m = { "Faible": { c: C.greenDark, b: "#DCFCE7" }, "Moyen": { c: "#92400E", b: "#FEF3C7" }, "\u00C9lev\u00E9": { c: "#991B1B", b: "#FEE2E2" } };
+  return h(Badge, { text: level, color: m[level]?.c || C.textSec, bg: m[level]?.b || "#f3f4f6" });
+}
+function BottomNav({ items, active, onNav, accent }) {
+  return h('div', { style: { height: 64, background: C.white, display: "flex", borderTop: "1px solid " + C.border, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom)" } },
+    items.map((it, i) => {
+      const act = active === it.id;
+      return h('button', { key: i, onClick: () => onNav(it.id), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, background: "none", border: "none", cursor: "pointer", position: "relative" } },
+        h('span', { style: { fontSize: 22 } }, it.emoji),
+        h('span', { style: { fontSize: 10, fontWeight: 600, color: act ? accent : C.textSec } }, it.label),
+        act && h('div', { style: { position: "absolute", bottom: 8, width: 4, height: 4, borderRadius: "50%", background: accent } })
+      );
+    })
+  );
+}
+
+const fmt = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+// ====== WORKER SCREENS ======
+function WHome({ nav }) {
+  const { state, dispatch } = useContext(AppContext);
+  const w = state.currentWorker;
+  const available = state.missions.filter(m => m.status === "published");
+  const myActive = state.missions.find(m => m.selectedWorkerId === w?.id && ["worker_selected", "in_progress"].includes(m.status));
+  const earned = state.payments.filter(p => p.workerId === w?.id && p.status === "released").reduce((s, p) => s + p.amountFcfa, 0);
+
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 12px", display: "flex", alignItems: "center", gap: 12 } },
+      h('div', { style: { width: 44, height: 44, borderRadius: "50%", background: "#E8F5E9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 } }, "\uD83D\uDC77\uD83C\uDFFE"),
+      h('div', null,
+        h('div', { style: { fontSize: 13, color: C.textSec } }, "Bonjour"),
+        h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: -0.5 } }, w?.fullName || "Travailleur")
+      )
+    ),
+    h('div', { style: { display: "flex", gap: 10, marginBottom: 14 } },
+      h(StatCard, { emoji: "\uD83D\uDCB0", value: fmt(earned), label: "FCFA gagn\u00E9s" }),
+      h(StatCard, { emoji: "\u2705", value: w?.missionsDone || 0, label: "Missions" })
+    ),
+    myActive && h(Card, { onClick: () => nav("w_active_mission", { missionId: myActive.id }), style: { background: "linear-gradient(135deg, " + C.green + ", " + C.greenDark + ")", marginBottom: 14, cursor: "pointer" } },
+      h('div', { style: { display: "flex", alignItems: "center", justifyContent: "space-between" } },
+        h('div', null,
+          h('div', { style: { fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.8)", textTransform: "uppercase", letterSpacing: 1 } }, "Mission " + (myActive.status === "in_progress" ? "en cours" : "assign\u00E9e")),
+          h('div', { style: { fontSize: 15, fontWeight: 700, color: "#fff", marginTop: 4 } }, (CAT_EMOJIS[myActive.category] || "\uD83D\uDCCB") + " " + myActive.title)
+        ),
+        h('span', { style: { color: "#fff", fontSize: 24 } }, "\u2192")
+      )
+    ),
+    h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 } }, "Missions disponibles (" + available.length + ")"),
+    available.length === 0
+      ? h(EmptyState, { emoji: "\uD83D\uDCED", title: "Aucune mission disponible", sub: "Les nouvelles missions appara\u00EEtront ici." })
+      : h('div', { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          available.map(m => {
+            const alreadyApplied = state.applications.some(a => a.missionId === m.id && a.workerId === w?.id);
+            return h(Card, { key: m.id, onClick: () => nav("w_mission_detail", { missionId: m.id }) },
+              h('div', { style: { display: "flex", gap: 12, alignItems: "flex-start" } },
+                h('div', { style: { width: 44, height: 44, borderRadius: 14, background: "#FFF8E1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 } }, CAT_EMOJIS[m.category] || "\uD83D\uDCCB"),
+                h('div', { style: { flex: 1 } },
+                  h('div', { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+                    h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, m.title),
+                    h(RiskBadge, { level: m.riskLevel })
+                  ),
+                  h('div', { style: { fontSize: 12, color: C.textSec, marginTop: 2 } }, m.employerName + " \u00B7 \uD83D\uDCCD " + (m.location?.slice(0, 25) || "")),
+                  h('div', { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 } },
+                    h('div', { style: { fontSize: 16, fontWeight: 800, color: C.green } }, fmt(m.payFcfa) + " FCFA"),
+                    alreadyApplied && h(Badge, { text: "\u2713 Candidat\u00E9", color: C.greenDark, bg: C.greenLight })
+                  )
+                )
+              )
+            );
+          })
+        )
+  );
+}
+
+function WMissionDetail({ nav, params }) {
+  const { state, dispatch } = useContext(AppContext);
+  const m = state.missions.find(x => x.id === params?.missionId);
+  const w = state.currentWorker;
+  const alreadyApplied = state.applications.some(a => a.missionId === m?.id && a.workerId === w?.id);
+  if (!m) return h('div', null, h(BackBtn, { onClick: () => nav("w_home") }), h(EmptyState, { emoji: "\u2753", title: "Mission introuvable", sub: "" }));
+
+  return h('div', { style: { flex: 1 } },
+    h(BackBtn, { onClick: () => nav("w_home") }),
+    h('div', { style: { padding: "0 16px 100px" } },
+      h('div', { style: { display: "flex", gap: 8, marginBottom: 12 } }, h(RiskBadge, { level: m.riskLevel }), h(Badge, { text: m.dateTime, color: C.blueDark, bg: C.blueLight })),
+      h('div', { style: { fontSize: 22, fontWeight: 800, color: C.text } }, (CAT_EMOJIS[m.category] || "") + " " + m.title),
+      h('div', { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 6 } }, h('span', { style: { fontSize: 14, color: C.textSec } }, m.employerName), h(Stars, { rating: m.employerRating })),
+      h('div', { style: { background: C.greenLight, borderRadius: 16, padding: "18px 20px", textAlign: "center", margin: "16px 0" } },
+        h('div', { style: { fontSize: 28, fontWeight: 800, color: C.greenDark } }, fmt(m.payFcfa) + " FCFA"),
+        h('div', { style: { fontSize: 12, color: C.green, fontWeight: 600 } }, "Paiement sous 24h")
+      ),
+      [{ i: "\uD83D\uDCCD", l: "Lieu", v: m.location }, { i: "\uD83D\uDD50", l: "Horaires", v: m.dateTime + " \u00B7 " + m.duration }, { i: "\uD83D\uDC64", l: "Responsable", v: m.responsible + " \u2014 " + m.responsiblePhone }].map((f, i) =>
+        h('div', { key: i, style: { display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 12 } },
+          h('span', { style: { fontSize: 18 } }, f.i),
+          h('div', null,
+            h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1 } }, f.l),
+            h('div', { style: { fontSize: 14, fontWeight: 600, color: C.text } }, f.v)
+          )
+        )
+      ),
+      h('div', { style: { marginTop: 8 } },
+        h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 } }, "T\u00E2ches attendues"),
+        h(Card, null, h('div', { style: { fontSize: 13, color: C.text, lineHeight: 1.6 } }, m.tasks))
+      ),
+      m.equipProvided?.length > 0 && h('div', { style: { marginTop: 14 } },
+        h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 } }, "\u00C9quipements fournis"),
+        h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, m.equipProvided.map((e, i) => h(Badge, { key: i, text: "\u2713 " + e, color: C.greenDark, bg: "#DCFCE7" })))
+      ),
+      m.equipBring?.length > 0 && h('div', { style: { marginTop: 12, background: C.orangeLight, borderRadius: 14, padding: "12px 14px", border: "1px solid #FED7AA" } },
+        h('div', { style: { fontSize: 12, fontWeight: 700, color: "#92400E" } }, "\u26A0\uFE0F \u00C0 apporter vous-m\u00EAme"),
+        h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 } }, m.equipBring.map((e, i) => h(Badge, { key: i, text: e, color: "#92400E", bg: "#FEF3C7" })))
+      )
+    ),
+    h('div', { style: { position: "sticky", bottom: 0, padding: "12px 16px", background: C.bg } },
+      alreadyApplied
+        ? h(Btn, { color: "#ccc", disabled: true }, "\u2713 Candidature envoy\u00E9e")
+        : h(Btn, { onClick: () => dispatch({ type: "APPLY_MISSION", payload: { missionId: m.id } }) }, "Candidater \uD83D\uDE80")
+    )
+  );
+}
+
+function WActiveMission({ nav, params }) {
+  const { state, dispatch } = useContext(AppContext);
+  const m = state.missions.find(x => x.id === params?.missionId);
+  const w = state.currentWorker;
+  const codes = state.missionCodes[m?.id];
+  const wCodes = codes?.workers?.[w?.id];
+  const [codeInput, setCodeInput] = useState(["", "", "", ""]);
+  const [codeMode, setCodeMode] = useState(null);
+  const [error, setError] = useState("");
+  const refs = [useRef(), useRef(), useRef(), useRef()];
+  const [seconds, setSeconds] = useState(0);
+
+  useEffect(() => {
+    if (m?.status === "in_progress" && m?.startedAt) {
+      const start = new Date(m.startedAt).getTime();
+      const tick = () => setSeconds(Math.floor((Date.now() - start) / 1000));
+      tick();
+      const t = setInterval(tick, 1000);
+      return () => clearInterval(t);
+    }
+  }, [m?.status, m?.startedAt]);
+
+  if (!m) return h('div', null, h(BackBtn, { onClick: () => nav("w_home") }), h(EmptyState, { emoji: "\u2753", title: "Mission introuvable", sub: "" }));
+
+  const handleCodeInput = (i, v) => {
+    if (v.length > 1) return;
+    const next = [...codeInput]; next[i] = v; setCodeInput(next);
+    if (v && i < 3) refs[i + 1].current?.focus();
+  };
+
+  const submitCode = (type) => {
+    const code = codeInput.join("");
+    if (code.length !== 4) return;
+    if (type === "start") dispatch({ type: "VALIDATE_CODE_START", payload: { missionId: m.id, workerId: w.id, code } });
+    else dispatch({ type: "VALIDATE_CODE_END", payload: { missionId: m.id, workerId: w.id, code } });
+    setTimeout(() => {
+      if (codeInput.join("") !== (type === "start" ? codes?.codeStart : codes?.codeEnd)) setError("Code incorrect");
+      else setError("");
+    }, 100);
+    setCodeInput(["", "", "", ""]);
+    setCodeMode(null);
+  };
+
+  const hh = String(Math.floor(seconds / 3600)).padStart(2, "0");
+  const mn = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+  const ss = String(seconds % 60).padStart(2, "0");
+
+  if (codeMode) {
+    const isFull = codeInput.every(c => c !== "");
+    return h('div', { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
+      h('div', { style: { fontSize: 56, marginBottom: 16 } }, "\uD83D\uDD10"),
+      h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text, textAlign: "center", marginBottom: 8 } }, "Code de " + (codeMode === "start" ? "d\u00E9but" : "fin")),
+      h('div', { style: { fontSize: 13, color: C.textSec, textAlign: "center", marginBottom: 24 } }, "Demandez le code au responsable sur site"),
+      error && h('div', { style: { color: C.red, fontSize: 13, fontWeight: 600, marginBottom: 12 } }, error),
+      h('div', { style: { display: "flex", gap: 12, marginBottom: 24 } },
+        codeInput.map((c, i) => h('input', { key: i, ref: refs[i], value: c, onChange: e => handleCodeInput(i, e.target.value), maxLength: 1, inputMode: "numeric", style: { width: 56, height: 64, borderRadius: 16, border: "2px solid " + (c ? C.green : C.border), background: c ? C.greenLight : C.white, textAlign: "center", fontSize: 28, fontWeight: 800, color: C.text, outline: "none" } }))
+      ),
+      h(Btn, { onClick: () => isFull && submitCode(codeMode), disabled: !isFull }, "Valider \u2713"),
+      h('button', { onClick: () => { setCodeMode(null); setCodeInput(["","","",""]); setError(""); }, style: { marginTop: 12, background: "none", border: "none", color: C.textSec, fontSize: 14, cursor: "pointer" } }, "Annuler")
+    );
+  }
+
+  if (m.status === "completed") { nav("w_rate", { missionId: m.id }); return null; }
+
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h(BackBtn, { onClick: () => nav("w_home") }),
+    h('div', { style: { textAlign: "center", marginBottom: 16 } },
+      h(StatusBadge, { status: m.status }),
+      h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text, marginTop: 8 } }, (CAT_EMOJIS[m.category] || "") + " " + m.title),
+      m.status === "in_progress" && h(Fragment, null,
+        h('div', { style: { fontSize: 44, fontWeight: 800, color: C.text, marginTop: 12, fontVariantNumeric: "tabular-nums", letterSpacing: -1 } }, hh + ":" + mn + ":" + ss),
+        h('div', { style: { height: 6, background: C.border, borderRadius: 3, margin: "12px 32px", overflow: "hidden" } },
+          h('div', { style: { width: Math.min(seconds / 324, 100) + "%", height: "100%", background: C.green, borderRadius: 3 } })
+        )
+      )
+    ),
+    h('div', { style: { display: "flex", gap: 10, marginBottom: 16 } },
+      h(Card, { style: { flex: 1, textAlign: "center" } },
+        h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1 } }, "Code d\u00E9but"),
+        wCodes?.startValidated ? h('div', { style: { fontSize: 16, fontWeight: 800, color: C.green, marginTop: 4 } }, "\u2713 Valid\u00E9") : h('div', { style: { fontSize: 13, color: C.textTri, marginTop: 4 } }, "En attente")
+      ),
+      h(Card, { style: { flex: 1, textAlign: "center" } },
+        h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1 } }, "Code fin"),
+        wCodes?.endValidated ? h('div', { style: { fontSize: 16, fontWeight: 800, color: C.green, marginTop: 4 } }, "\u2713 Valid\u00E9") : h('div', { style: { fontSize: 13, color: C.textTri, marginTop: 4 } }, "En attente")
+      )
+    ),
+    h(Card, { style: { marginBottom: 10 } },
+      h('div', { style: { fontSize: 13, fontWeight: 700, color: C.text } }, m.responsible),
+      h('div', { style: { fontSize: 12, color: C.textSec } }, m.responsiblePhone + " \u00B7 Responsable sur site")
+    ),
+    h(Card, { style: { marginBottom: 12, background: C.blueLight } },
+      h('div', { style: { fontSize: 12, color: C.blueDark, fontWeight: 600 } }, "\uD83D\uDCB0 R\u00E9mun\u00E9ration : " + fmt(m.payFcfa) + " FCFA \u2014 paiement sous 24h apr\u00E8s cl\u00F4ture")
+    ),
+    h('div', { style: { display: "flex", gap: 10 } },
+      !wCodes?.startValidated && h(Btn, { onClick: () => setCodeMode("start") }, "Saisir code d\u00E9but"),
+      wCodes?.startValidated && !wCodes?.endValidated && h(Fragment, null,
+        h(Btn, { onClick: () => setCodeMode("end"), style: { flex: 1 } }, "Saisir code fin"),
+        h(Btn, { color: C.red, full: false, onClick: () => dispatch({ type: "REPORT_INCIDENT", payload: { missionId: m.id, reportedBy: w.id, incidentType: "worker_report", description: "Incident signal\u00E9 par le travailleur" } }), style: { padding: "14px 18px" } }, "\uD83D\uDEA8")
+      )
+    )
+  );
+}
+
+function WRate({ nav, params }) {
+  const { state, dispatch } = useContext(AppContext);
+  const m = state.missions.find(x => x.id === params?.missionId);
+  const w = state.currentWorker;
+  const [mood, setMood] = useState(null);
+  const [cond, setCond] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const alreadyRated = state.ratings.some(r => r.missionId === m?.id && r.fromUser === w?.id);
+  const payment = state.payments.find(p => p.missionId === m?.id && p.workerId === w?.id);
+  const moods = ["\uD83D\uDE1E", "\uD83D\uDE10", "\uD83D\uDE42", "\uD83D\uDE0A", "\uD83E\uDD29"];
+
+  const submit = () => {
+    if (mood === null) return;
+    dispatch({ type: "SUBMIT_RATING", payload: { missionId: m.id, fromUser: w.id, toUser: m.employerId, fromRole: "worker", toRole: "employer", moodScore: mood + 1, conditionsMet: cond } });
+    setSubmitted(true);
+  };
+
+  if (alreadyRated || submitted) return h('div', { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
+    h('div', { style: { fontSize: 56, marginBottom: 8 } }, "\uD83C\uDF89"),
+    h('div', { style: { fontSize: 22, fontWeight: 800, color: C.text } }, "Merci !"),
+    h('div', { style: { fontSize: 14, color: C.textSec, marginTop: 8 } }, "Votre \u00E9valuation a \u00E9t\u00E9 enregistr\u00E9e."),
+    payment && h('div', { style: { marginTop: 12 } }, h(Badge, { text: payment.status === "released" ? "\uD83D\uDCB3 Paiement lib\u00E9r\u00E9" : "\u23F3 Paiement en cours", color: payment.status === "released" ? C.greenDark : "#92400E", bg: payment.status === "released" ? C.greenLight : C.orangeLight })),
+    h(Btn, { onClick: () => nav("w_home"), style: { marginTop: 24 } }, "Retour \u00E0 l'accueil")
+  );
+
+  return h('div', { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
+    h('div', { style: { fontSize: 56, marginBottom: 8 } }, "\uD83C\uDF89"),
+    h('div', { style: { fontSize: 22, fontWeight: 800, color: C.text } }, "Mission termin\u00E9e !"),
+    m && h('div', { style: { fontSize: 28, fontWeight: 800, color: C.green, margin: "8px 0" } }, fmt(m.payFcfa) + " FCFA"),
+    payment && h(Badge, { text: payment.status === "released" ? "\uD83D\uDCB3 Paiement lib\u00E9r\u00E9" : "\u23F3 Paiement en cours", color: payment.status === "released" ? C.greenDark : "#92400E", bg: payment.status === "released" ? C.greenLight : C.orangeLight }),
+    h('div', { style: { marginTop: 28, width: "100%" } },
+      h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text, textAlign: "center", marginBottom: 12 } }, "Comment s'est pass\u00E9e la mission ?"),
+      h('div', { style: { display: "flex", justifyContent: "center", gap: 8 } }, moods.map((e, i) => h('button', { key: i, onClick: () => setMood(i), style: { width: 50, height: 50, borderRadius: 16, background: mood === i ? C.greenLight : C.white, border: "2px solid " + (mood === i ? C.green : C.border), fontSize: 22, cursor: "pointer", transform: mood === i ? "scale(1.15)" : "scale(1)", transition: "all 0.15s" } }, e)))
+    ),
+    h('div', { style: { marginTop: 24, width: "100%" } },
+      h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text, textAlign: "center", marginBottom: 12 } }, "Conditions respect\u00E9es ?"),
+      h('div', { style: { display: "flex", gap: 10, justifyContent: "center" } },
+        h(Btn, { full: false, color: cond === true ? C.green : C.white, outline: cond !== true, onClick: () => setCond(true), style: { color: cond === true ? "#fff" : C.text, border: "2px solid " + (cond === true ? C.green : C.border) } }, "Oui \u2713"),
+        h(Btn, { full: false, color: cond === false ? C.red : C.white, outline: cond !== false, onClick: () => setCond(false), style: { color: cond === false ? "#fff" : C.text, border: "2px solid " + (cond === false ? C.red : C.border) } }, "Non \u2717")
+      )
+    ),
+    h(Btn, { onClick: submit, disabled: mood === null, style: { marginTop: 28 } }, "Envoyer")
+  );
+}
+
+function WSearch({ nav }) {
+  const { state } = useContext(AppContext);
+  const [q, setQ] = useState("");
+  const [catFilter, setCatFilter] = useState(null);
+  const available = state.missions.filter(m => m.status === "published");
+  const filtered = available.filter(m => {
+    if (catFilter && m.category !== catFilter) return false;
+    if (q && !m.title.toLowerCase().includes(q.toLowerCase()) && !m.location?.toLowerCase().includes(q.toLowerCase()) && !m.employerName?.toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 12px" } }, h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, "\uD83D\uDD0D Rechercher")),
+    h('div', { style: { position: "relative", marginBottom: 16 } },
+      h('input', { value: q, onChange: e => setQ(e.target.value), placeholder: "M\u00E9tier, entreprise, lieu\u2026", style: { width: "100%", padding: "14px 14px 14px 42px", borderRadius: 16, border: "1.5px solid " + C.border, fontSize: 14, fontFamily: "inherit", outline: "none", background: C.white, boxSizing: "border-box" } }),
+      h('span', { style: { position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16 } }, "\uD83D\uDD0D")
+    ),
+    h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 } },
+      h('button', { onClick: () => setCatFilter(null), style: { padding: "7px 12px", borderRadius: 50, border: "1.5px solid " + (!catFilter ? C.green : C.border), background: !catFilter ? C.greenLight : C.white, color: !catFilter ? C.greenDark : C.textSec, fontSize: 12, fontWeight: 600, cursor: "pointer" } }, "Tout"),
+      CATEGORIES.map(c => h('button', { key: c, onClick: () => setCatFilter(catFilter === c ? null : c), style: { padding: "7px 12px", borderRadius: 50, border: "1.5px solid " + (catFilter === c ? C.green : C.border), background: catFilter === c ? C.greenLight : C.white, color: catFilter === c ? C.greenDark : C.textSec, fontSize: 12, fontWeight: 600, cursor: "pointer" } }, (CAT_EMOJIS[c] || "") + " " + c))
+    ),
+    filtered.length === 0
+      ? h(EmptyState, { emoji: "\uD83D\uDD0E", title: "Aucun r\u00E9sultat", sub: "Modifiez vos filtres ou attendez de nouvelles missions." })
+      : h('div', { style: { display: "flex", flexDirection: "column", gap: 10 } }, filtered.map(m =>
+          h(Card, { key: m.id, onClick: () => nav("w_mission_detail", { missionId: m.id }) },
+            h('div', { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+              h('div', null, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, (CAT_EMOJIS[m.category] || "") + " " + m.title), h('div', { style: { fontSize: 12, color: C.textSec, marginTop: 2 } }, m.employerName + " \u00B7 " + m.dateTime)),
+              h('div', { style: { fontSize: 16, fontWeight: 800, color: C.green } }, fmt(m.payFcfa))
+            )
+          )
+        ))
+  );
+}
+
+function WMissions({ nav }) {
+  const { state } = useContext(AppContext);
+  const w = state.currentWorker;
+  const [tab, setTab] = useState("active");
+  const myApps = state.applications.filter(a => a.workerId === w?.id);
+  const activeM = state.missions.filter(m => m.selectedWorkerId === w?.id && ["worker_selected", "in_progress"].includes(m.status));
+  const doneM = state.missions.filter(m => m.selectedWorkerId === w?.id && m.status === "completed");
+  const pendingApps = myApps.filter(a => a.status === "pending");
+  const tabs = [{k:"active",l:"En cours",n:activeM.length},{k:"done",l:"Termin\u00E9es",n:doneM.length},{k:"pending",l:"Candidatures",n:pendingApps.length}];
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 12px" } }, h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, "\uD83D\uDCCB Mes missions")),
+    h('div', { style: { display: "flex", gap: 6, marginBottom: 16 } }, tabs.map(t => h('button', { key: t.k, onClick: () => setTab(t.k), style: { flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid " + (tab === t.k ? C.green : C.border), background: tab === t.k ? C.greenLight : C.white, color: tab === t.k ? C.greenDark : C.textSec, fontSize: 12, fontWeight: 600, cursor: "pointer" } }, t.l + " (" + t.n + ")"))),
+    tab === "active" && (activeM.length === 0 ? h(EmptyState, { emoji: "\uD83C\uDFC3", title: "Aucune mission en cours", sub: "Vos missions assign\u00E9es appara\u00EEtront ici." }) : activeM.map(m => h(Card, { key: m.id, onClick: () => nav("w_active_mission", { missionId: m.id }), style: { marginBottom: 10 } }, h('div', { style: { display: "flex", justifyContent: "space-between" } }, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, (CAT_EMOJIS[m.category]||"") + " " + m.title), h(StatusBadge, { status: m.status }))))),
+    tab === "done" && (doneM.length === 0 ? h(EmptyState, { emoji: "\uD83D\uDCC2", title: "Aucune mission termin\u00E9e", sub: "Votre historique appara\u00EEtra ici." }) : doneM.map(m => h(Card, { key: m.id, style: { marginBottom: 10 } }, h('div', { style: { display: "flex", justifyContent: "space-between" } }, h('div', null, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, m.title), h('div', { style: { fontSize: 12, color: C.textSec } }, m.dateTime)), h(StatusBadge, { status: "completed" }))))),
+    tab === "pending" && (pendingApps.length === 0 ? h(EmptyState, { emoji: "\uD83D\uDCE8", title: "Aucune candidature", sub: "Vos candidatures en attente appara\u00EEtront ici." }) : pendingApps.map(a => { const m = state.missions.find(x => x.id === a.missionId); return h(Card, { key: a.id, style: { marginBottom: 10 } }, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, m?.title || "Mission"), h('div', { style: { fontSize: 12, color: C.textSec } }, (m?.employerName || "") + " \u00B7 Candidat\u00E9 le " + new Date(a.appliedAt).toLocaleDateString("fr")), h(Badge, { text: "En attente", color: "#92400E", bg: C.orangeLight })); }))
+  );
+}
+
+function WProfile({ nav }) {
+  const { state, dispatch } = useContext(AppContext);
+  const w = state.currentWorker;
+  if (!w) return h(EmptyState, { emoji: "\uD83D\uDC64", title: "Non connect\u00E9", sub: "" });
+  const fields = [{i:"\uD83D\uDCF1",l:"T\u00E9l\u00E9phone",v:w.phone},{i:"\uD83D\uDCCD",l:"Quartier",v:w.neighborhood},{i:"\uD83D\uDEE0",l:"Comp\u00E9tences",v:w.skills?.join(", ")||"Aucune"},{i:"\u2705",l:"Missions compl\u00E9t\u00E9es",v:String(w.missionsDone||0)},{i:"\u2B50",l:"Note moyenne",v:w.avgRating?w.avgRating+"/5":"Pas encore not\u00E9"}];
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 20px", display: "flex", flexDirection: "column", alignItems: "center" } },
+      h('div', { style: { width: 72, height: 72, borderRadius: "50%", background: "#E8F5E9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 12 } }, "\uD83D\uDC77\uD83C\uDFFE"),
+      h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, w.fullName),
+      h(Stars, { rating: w.avgRating })
+    ),
+    fields.map((f, i) => h(Card, { key: i, style: { marginBottom: 10 } }, h('div', { style: { display: "flex", alignItems: "center", gap: 12 } }, h('span', { style: { fontSize: 20 } }, f.i), h('div', { style: { flex: 1 } }, h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1 } }, f.l), h('div', { style: { fontSize: 14, fontWeight: 600, color: C.text, marginTop: 2 } }, f.v))))),
+    h(Btn, { outline: true, onClick: () => { dispatch({ type: "SET_WORKER", payload: null }); nav("onboarding"); }, style: { marginTop: 12 } }, "Changer de compte")
+  );
+}
+
+// ====== EMPLOYER SCREENS ======
+function EDash({ nav }) {
+  const { state } = useContext(AppContext);
+  const e = state.currentEmployer;
+  const myMissions = state.missions.filter(m => m.employerId === e?.id);
+  const active = myMissions.filter(m => ["published","worker_selected","in_progress"].includes(m.status));
+  const done = myMissions.filter(m => m.status === "completed");
+  const incidents = state.incidents.filter(i => myMissions.some(m => m.id === i.missionId) && i.status === "open");
+  const pendingApps = state.applications.filter(a => a.status === "pending" && myMissions.some(m => m.id === a.missionId));
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 12px", display: "flex", alignItems: "center", gap: 12 } },
+      h('div', { style: { width: 44, height: 44, borderRadius: "50%", background: C.blueLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 } }, "\uD83C\uDFE2"),
+      h('div', null, h('div', { style: { fontSize: 13, color: C.textSec } }, "Bienvenue"), h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, e?.companyName || "Entreprise"))
+    ),
+    h('div', { style: { display: "flex", gap: 8, marginBottom: 14 } },
+      h(StatCard, { emoji: "\uD83D\uDD04", value: active.length, label: "Actives" }),
+      h(StatCard, { emoji: "\u2705", value: done.length, label: "Termin\u00E9es" }),
+      h(StatCard, { emoji: "\u26A0\uFE0F", value: incidents.length, label: "Litiges" })
+    ),
+    h(Btn, { color: C.blue, onClick: () => nav("e_publish") }, "\uFF0B Publier une mission"),
+    pendingApps.length > 0 && h(Card, { onClick: () => nav("e_missions"), style: { marginTop: 14, border: "1.5px dashed " + C.blue } },
+      h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text } }, "\uD83D\uDCE8 " + pendingApps.length + " candidature" + (pendingApps.length > 1 ? "s" : "") + " en attente"),
+      h('div', { style: { fontSize: 12, color: C.textSec } }, "Consultez vos missions pour s\u00E9lectionner")
+    ),
+    active.length > 0 && h(Fragment, null,
+      h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1.5, marginTop: 16, marginBottom: 10 } }, "Missions actives"),
+      active.map(m => h(Card, { key: m.id, onClick: () => nav("e_mission_detail", { missionId: m.id }), style: { marginBottom: 10 } },
+        h('div', { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+          h('div', null, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, (CAT_EMOJIS[m.category]||"") + " " + m.title), h('div', { style: { fontSize: 12, color: C.textSec } }, m.dateTime)),
+          h(StatusBadge, { status: m.status })
+        )
+      ))
+    ),
+    active.length === 0 && h('div', { style: { marginTop: 14 } }, h(EmptyState, { emoji: "\uD83D\uDCED", title: "Aucune mission active", sub: "Publiez une mission pour d\u00E9marrer." }))
+  );
+}
+
+function EPublish({ nav }) {
+  const { state, dispatch } = useContext(AppContext);
+  const [form, setForm] = useState({ title: "", category: "", location: "", dateTime: "", duration: "", tasks: "", payFcfa: "", riskLevel: "Faible", responsible: "", responsiblePhone: "", equipProvided: [], equipBring: [] });
+  const [equipBringInput, setEquipBringInput] = useState("");
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const toggleEquip = (e) => set("equipProvided", form.equipProvided.includes(e) ? form.equipProvided.filter(x => x !== e) : [...form.equipProvided, e]);
+  const addEquipBring = () => { if (equipBringInput.trim()) { set("equipBring", [...form.equipBring, equipBringInput.trim()]); setEquipBringInput(""); } };
+  const canPublish = form.title && form.category && form.location && form.dateTime && form.duration && form.tasks && form.payFcfa && form.responsible && form.responsiblePhone;
+
+  return h('div', { style: { flex: 1 } },
+    h(BackBtn, { onClick: () => nav("e_home") }),
+    h('div', { style: { padding: "0 16px 32px" } },
+      h('div', { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 } }, "Publier une mission"),
+      h('div', { style: { background: C.blueLight, borderRadius: 14, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: C.blueDark } }, "\uD83D\uDCA1 Tous les champs sont obligatoires. Missions compl\u00E8tes = 3\u00D7 plus de candidats"),
+      h(Input, { emoji: "\uD83D\uDCDD", label: "Titre de la mission", value: form.title, onChange: v => set("title", v), placeholder: "Ex: D\u00E9chargement conteneur" }),
+      h('div', { style: { marginBottom: 14 } },
+        h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 6 } }, "\uD83D\uDCE6 Cat\u00E9gorie"),
+        h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, CATEGORIES.map(c => h('button', { key: c, onClick: () => set("category", c), style: { padding: "7px 12px", borderRadius: 50, border: "1.5px solid " + (form.category === c ? C.blue : C.border), background: form.category === c ? C.blueLight : C.white, color: form.category === c ? C.blueDark : C.textSec, fontSize: 12, fontWeight: 600, cursor: "pointer" } }, (CAT_EMOJIS[c]||"") + " " + c)))
+      ),
+      h(Input, { emoji: "\uD83D\uDCCD", label: "Lieu exact", value: form.location, onChange: v => set("location", v), placeholder: "Zone, b\u00E2timent, rep\u00E8re\u2026" }),
+      h(Input, { emoji: "\uD83D\uDCC5", label: "Date et horaires", value: form.dateTime, onChange: v => set("dateTime", v), placeholder: "28/03/2026, 08h - 17h" }),
+      h(Input, { emoji: "\u23F1", label: "Dur\u00E9e", value: form.duration, onChange: v => set("duration", v), placeholder: "1 jour, 1 matin\u00E9e\u2026" }),
+      h(Input, { emoji: "\uD83D\uDCCB", label: "T\u00E2ches attendues", value: form.tasks, onChange: v => set("tasks", v), placeholder: "D\u00E9crivez les t\u00E2ches pr\u00E9cises\u2026", multiline: true }),
+      h(Input, { emoji: "\uD83D\uDCB0", label: "R\u00E9mun\u00E9ration (FCFA)", value: form.payFcfa, onChange: v => set("payFcfa", v), placeholder: "25000", type: "number" }),
+      h(Input, { emoji: "\uD83D\uDC64", label: "Responsable", value: form.responsible, onChange: v => set("responsible", v), placeholder: "Nom du responsable" }),
+      h(Input, { emoji: "\uD83D\uDCF1", label: "T\u00E9l\u00E9phone responsable", value: form.responsiblePhone, onChange: v => set("responsiblePhone", v), placeholder: "077 XX XX XX" }),
+      h('div', { style: { marginBottom: 14 } },
+        h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 8 } }, "\u26A1 Niveau de risque"),
+        h('div', { style: { display: "flex", gap: 8 } }, RISK_LEVELS.map(r => h('button', { key: r, onClick: () => set("riskLevel", r), style: { flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid " + (form.riskLevel === r ? (r === "Faible" ? C.green : r === "Moyen" ? C.orange : C.red) : C.border), background: form.riskLevel === r ? (r === "Faible" ? C.greenLight : r === "Moyen" ? C.orangeLight : C.redLight) : C.white, color: form.riskLevel === r ? (r === "Faible" ? C.greenDark : r === "Moyen" ? "#92400E" : "#991B1B") : C.textSec, fontSize: 13, fontWeight: 600, cursor: "pointer" } }, (form.riskLevel === r ? "\u2713 " : "") + r)))
+      ),
+      h('div', { style: { marginBottom: 14 } },
+        h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 8 } }, "\uD83D\uDEE1 \u00C9quipements fournis"),
+        h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6 } }, EQUIP_OPTIONS.map(e => h('button', { key: e, onClick: () => toggleEquip(e), style: { padding: "6px 12px", borderRadius: 50, background: form.equipProvided.includes(e) ? "#DCFCE7" : C.white, color: form.equipProvided.includes(e) ? C.greenDark : C.textSec, fontSize: 12, fontWeight: 600, border: "1.5px solid " + (form.equipProvided.includes(e) ? C.green : C.border), cursor: "pointer" } }, (form.equipProvided.includes(e) ? "\u2713 " : "") + e)))
+      ),
+      h('div', { style: { marginBottom: 20 } },
+        h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 8 } }, "\u26A0\uFE0F \u00C9quipements \u00E0 apporter par le travailleur"),
+        h('div', { style: { display: "flex", gap: 6 } },
+          h('input', { value: equipBringInput, onChange: e => setEquipBringInput(e.target.value), placeholder: "Ex: Chaussures noires", style: { flex: 1, padding: "10px 14px", borderRadius: 14, border: "1.5px solid " + C.border, fontSize: 13, outline: "none" }, onKeyDown: e => e.key === "Enter" && addEquipBring() }),
+          h('button', { onClick: addEquipBring, style: { padding: "10px 16px", borderRadius: 14, background: C.blueLight, border: "none", color: C.blueDark, fontWeight: 600, cursor: "pointer" } }, "+")
+        ),
+        form.equipBring.length > 0 && h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 } }, form.equipBring.map((e, i) => h('span', { key: i, style: { padding: "4px 10px", borderRadius: 50, background: "#FEF3C7", color: "#92400E", fontSize: 11, fontWeight: 600 } }, e + " ", h('span', { onClick: () => set("equipBring", form.equipBring.filter((_, j) => j !== i)), style: { cursor: "pointer" } }, "\u2715"))))
+      ),
+      h(Btn, { color: C.blue, onClick: () => { if (canPublish) { dispatch({ type: "PUBLISH_MISSION", payload: { ...form, payFcfa: parseInt(form.payFcfa) } }); nav("e_home"); } }, disabled: !canPublish }, "Publier \uD83D\uDE80")
+    )
+  );
+}
+
+function EMissionDetail({ nav, params }) {
+  const { state, dispatch } = useContext(AppContext);
+  const m = state.missions.find(x => x.id === params?.missionId);
+  const codes = state.missionCodes[m?.id];
+  const apps = state.applications.filter(a => a.missionId === m?.id);
+  const payment = state.payments.find(p => p.missionId === m?.id);
+  if (!m) return h('div', null, h(BackBtn, { onClick: () => nav("e_home") }), h(EmptyState, { emoji: "\u2753", title: "Mission introuvable", sub: "" }));
+
+  return h('div', { style: { flex: 1 } },
+    h(BackBtn, { onClick: () => nav("e_home") }),
+    h('div', { style: { padding: "0 16px 16px" } },
+      h('div', { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 12 } },
+        h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text, flex: 1 } }, (CAT_EMOJIS[m.category]||"") + " " + m.title),
+        h(StatusBadge, { status: m.status })
+      ),
+      codes && (m.status === "worker_selected" || m.status === "in_progress") && h(Card, { style: { background: C.blueLight, marginBottom: 14 } },
+        h('div', { style: { fontSize: 11, fontWeight: 600, color: C.blue, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, textAlign: "center" } }, "Codes mission"),
+        h('div', { style: { display: "flex", gap: 16, justifyContent: "center" } },
+          h('div', { style: { textAlign: "center" } }, h('div', { style: { fontSize: 10, color: C.textSec, fontWeight: 600 } }, "D\u00C9BUT"), h('div', { style: { fontSize: 28, fontWeight: 800, color: C.blueDark, letterSpacing: 4 } }, codes.codeStart)),
+          h('div', { style: { width: 1, background: C.border } }),
+          h('div', { style: { textAlign: "center" } }, h('div', { style: { fontSize: 10, color: C.textSec, fontWeight: 600 } }, "FIN"), h('div', { style: { fontSize: 28, fontWeight: 800, color: C.blueDark, letterSpacing: 4 } }, codes.codeEnd))
+        ),
+        h('div', { style: { fontSize: 11, color: C.blue, marginTop: 10, fontWeight: 600, textAlign: "center" } }, "\uD83D\uDCCB Communiquez ces codes physiquement sur site")
+      ),
+      apps.length > 0 && h(Fragment, null,
+        h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 } }, "Candidatures (" + apps.length + ")"),
+        apps.map(a => {
+          return h(Card, { key: a.id, style: { marginBottom: 10 } },
+            h('div', { style: { display: "flex", alignItems: "center", gap: 12 } },
+              h('div', { style: { width: 44, height: 44, borderRadius: "50%", background: "#FFF8E1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 } }, "\uD83D\uDC64"),
+              h('div', { style: { flex: 1 } },
+                h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, a.workerName),
+                h(Stars, { rating: a.workerRating }),
+                h('div', { style: { fontSize: 12, color: C.textSec } }, a.workerMissions + " missions \u00B7 " + (a.workerSkills?.join(", ") || ""))
+              )
+            ),
+            a.status === "pending" && m.status === "published" && h(Btn, { color: C.blue, onClick: () => dispatch({ type: "SELECT_WORKER", payload: { applicationId: a.id, missionId: m.id, workerId: a.workerId } }), style: { marginTop: 10 } }, "S\u00E9lectionner \u2713"),
+            a.status === "selected" && h(Badge, { text: "\u2713 S\u00E9lectionn\u00E9", color: C.greenDark, bg: C.greenLight }),
+            a.status === "rejected" && h(Badge, { text: "Non retenu", color: C.textSec, bg: "#F3F4F6" })
+          );
+        })
+      ),
+      apps.length === 0 && m.status === "published" && h(EmptyState, { emoji: "\u23F3", title: "En attente de candidats", sub: "Les travailleurs peuvent maintenant voir et postuler \u00E0 cette mission." }),
+      payment && h(Card, { style: { marginTop: 12, background: "#F8FAFC" } },
+        h('div', { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, h('span', { style: { fontSize: 13, color: C.textSec } }, "R\u00E9mun\u00E9ration"), h('span', { style: { fontSize: 14, fontWeight: 700, color: C.text } }, fmt(payment.amountFcfa) + " FCFA")),
+        h('div', { style: { display: "flex", justifyContent: "space-between", marginBottom: 6 } }, h('span', { style: { fontSize: 13, color: C.textSec } }, "Commission 15%"), h('span', { style: { fontSize: 14, fontWeight: 700, color: C.orange } }, fmt(payment.commissionFcfa) + " FCFA")),
+        h('div', { style: { borderTop: "1px solid " + C.border, paddingTop: 8, display: "flex", justifyContent: "space-between" } }, h('span', { style: { fontSize: 14, fontWeight: 700, color: C.text } }, "Total"), h('span', { style: { fontSize: 18, fontWeight: 800, color: C.blueDark } }, fmt(payment.amountFcfa + payment.commissionFcfa) + " FCFA")),
+        h('div', { style: { marginTop: 8 } }, h(Badge, { text: payment.status === "preauthorized" ? "\uD83D\uDCB3 Pr\u00E9-autoris\u00E9" : payment.status === "released" ? "\u2713 Pay\u00E9" : payment.status === "blocked" ? "\uD83D\uDEA8 Bloqu\u00E9" : payment.status, color: payment.status === "released" ? C.greenDark : payment.status === "blocked" ? "#991B1B" : C.blueDark, bg: payment.status === "released" ? C.greenLight : payment.status === "blocked" ? C.redLight : C.blueLight }))
+      )
+    )
+  );
+}
+
+function EMissions({ nav }) {
+  const { state } = useContext(AppContext);
+  const e = state.currentEmployer;
+  const [tab, setTab] = useState("active");
+  const my = state.missions.filter(m => m.employerId === e?.id);
+  const active = my.filter(m => ["published","worker_selected","in_progress"].includes(m.status));
+  const done = my.filter(m => m.status === "completed");
+  const tabs = [{k:"active",l:"Actives",n:active.length},{k:"done",l:"Termin\u00E9es",n:done.length}];
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 12px" } }, h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, "\uD83D\uDCCB Mes missions")),
+    h('div', { style: { display: "flex", gap: 6, marginBottom: 16 } }, tabs.map(t => h('button', { key: t.k, onClick: () => setTab(t.k), style: { flex: 1, padding: "10px 0", borderRadius: 50, border: "1.5px solid " + (tab === t.k ? C.blue : C.border), background: tab === t.k ? C.blueLight : C.white, color: tab === t.k ? C.blueDark : C.textSec, fontSize: 12, fontWeight: 600, cursor: "pointer" } }, t.l + " (" + t.n + ")"))),
+    tab === "active" && (active.length === 0 ? h(EmptyState, { emoji: "\uD83D\uDCED", title: "Aucune mission active", sub: "Publiez une mission pour commencer." }) : active.map(m => h(Card, { key: m.id, onClick: () => nav("e_mission_detail", { missionId: m.id }), style: { marginBottom: 10 } }, h('div', { style: { display: "flex", justifyContent: "space-between" } }, h('div', null, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, (CAT_EMOJIS[m.category]||"") + " " + m.title), h('div', { style: { fontSize: 12, color: C.textSec } }, m.dateTime + " \u00B7 " + state.applications.filter(a => a.missionId === m.id && a.status === "pending").length + " candidats")), h(StatusBadge, { status: m.status }))))),
+    tab === "done" && (done.length === 0 ? h(EmptyState, { emoji: "\uD83D\uDCC2", title: "Aucune termin\u00E9e", sub: "" }) : done.map(m => h(Card, { key: m.id, onClick: () => nav("e_mission_detail", { missionId: m.id }), style: { marginBottom: 10 } }, h('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, m.title), h('div', { style: { fontSize: 12, color: C.textSec } }, m.dateTime))))
+  );
+}
+
+function EStats({ nav }) {
+  const { state } = useContext(AppContext);
+  const e = state.currentEmployer;
+  const my = state.missions.filter(m => m.employerId === e?.id);
+  const totalSpent = state.payments.filter(p => p.employerId === e?.id && p.status === "released").reduce((s, p) => s + p.amountFcfa + p.commissionFcfa, 0);
+  const stats = [{l:"Publi\u00E9es",v:my.filter(m=>m.status==="published").length,c:C.blue},{l:"En cours",v:my.filter(m=>["worker_selected","in_progress"].includes(m.status)).length,c:C.orange},{l:"Termin\u00E9es",v:my.filter(m=>m.status==="completed").length,c:C.green}];
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 12px" } }, h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, "\uD83D\uDCCA Statistiques")),
+    h('div', { style: { display: "flex", gap: 8, marginBottom: 16 } }, h(StatCard, { emoji: "\uD83D\uDCCB", value: my.length, label: "Total missions" }), h(StatCard, { emoji: "\uD83D\uDCB0", value: fmt(totalSpent), label: "FCFA d\u00E9pens\u00E9s" })),
+    h(Card, { style: { marginBottom: 10 } },
+      h('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 8 } }, "R\u00E9partition"),
+      stats.map((s, i) => h('div', { key: i, style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0", borderBottom: i < 2 ? "1px solid " + C.border : "none" } },
+        h('div', { style: { display: "flex", alignItems: "center", gap: 8 } }, h('div', { style: { width: 8, height: 8, borderRadius: "50%", background: s.c } }), h('span', { style: { fontSize: 13, color: C.textSec } }, s.l)),
+        h('span', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, s.v)
+      ))
+    ),
+    h(Card, null, h('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 } }, "Note moyenne"), h(Stars, { rating: e?.avgRating, size: 16 }))
+  );
+}
+
+function EAccount({ nav }) {
+  const { state, dispatch } = useContext(AppContext);
+  const e = state.currentEmployer;
+  if (!e) return h(EmptyState, { emoji: "\uD83C\uDFE2", title: "Non connect\u00E9", sub: "" });
+  const fields = [{i:"\uD83D\uDCC4",l:"RCCM",v:e.rccm},{i:"\uD83C\uDFED",l:"Secteur",v:e.sector},{i:"\uD83D\uDCCD",l:"Zone",v:e.zone},{i:"\uD83D\uDCF1",l:"T\u00E9l\u00E9phone",v:e.phone}];
+  return h('div', { style: { flex: 1, padding: "0 16px 16px" } },
+    h('div', { style: { padding: "16px 0 20px", display: "flex", flexDirection: "column", alignItems: "center" } },
+      h('div', { style: { width: 72, height: 72, borderRadius: "50%", background: C.blueLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 12 } }, "\uD83C\uDFE2"),
+      h('div', { style: { fontSize: 20, fontWeight: 800, color: C.text } }, e.companyName),
+      h(Stars, { rating: e.avgRating })
+    ),
+    fields.map((f, i) => h(Card, { key: i, style: { marginBottom: 10 } }, h('div', { style: { display: "flex", alignItems: "center", gap: 12 } }, h('span', { style: { fontSize: 20 } }, f.i), h('div', { style: { flex: 1 } }, h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1 } }, f.l), h('div', { style: { fontSize: 14, fontWeight: 600, color: C.text, marginTop: 2 } }, f.v || "Non renseign\u00E9"))))),
+    h(Btn, { outline: true, onClick: () => { dispatch({ type: "SET_EMPLOYER", payload: null }); nav("onboarding"); }, style: { marginTop: 12 } }, "Changer de compte")
+  );
+}
+
+// ====== ONBOARDING ======
+function Onboarding({ nav }) {
+  const { state, dispatch } = useContext(AppContext);
+  const [mode, setMode] = useState(null);
+  const [wForm, setWForm] = useState({ fullName: "", phone: "", neighborhood: "", skills: [] });
+  const [eForm, setEForm] = useState({ companyName: "", rccm: "", sector: "", zone: "", phone: "" });
+  const [skillInput, setSkillInput] = useState("");
+
+  if (!mode) return h('div', { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 } },
+    h('div', { style: { fontSize: 36, fontWeight: 800, marginBottom: 4 } }, h('span', { style: { color: C.green } }, "Kaza"), h('span', { style: { color: C.blue } }, "Job")),
+    h('div', { style: { fontSize: 13, color: C.textSec, marginBottom: 32 } }, "Placement rapide s\u00E9curis\u00E9 \u00B7 Libreville"),
+    state.workers.length > 0 && h('div', { style: { width: "100%", marginBottom: 12 } },
+      h('div', { style: { fontSize: 11, fontWeight: 600, color: C.textSec, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 } }, "Comptes existants"),
+      state.workers.map(w => h(Card, { key: w.id, onClick: () => { dispatch({ type: "SET_WORKER", payload: w }); nav("w_home"); }, style: { marginBottom: 8, cursor: "pointer" } }, h('div', { style: { display: "flex", alignItems: "center", gap: 10 } }, h('span', { style: { fontSize: 20 } }, "\uD83D\uDC77\uD83C\uDFFE"), h('div', null, h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text } }, w.fullName), h('div', { style: { fontSize: 12, color: C.textSec } }, "Travailleur"))))),
+      state.employers.map(e => h(Card, { key: e.id, onClick: () => { dispatch({ type: "SET_EMPLOYER", payload: e }); nav("e_home"); }, style: { marginBottom: 8, cursor: "pointer" } }, h('div', { style: { display: "flex", alignItems: "center", gap: 10 } }, h('span', { style: { fontSize: 20 } }, "\uD83C\uDFE2"), h('div', null, h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text } }, e.companyName), h('div', { style: { fontSize: 12, color: C.textSec } }, "Employeur"))))),
+      h('div', { style: { borderTop: "1px solid " + C.border, margin: "16px 0" } })
+    ),
+    h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 12 } }, "Nouveau compte"),
+    h(Btn, { onClick: () => setMode("worker"), style: { marginBottom: 10 } }, "\uD83D\uDC77\uD83C\uDFFE Je suis travailleur"),
+    h(Btn, { color: C.blue, onClick: () => setMode("employer") }, "\uD83C\uDFE2 Je suis employeur"),
+    (state.workers.length > 0 || state.employers.length > 0) && h('button', { onClick: () => dispatch({ type: "RESET" }), style: { marginTop: 20, background: "none", border: "none", color: C.red, fontSize: 12, cursor: "pointer", fontWeight: 600 } }, "R\u00E9initialiser toutes les donn\u00E9es")
+  );
+
+  if (mode === "worker") return h('div', { style: { flex: 1, padding: 24 } },
+    h('button', { onClick: () => setMode(null), style: { background: "none", border: "none", color: C.textSec, fontSize: 14, cursor: "pointer", marginBottom: 16 } }, "\u2190 Retour"),
+    h('div', { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 } }, "Inscription travailleur"),
+    h('div', { style: { fontSize: 13, color: C.textSec, marginBottom: 20 } }, "Gratuite \u00B7 Aucun frais, jamais"),
+    h(Input, { emoji: "\uD83D\uDC64", label: "Nom complet", value: wForm.fullName, onChange: v => setWForm(p => ({ ...p, fullName: v })), placeholder: "Votre nom" }),
+    h(Input, { emoji: "\uD83D\uDCF1", label: "T\u00E9l\u00E9phone", value: wForm.phone, onChange: v => setWForm(p => ({ ...p, phone: v })), placeholder: "077 XX XX XX" }),
+    h(Input, { emoji: "\uD83D\uDCCD", label: "Quartier", value: wForm.neighborhood, onChange: v => setWForm(p => ({ ...p, neighborhood: v })), placeholder: "Votre quartier \u00E0 Libreville" }),
+    h('div', { style: { marginBottom: 14 } },
+      h('div', { style: { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 6 } }, "\uD83D\uDEE0 Comp\u00E9tences"),
+      h('div', { style: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 } }, CATEGORIES.map(c => h('button', { key: c, onClick: () => setWForm(p => ({ ...p, skills: p.skills.includes(c) ? p.skills.filter(x => x !== c) : [...p.skills, c] })), style: { padding: "7px 12px", borderRadius: 50, border: "1.5px solid " + (wForm.skills.includes(c) ? C.green : C.border), background: wForm.skills.includes(c) ? C.greenLight : C.white, color: wForm.skills.includes(c) ? C.greenDark : C.textSec, fontSize: 12, fontWeight: 600, cursor: "pointer" } }, (wForm.skills.includes(c) ? "\u2713 " : "") + c)))
+    ),
+    h(Btn, { onClick: () => { if (wForm.fullName && wForm.phone) { dispatch({ type: "REGISTER_WORKER", payload: wForm }); nav("w_home"); } }, disabled: !wForm.fullName || !wForm.phone }, "Cr\u00E9er mon compte")
+  );
+
+  return h('div', { style: { flex: 1, padding: 24 } },
+    h('button', { onClick: () => setMode(null), style: { background: "none", border: "none", color: C.textSec, fontSize: 14, cursor: "pointer", marginBottom: 16 } }, "\u2190 Retour"),
+    h('div', { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 } }, "Inscription employeur"),
+    h('div', { style: { fontSize: 13, color: C.textSec, marginBottom: 20 } }, "V\u00E9rification B2B requise"),
+    h(Input, { emoji: "\uD83C\uDFE2", label: "Raison sociale", value: eForm.companyName, onChange: v => setEForm(p => ({ ...p, companyName: v })), placeholder: "Nom de l'entreprise" }),
+    h(Input, { emoji: "\uD83D\uDCC4", label: "RCCM", value: eForm.rccm, onChange: v => setEForm(p => ({ ...p, rccm: v })), placeholder: "Num\u00E9ro RCCM" }),
+    h(Input, { emoji: "\uD83C\uDFED", label: "Secteur", value: eForm.sector, onChange: v => setEForm(p => ({ ...p, sector: v })), placeholder: "Logistique, BTP, H\u00F4tellerie\u2026" }),
+    h(Input, { emoji: "\uD83D\uDCCD", label: "Zone g\u00E9ographique", value: eForm.zone, onChange: v => setEForm(p => ({ ...p, zone: v })), placeholder: "Libreville, Owendo\u2026" }),
+    h(Input, { emoji: "\uD83D\uDCF1", label: "T\u00E9l\u00E9phone", value: eForm.phone, onChange: v => setEForm(p => ({ ...p, phone: v })), placeholder: "077 XX XX XX" }),
+    h(Btn, { color: C.blue, onClick: () => { if (eForm.companyName && eForm.rccm) { dispatch({ type: "REGISTER_EMPLOYER", payload: eForm }); nav("e_home"); } }, disabled: !eForm.companyName || !eForm.rccm }, "Cr\u00E9er le compte")
+  );
+}
+
+// ====== MAIN APP ======
+const W_NAV = [{ id: "w_home", emoji: "\uD83C\uDFE0", label: "Accueil" }, { id: "w_search", emoji: "\uD83D\uDD0D", label: "Chercher" }, { id: "w_missions", emoji: "\uD83D\uDCCB", label: "Missions" }, { id: "w_profile", emoji: "\uD83D\uDC64", label: "Profil" }];
+const E_NAV = [{ id: "e_home", emoji: "\uD83C\uDFE0", label: "Accueil" }, { id: "e_stats", emoji: "\uD83D\uDCCA", label: "Stats" }, { id: "e_missions", emoji: "\uD83D\uDCCB", label: "Missions" }, { id: "e_account", emoji: "\uD83D\uDC64", label: "Compte" }];
+const MAIN_W = ["w_home","w_search","w_missions","w_profile"];
+const MAIN_E = ["e_home","e_stats","e_missions","e_account"];
+
+function App() {
+  const appState = useAppState();
+  const { state } = appState;
+  const [screen, setScreen] = useState("onboarding");
+  const [params, setParams] = useState(null);
+  const [history, setHistory] = useState(["onboarding"]);
+  const [installable, setInstallable] = useState(false);
+  const [showInstall, setShowInstall] = useState(false);
+
+  const isWorker = state.currentWorker && !state.currentEmployer;
+  const isEmployer = state.currentEmployer && !state.currentWorker;
+
+  const nav = useCallback((s, p) => {
+    setParams(p || null);
+    if ([...MAIN_W, ...MAIN_E, "onboarding"].includes(s)) setHistory([s]);
+    else setHistory(prev => [...prev, s]);
+    setScreen(s);
+  }, []);
+
+  useEffect(() => {
+    if (screen === "onboarding" && state.currentWorker) setScreen("w_home");
+    if (screen === "onboarding" && state.currentEmployer) setScreen("e_home");
+  }, []);
+
+  useEffect(() => {
+    const handler = () => { setInstallable(true); setShowInstall(true); };
+    window.addEventListener('kazajob-installable', handler);
+    return () => window.removeEventListener('kazajob-installable', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (deferredInstallPrompt) {
+      deferredInstallPrompt.prompt();
+      const result = await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      setShowInstall(false);
+    }
+  };
+
+  const renderScreen = () => {
+    switch (screen) {
+      case "onboarding": return h(Onboarding, { nav });
+      case "w_home": return h(WHome, { nav });
+      case "w_search": return h(WSearch, { nav });
+      case "w_missions": return h(WMissions, { nav });
+      case "w_profile": return h(WProfile, { nav });
+      case "w_mission_detail": return h(WMissionDetail, { nav, params });
+      case "w_active_mission": return h(WActiveMission, { nav, params });
+      case "w_rate": return h(WRate, { nav, params });
+      case "e_home": return h(EDash, { nav });
+      case "e_stats": return h(EStats, { nav });
+      case "e_missions": return h(EMissions, { nav });
+      case "e_account": return h(EAccount, { nav });
+      case "e_publish": return h(EPublish, { nav });
+      case "e_mission_detail": return h(EMissionDetail, { nav, params });
+      default: return h(Onboarding, { nav });
+    }
+  };
+
+  const showNav = (isWorker && MAIN_W.includes(screen)) || (isEmployer && MAIN_E.includes(screen));
+
+  return h(AppContext.Provider, { value: appState },
+    h('div', { style: { height: "100%", display: "flex", flexDirection: "column", background: C.bg } },
+      h('div', { style: { flex: 1, overflow: "auto", display: "flex", flexDirection: "column" } }, renderScreen()),
+      showNav && h(BottomNav, { items: isWorker ? W_NAV : E_NAV, active: screen, onNav: nav, accent: isWorker ? C.green : C.blue }),
+      showInstall && h('div', { className: "install-banner" },
+        h('div', { style: { width: 44, height: 44, borderRadius: 14, background: C.greenLight, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 } }, "\uD83D\uDCF2"),
+        h('div', { style: { flex: 1 } },
+          h('div', { style: { fontSize: 14, fontWeight: 700, color: C.text } }, "Installer KazaJob"),
+          h('div', { style: { fontSize: 12, color: C.textSec } }, "Acc\u00E8s rapide depuis l'\u00E9cran d'accueil")
+        ),
+        h('button', { onClick: handleInstall, style: { padding: "8px 16px", borderRadius: 50, background: C.green, color: "#fff", border: "none", fontWeight: 700, fontSize: 13, cursor: "pointer" } }, "Installer"),
+        h('button', { onClick: () => setShowInstall(false), style: { background: "none", border: "none", color: C.textSec, fontSize: 18, cursor: "pointer", padding: "4px 8px" } }, "\u00D7")
+      )
+    )
+  );
+}
+
+ReactDOM.render(h(App), document.getElementById('root'));
+</script>
+</body>
+</html>
