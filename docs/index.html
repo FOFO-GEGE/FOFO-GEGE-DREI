@@ -770,9 +770,9 @@ function Onboarding({nav,authUser}){
   // Si l'utilisateur est déjà authentifié via OAuth mais n'a pas de profil → RoleChoice
   if(authUser) return h(RoleChoice,{authUser,nav});
 
-  return h('div',{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32}},
+  return h('div',{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,background:"#000"}},
     h('div',{style:{fontSize:42,fontWeight:800,marginBottom:4,letterSpacing:-1}},
-      h('span',{style:{color:C.green}},"Kaza"),h('span',{style:{color:"#1D4ED8"}},"Job")
+      h('span',{style:{color:C.green}},"Kaza"),h('span',{style:{color:"#60A5FA"}},"Job")
     ),
     h('div',{style:{fontSize:13,color:C.textSec,marginBottom:40}},"Placement rapide s\u00E9curis\u00E9 \u00B7 Libreville"),
 
