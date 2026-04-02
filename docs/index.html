@@ -99,8 +99,6 @@ const mapR = r => r ? ({ id:r.id, missionId:r.mission_id, fromUser:r.from_user, 
 const mapI = r => r ? ({ id:r.id, missionId:r.mission_id, reportedBy:r.reported_by, incidentType:r.incident_type, description:r.description, status:r.status, resolution:r.resolution, resolvedAt:r.resolved_at, createdAt:r.created_at }) : null;
 
 function genCode() { return String(Math.floor(1000+Math.random()*9000)); }
-function saveSession(k,v) { try { localStorage.setItem('kj_'+k, v?JSON.stringify({id:v.id}):''); } catch{} }
-function loadSession(k) { try { const s=localStorage.getItem('kj_'+k); return s?JSON.parse(s):null; } catch{return null;} }
 
 // ====== STATE ======
 const AppContext = createContext();
@@ -133,14 +131,13 @@ function useAppState() {
       (codes||[]).forEach(c => { codesMap[c.mission_id]={codeStart:c.code_start,codeEnd:c.code_end,workers:{}}; });
       (vals||[]).forEach(v => { if(codesMap[v.mission_id]) codesMap[v.mission_id].workers[v.worker_id]={startValidated:v.start_validated,startTime:v.start_time,endValidated:v.end_validated,endTime:v.end_time}; });
       const mappedE=(employers||[]).map(mapE), mappedW=(workers||[]).map(mapW);
-      const eS=loadSession('employer'), wS=loadSession('worker');
       setState(p=>({...p,
         employers:mappedE, workers:mappedW,
         missions:(missions||[]).map(mapM), applications:(applications||[]).map(mapA),
         payments:(payments||[]).map(mapP), ratings:(ratings||[]).map(mapR),
         incidents:(incidents||[]).map(mapI), missionCodes:codesMap,
-        currentEmployer:eS?mappedE.find(e=>e.id===eS.id)||null:null,
-        currentWorker:wS?mappedW.find(w=>w.id===wS.id)||null:null,
+        currentEmployer:p.currentEmployer?mappedE.find(e=>e.id===p.currentEmployer.id)||null:null,
+        currentWorker:p.currentWorker?mappedW.find(w=>w.id===p.currentWorker.id)||null:null,
         loading:false, error:null
       }));
     } catch(e) { setState(p=>({...p,loading:false,error:'Erreur de connexion'})); }
@@ -173,7 +170,6 @@ function useAppState() {
           if(action.authUserId){
             await SB.from('profiles').upsert([{id:action.authUserId,role:'employer',entity_id:e.id}]);
           }
-          saveSession('employer',e); saveSession('worker',null);
           setState(p=>({...p,employers:[...p.employers,e],currentEmployer:e,currentWorker:null}));
           break;
         }
@@ -189,18 +185,15 @@ function useAppState() {
           if(action.authUserId){
             await SB.from('profiles').upsert([{id:action.authUserId,role:'worker',entity_id:w.id}]);
           }
-          saveSession('worker',w); saveSession('employer',null);
           setState(p=>({...p,workers:[...p.workers,w],currentWorker:w,currentEmployer:null}));
           break;
         }
 
         case 'SET_EMPLOYER':
-          saveSession('employer',action.payload); saveSession('worker',null);
           setState(p=>({...p,currentEmployer:action.payload,currentWorker:null}));
           break;
 
         case 'SET_WORKER':
-          saveSession('worker',action.payload); saveSession('employer',null);
           setState(p=>({...p,currentWorker:action.payload,currentEmployer:null}));
           break;
 
@@ -315,7 +308,7 @@ function useAppState() {
     return dispatch({...action, __state:st, __emp:emp, __wkr:wkr});
   }, [dispatch]);
 
-  return { state, dispatch: wrappedDispatch };
+  return { state, dispatch: wrappedDispatch, setState };
 }
 
 // ====== DESIGN ======
@@ -555,7 +548,7 @@ function WProfile({nav}){
   return h('div',{style:{flex:1,padding:"0 16px 16px"}},
     h('div',{style:{padding:"16px 0 20px",display:"flex",flexDirection:"column",alignItems:"center"}},h('div',{style:{width:72,height:72,borderRadius:"50%",background:"#E8F5E9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:12}},"\uD83D\uDC77\uD83C\uDFFE"),h('div',{style:{fontSize:20,fontWeight:800,color:C.text}},w.fullName),h(Stars,{rating:w.avgRating})),
     fields.map((f,i)=>h(Card,{key:i,style:{marginBottom:10}},h('div',{style:{display:"flex",alignItems:"center",gap:12}},h('span',{style:{fontSize:20}},f.i),h('div',{style:{flex:1}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1}},f.l),h('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginTop:2}},f.v))))),
-    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();saveSession("worker",null);saveSession("employer",null);dispatch({type:"SET_WORKER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
+    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();},style:{marginTop:12}},"Se d\u00E9connecter")
   );
 }
 
@@ -682,17 +675,15 @@ function EAccount({nav}){
   return h('div',{style:{flex:1,padding:"0 16px 16px"}},
     h('div',{style:{padding:"16px 0 20px",display:"flex",flexDirection:"column",alignItems:"center"}},h('div',{style:{width:72,height:72,borderRadius:"50%",background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:12}},"\uD83C\uDFE2"),h('div',{style:{fontSize:20,fontWeight:800,color:C.text}},e.companyName),h(Stars,{rating:e.avgRating})),
     fields.map((f,i)=>h(Card,{key:i,style:{marginBottom:10}},h('div',{style:{display:"flex",alignItems:"center",gap:12}},h('span',{style:{fontSize:20}},f.i),h('div',{style:{flex:1}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1}},f.l),h('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginTop:2}},f.v||"Non renseign\u00E9"))))),
-    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();saveSession("worker",null);saveSession("employer",null);dispatch({type:"SET_EMPLOYER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
+    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();},style:{marginTop:12}},"Se d\u00E9connecter")
   );
 }
 
 // ====== OAUTH BUTTONS ======
-function OAuthBtn({provider,role,label,icon}){
+function OAuthBtn({provider,label,icon}){
   const [loading,setLoading]=useState(false);
   const sign=async()=>{
     setLoading(true);
-    // Stocker le rôle choisi avant redirect OAuth
-    localStorage.setItem('kj_pending_role', role);
     const {error}=await SB.auth.signInWithOAuth({
       provider,
       options:{redirectTo: window.location.href.split('?')[0]}
@@ -713,7 +704,7 @@ function OAuthBtn({provider,role,label,icon}){
 function RoleChoice({authUser,nav}){
   // L'utilisateur vient de se connecter via OAuth mais n'a pas encore de profil
   const {dispatch}=useContext(AppContext);
-  const [role,setRole]=useState(authUser.pendingRole||null); // pré-remplir si rôle déjà choisi
+  const [role,setRole]=useState(null);
   const [wForm,setWForm]=useState({fullName:authUser.user_metadata?.full_name||"",phone:"",neighborhood:"",skills:[]});
   const [eForm,setEForm]=useState({companyName:"",rccm:"",sector:"",zone:"",phone:""});
   const [saving,setSaving]=useState(false);
@@ -834,39 +825,98 @@ function App(){
 
   const nav=useCallback((s,p)=>{ setParams(p||null); setScreen(s); },[]);
 
-  // Gérer session OAuth Supabase
+  // Gérer session Supabase : source unique de connexion
   useEffect(()=>{
-    const handleSession=async(event, session)=>{
-      // Déconnexion explicite → reset complet
-      if(event==='SIGNED_OUT'||!session){
+    let alive = true;
+
+    const applySession = async (session) => {
+      if(!alive) return;
+
+      if(!session?.user){
         setAuthUser(null);
-        saveSession('worker',null);
-        saveSession('employer',null);
+        appState.setState(p=>({
+          ...p,
+          currentEmployer:null,
+          currentWorker:null,
+          loading:false,
+          error:null
+        }));
+        setScreen('onboarding');
         return;
       }
-      // Nouvelle session (SIGNED_IN ou INITIAL_SESSION)
-      const user=session.user;
-      const {data:profile}=await SB.from('profiles').select('*').eq('id',user.id).maybeSingle();
-      if(profile&&profile.entity_id){
-        // Profil existant → charger et naviguer
-        if(profile.role==='worker'){
-          const {data:w}=await SB.from('workers').select('*').eq('id',profile.entity_id).maybeSingle();
-          if(w){ appState.dispatch({type:'SET_WORKER',payload:mapW(w)}); setAuthUser(null); setScreen('w_home'); }
-        } else {
-          const {data:e}=await SB.from('employers').select('*').eq('id',profile.entity_id).maybeSingle();
-          if(e){ appState.dispatch({type:'SET_EMPLOYER',payload:mapE(e)}); setAuthUser(null); setScreen('e_home'); }
-        }
-      } else {
-        // Nouveau utilisateur → formulaire profil
-        const pendingRole=localStorage.getItem('kj_pending_role');
-        localStorage.removeItem('kj_pending_role');
-        setAuthUser({...user, pendingRole: pendingRole||null});
+
+      const user = session.user;
+      setAuthUser(user);
+
+      const {data:profile,error:profileError} = await SB
+        .from('profiles')
+        .select('id, role, entity_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if(!alive) return;
+
+      if(profileError){
+        appState.setState(p=>({...p,loading:false,error:'Erreur profil'}));
+        return;
+      }
+
+      if(!profile || !profile.entity_id){
+        appState.setState(p=>({
+          ...p,
+          currentEmployer:null,
+          currentWorker:null,
+          loading:false,
+          error:null
+        }));
         setScreen('onboarding');
+        return;
+      }
+
+      if(profile.role==='worker'){
+        const {data:w,error:wError} = await SB.from('workers').select('*').eq('id',profile.entity_id).maybeSingle();
+        if(!alive) return;
+        if(wError || !w){
+          appState.setState(p=>({...p,currentEmployer:null,currentWorker:null,loading:false,error:'Profil travailleur introuvable'}));
+          setScreen('onboarding');
+          return;
+        }
+        appState.setState(p=>({...p,currentWorker:mapW(w),currentEmployer:null,loading:false,error:null}));
+        setAuthUser(null);
+        setScreen('w_home');
+        return;
+      }
+
+      if(profile.role==='employer'){
+        const {data:e,error:eError} = await SB.from('employers').select('*').eq('id',profile.entity_id).maybeSingle();
+        if(!alive) return;
+        if(eError || !e){
+          appState.setState(p=>({...p,currentEmployer:null,currentWorker:null,loading:false,error:'Profil employeur introuvable'}));
+          setScreen('onboarding');
+          return;
+        }
+        appState.setState(p=>({...p,currentEmployer:mapE(e),currentWorker:null,loading:false,error:null}));
+        setAuthUser(null);
+        setScreen('e_home');
       }
     };
-    // Écouter TOUS les événements auth (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED)
-    const {data:{subscription}}=SB.auth.onAuthStateChange(handleSession);
-    return ()=>subscription.unsubscribe();
+
+    SB.auth.getSession().then(({data,error})=>{
+      if(error) {
+        appState.setState(p=>({...p,loading:false,error:'Erreur de session'}));
+        return;
+      }
+      applySession(data.session);
+    });
+
+    const {data:{subscription}} = SB.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+    });
+
+    return ()=>{
+      alive = false;
+      subscription.unsubscribe();
+    };
   },[]);
 
   useEffect(()=>{
