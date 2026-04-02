@@ -828,89 +828,89 @@ function App(){
   // Gérer session Supabase : source unique de connexion
   useEffect(()=>{
     let alive = true;
+    let handling = false;
 
-    const applySession = async (session) => {
+    const applySession = async (event, session) => {
+      // Ignorer les événements qui ne changent pas la session
+      if(event==='TOKEN_REFRESHED' || event==='USER_UPDATED') return;
       if(!alive) return;
+      // Éviter les appels concurrents
+      if(handling) return;
+      handling = true;
 
-      if(!session?.user){
-        setAuthUser(null);
-        appState.setState(p=>({
-          ...p,
-          currentEmployer:null,
-          currentWorker:null,
-          loading:false,
-          error:null
-        }));
-        setScreen('onboarding');
-        return;
-      }
-
-      const user = session.user;
-      setAuthUser(user);
-
-      const {data:profile,error:profileError} = await SB
-        .from('profiles')
-        .select('id, role, entity_id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if(!alive) return;
-
-      if(profileError){
-        appState.setState(p=>({...p,loading:false,error:'Erreur profil'}));
-        return;
-      }
-
-      if(!profile || !profile.entity_id){
-        appState.setState(p=>({
-          ...p,
-          currentEmployer:null,
-          currentWorker:null,
-          loading:false,
-          error:null
-        }));
-        setScreen('onboarding');
-        return;
-      }
-
-      if(profile.role==='worker'){
-        const {data:w,error:wError} = await SB.from('workers').select('*').eq('id',profile.entity_id).maybeSingle();
-        if(!alive) return;
-        if(wError || !w){
-          appState.setState(p=>({...p,currentEmployer:null,currentWorker:null,loading:false,error:'Profil travailleur introuvable'}));
+      try {
+        if(!session?.user){
+          setAuthUser(null);
+          appState.setState(p=>({
+            ...p,
+            currentEmployer:null,
+            currentWorker:null,
+            loading:false,
+            error:null
+          }));
           setScreen('onboarding');
           return;
         }
-        appState.setState(p=>({...p,currentWorker:mapW(w),currentEmployer:null,loading:false,error:null}));
-        setAuthUser(null);
-        setScreen('w_home');
-        return;
-      }
 
-      if(profile.role==='employer'){
-        const {data:e,error:eError} = await SB.from('employers').select('*').eq('id',profile.entity_id).maybeSingle();
+        const user = session.user;
+        setAuthUser(user);
+
+        const {data:profile,error:profileError} = await SB
+          .from('profiles')
+          .select('id, role, entity_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
         if(!alive) return;
-        if(eError || !e){
-          appState.setState(p=>({...p,currentEmployer:null,currentWorker:null,loading:false,error:'Profil employeur introuvable'}));
+
+        if(profileError){
+          appState.setState(p=>({...p,loading:false,error:'Erreur profil'}));
+          return;
+        }
+
+        if(!profile || !profile.entity_id){
+          appState.setState(p=>({
+            ...p,
+            currentEmployer:null,
+            currentWorker:null,
+            loading:false,
+            error:null
+          }));
           setScreen('onboarding');
           return;
         }
-        appState.setState(p=>({...p,currentEmployer:mapE(e),currentWorker:null,loading:false,error:null}));
-        setAuthUser(null);
-        setScreen('e_home');
+
+        if(profile.role==='worker'){
+          const {data:w,error:wError} = await SB.from('workers').select('*').eq('id',profile.entity_id).maybeSingle();
+          if(!alive) return;
+          if(wError || !w){
+            appState.setState(p=>({...p,currentEmployer:null,currentWorker:null,loading:false,error:'Profil travailleur introuvable'}));
+            setScreen('onboarding');
+            return;
+          }
+          appState.setState(p=>({...p,currentWorker:mapW(w),currentEmployer:null,loading:false,error:null}));
+          setScreen('w_home');
+          return;
+        }
+
+        if(profile.role==='employer'){
+          const {data:e,error:eError} = await SB.from('employers').select('*').eq('id',profile.entity_id).maybeSingle();
+          if(!alive) return;
+          if(eError || !e){
+            appState.setState(p=>({...p,currentEmployer:null,currentWorker:null,loading:false,error:'Profil employeur introuvable'}));
+            setScreen('onboarding');
+            return;
+          }
+          appState.setState(p=>({...p,currentEmployer:mapE(e),currentWorker:null,loading:false,error:null}));
+          setScreen('e_home');
+        }
+      } finally {
+        handling = false;
       }
     };
 
-    SB.auth.getSession().then(({data,error})=>{
-      if(error) {
-        appState.setState(p=>({...p,loading:false,error:'Erreur de session'}));
-        return;
-      }
-      applySession(data.session);
-    });
-
-    const {data:{subscription}} = SB.auth.onAuthStateChange((_event, session) => {
-      applySession(session);
+    const {data:{subscription}} = SB.auth.onAuthStateChange((event, session) => {
+      applySession(event, session);
     });
 
     return ()=>{
@@ -918,13 +918,6 @@ function App(){
       subscription.unsubscribe();
     };
   },[]);
-
-  useEffect(()=>{
-    if(!state.loading){
-      if(state.currentWorker&&screen==="onboarding") setScreen("w_home");
-      if(state.currentEmployer&&screen==="onboarding") setScreen("e_home");
-    }
-  },[state.loading]);
 
   useEffect(()=>{
     const h=()=>{setShowInstall(true);}; window.addEventListener('kazajob-installable',h); return()=>window.removeEventListener('kazajob-installable',h);
