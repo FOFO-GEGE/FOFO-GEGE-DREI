@@ -713,7 +713,7 @@ function OAuthBtn({provider,role,label,icon}){
 function RoleChoice({authUser,nav}){
   // L'utilisateur vient de se connecter via OAuth mais n'a pas encore de profil
   const {dispatch}=useContext(AppContext);
-  const [role,setRole]=useState(null);
+  const [role,setRole]=useState(authUser.pendingRole||null); // pré-remplir si rôle déjà choisi
   const [wForm,setWForm]=useState({fullName:authUser.user_metadata?.full_name||"",phone:"",neighborhood:"",skills:[]});
   const [eForm,setEForm]=useState({companyName:"",rccm:"",sector:"",zone:"",phone:""});
   const [saving,setSaving]=useState(false);
@@ -866,8 +866,10 @@ function App(){
           }
         }
       } else {
-        // Nouveau utilisateur OAuth → choix du rôle
-        setAuthUser(user);
+        // Nouveau utilisateur OAuth → vérifier si rôle pré-sélectionné
+        const pendingRole = localStorage.getItem('kj_pending_role');
+        localStorage.removeItem('kj_pending_role');
+        setAuthUser({...user, pendingRole: pendingRole||null});
         setScreen('onboarding');
       }
     };
