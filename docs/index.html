@@ -836,49 +836,36 @@ function App(){
 
   // Gérer session OAuth Supabase
   useEffect(()=>{
-    let handled=false;
-    const checkSession=async(session)=>{
-      if(!session){
+    const handleSession=async(event, session)=>{
+      // Déconnexion explicite → reset complet
+      if(event==='SIGNED_OUT'||!session){
         setAuthUser(null);
+        saveSession('worker',null);
+        saveSession('employer',null);
         return;
       }
+      // Nouvelle session (SIGNED_IN ou INITIAL_SESSION)
       const user=session.user;
-      // Chercher le profil en base
       const {data:profile}=await SB.from('profiles').select('*').eq('id',user.id).maybeSingle();
       if(profile&&profile.entity_id){
-        // Profil existant → charger l'entité et naviguer directement
+        // Profil existant → charger et naviguer
         if(profile.role==='worker'){
           const {data:w}=await SB.from('workers').select('*').eq('id',profile.entity_id).maybeSingle();
-          if(w){
-            saveSession('worker',w); saveSession('employer',null);
-            appState.setState && appState.setState(p=>({...p,currentWorker:mapW(w),currentEmployer:null}));
-            appState.dispatch({type:'SET_WORKER',payload:mapW(w)});
-            setAuthUser(null);
-            setScreen('w_home');
-          }
+          if(w){ appState.dispatch({type:'SET_WORKER',payload:mapW(w)}); setAuthUser(null); setScreen('w_home'); }
         } else {
           const {data:e}=await SB.from('employers').select('*').eq('id',profile.entity_id).maybeSingle();
-          if(e){
-            saveSession('employer',e); saveSession('worker',null);
-            appState.dispatch({type:'SET_EMPLOYER',payload:mapE(e)});
-            setAuthUser(null);
-            setScreen('e_home');
-          }
+          if(e){ appState.dispatch({type:'SET_EMPLOYER',payload:mapE(e)}); setAuthUser(null); setScreen('e_home'); }
         }
       } else {
-        // Nouveau utilisateur OAuth → vérifier si rôle pré-sélectionné
-        const pendingRole = localStorage.getItem('kj_pending_role');
+        // Nouveau utilisateur → formulaire profil
+        const pendingRole=localStorage.getItem('kj_pending_role');
         localStorage.removeItem('kj_pending_role');
         setAuthUser({...user, pendingRole: pendingRole||null});
         setScreen('onboarding');
       }
     };
-    // Vérifier la session au chargement (gère le redirect OAuth)
-    SB.auth.getSession().then(({data:{session}})=>checkSession(session));
-    // Écouter les changements d'état auth
-    const {data:{subscription}}=SB.auth.onAuthStateChange((_ev,session)=>{
-      checkSession(session);
-    });
+    // Écouter TOUS les événements auth (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED)
+    const {data:{subscription}}=SB.auth.onAuthStateChange(handleSession);
     return ()=>subscription.unsubscribe();
   },[]);
 
