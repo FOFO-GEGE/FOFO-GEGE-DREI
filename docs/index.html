@@ -169,6 +169,10 @@ function useAppState() {
           }]).select().single();
           if(error) throw error;
           const e=mapE(data);
+          // Créer le profil lié à l'auth user si OAuth
+          if(action.authUserId){
+            await SB.from('profiles').upsert([{id:action.authUserId,role:'employer',entity_id:e.id}]);
+          }
           saveSession('employer',e); saveSession('worker',null);
           setState(p=>({...p,employers:[...p.employers,e],currentEmployer:e,currentWorker:null}));
           break;
@@ -181,6 +185,10 @@ function useAppState() {
           }]).select().single();
           if(error) throw error;
           const w=mapW(data);
+          // Créer le profil lié à l'auth user si OAuth
+          if(action.authUserId){
+            await SB.from('profiles').upsert([{id:action.authUserId,role:'worker',entity_id:w.id}]);
+          }
           saveSession('worker',w); saveSession('employer',null);
           setState(p=>({...p,workers:[...p.workers,w],currentWorker:w,currentEmployer:null}));
           break;
@@ -547,7 +555,7 @@ function WProfile({nav}){
   return h('div',{style:{flex:1,padding:"0 16px 16px"}},
     h('div',{style:{padding:"16px 0 20px",display:"flex",flexDirection:"column",alignItems:"center"}},h('div',{style:{width:72,height:72,borderRadius:"50%",background:"#E8F5E9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:12}},"\uD83D\uDC77\uD83C\uDFFE"),h('div',{style:{fontSize:20,fontWeight:800,color:C.text}},w.fullName),h(Stars,{rating:w.avgRating})),
     fields.map((f,i)=>h(Card,{key:i,style:{marginBottom:10}},h('div',{style:{display:"flex",alignItems:"center",gap:12}},h('span',{style:{fontSize:20}},f.i),h('div',{style:{flex:1}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1}},f.l),h('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginTop:2}},f.v))))),
-    h(Btn,{outline:true,onClick:()=>{dispatch({type:"SET_WORKER",payload:null});nav("onboarding");},style:{marginTop:12}},"Changer de compte")
+    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();dispatch({type:"SET_WORKER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
   );
 }
 
@@ -674,53 +682,136 @@ function EAccount({nav}){
   return h('div',{style:{flex:1,padding:"0 16px 16px"}},
     h('div',{style:{padding:"16px 0 20px",display:"flex",flexDirection:"column",alignItems:"center"}},h('div',{style:{width:72,height:72,borderRadius:"50%",background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:12}},"\uD83C\uDFE2"),h('div',{style:{fontSize:20,fontWeight:800,color:C.text}},e.companyName),h(Stars,{rating:e.avgRating})),
     fields.map((f,i)=>h(Card,{key:i,style:{marginBottom:10}},h('div',{style:{display:"flex",alignItems:"center",gap:12}},h('span',{style:{fontSize:20}},f.i),h('div',{style:{flex:1}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1}},f.l),h('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginTop:2}},f.v||"Non renseign\u00E9"))))),
-    h(Btn,{outline:true,onClick:()=>{dispatch({type:"SET_EMPLOYER",payload:null});nav("onboarding");},style:{marginTop:12}},"Changer de compte")
+    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();dispatch({type:"SET_EMPLOYER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
   );
 }
 
-// ====== ONBOARDING ======
-function Onboarding({nav}){
-  const {state,dispatch}=useContext(AppContext);
-  const [mode,setMode]=useState(null);
-  const [wForm,setWForm]=useState({fullName:"",phone:"",neighborhood:"",skills:[]});
+// ====== OAUTH BUTTONS ======
+function OAuthBtn({provider,role,label,icon}){
+  const [loading,setLoading]=useState(false);
+  const sign=async()=>{
+    setLoading(true);
+    // Stocker le rôle choisi avant redirect OAuth
+    localStorage.setItem('kj_pending_role', role);
+    const {error}=await SB.auth.signInWithOAuth({
+      provider,
+      options:{redirectTo: window.location.href.split('?')[0]}
+    });
+    if(error){setLoading(false); alert(error.message);}
+  };
+  return h('button',{onClick:sign,disabled:loading,style:{
+    width:"100%",padding:"14px 20px",borderRadius:16,border:"1.5px solid "+C.border,
+    background:C.white,display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+    fontSize:15,fontWeight:600,color:C.text,cursor:loading?"default":"pointer",
+    opacity:loading?0.6:1,marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"
+  }},
+    loading?h('span',null,"Connexion\u2026"):h(Fragment,null,h('span',{style:{fontSize:20}},icon),h('span',null,label))
+  );
+}
+
+// ====== CHOIX ROLE APRES OAUTH ======
+function RoleChoice({authUser,nav}){
+  // L'utilisateur vient de se connecter via OAuth mais n'a pas encore de profil
+  const {dispatch}=useContext(AppContext);
+  const [role,setRole]=useState(null);
+  const [wForm,setWForm]=useState({fullName:authUser.user_metadata?.full_name||"",phone:"",neighborhood:"",skills:[]});
   const [eForm,setEForm]=useState({companyName:"",rccm:"",sector:"",zone:"",phone:""});
   const [saving,setSaving]=useState(false);
 
-  if(!mode) return h('div',{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,overflowY:"auto"}},
+  if(!role) return h('div',{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32}},
     h('div',{style:{fontSize:36,fontWeight:800,marginBottom:4}},h('span',{style:{color:C.green}},"Kaza"),h('span',{style:{color:C.blue}},"Job")),
-    h('div',{style:{fontSize:13,color:C.textSec,marginBottom:32}},"Placement rapide s\u00E9curis\u00E9 \u00B7 Libreville"),
-    (state.workers.length>0||state.employers.length>0)&&h('div',{style:{width:"100%",marginBottom:12}},
-      h('div',{style:{fontSize:11,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1,marginBottom:8}},"Comptes existants"),
-      state.workers.map(w=>h(Card,{key:w.id,onClick:()=>{dispatch({type:"SET_WORKER",payload:w});nav("w_home");},style:{marginBottom:8,cursor:"pointer"}},h('div',{style:{display:"flex",alignItems:"center",gap:10}},h('span',{style:{fontSize:20}},"\uD83D\uDC77\uD83C\uDFFE"),h('div',null,h('div',{style:{fontSize:14,fontWeight:700,color:C.text}},w.fullName),h('div',{style:{fontSize:12,color:C.textSec}},"Travailleur"))))),
-      state.employers.map(e=>h(Card,{key:e.id,onClick:()=>{dispatch({type:"SET_EMPLOYER",payload:e});nav("e_home");},style:{marginBottom:8,cursor:"pointer"}},h('div',{style:{display:"flex",alignItems:"center",gap:10}},h('span',{style:{fontSize:20}},"\uD83C\uDFE2"),h('div',null,h('div',{style:{fontSize:14,fontWeight:700,color:C.text}},e.companyName),h('div',{style:{fontSize:12,color:C.textSec}},"Employeur"))))),
-      h('div',{style:{borderTop:"1px solid "+C.border,margin:"16px 0"}})
+    h('div',{style:{fontSize:13,color:C.textSec,marginBottom:8}},"Bienvenue !"),
+    h('div',{style:{fontSize:13,color:C.textSec,marginBottom:32,fontWeight:600}},authUser.email),
+    h('div',{style:{fontSize:16,fontWeight:700,color:C.text,marginBottom:20}},"Je suis\u2026"),
+    h('button',{onClick:()=>setRole("worker"),style:{width:"100%",padding:"20px",borderRadius:20,border:"2px solid "+C.green,background:C.greenLight,marginBottom:12,cursor:"pointer"}},
+      h('div',{style:{fontSize:28,marginBottom:6}},"\uD83D\uDC77\uD83C\uDFFE"),
+      h('div',{style:{fontSize:16,fontWeight:800,color:C.greenDark}},"Travailleur"),
+      h('div',{style:{fontSize:12,color:C.green,marginTop:4}},"Je cherche des missions")
     ),
-    h('div',{style:{fontSize:14,fontWeight:700,color:C.text,marginBottom:12}},"Nouveau compte"),
-    h(Btn,{onClick:()=>setMode("worker"),style:{marginBottom:10}},"\uD83D\uDC77\uD83C\uDFFE Je suis travailleur"),
-    h(Btn,{color:C.blue,onClick:()=>setMode("employer")},"\uD83C\uDFE2 Je suis employeur")
+    h('button',{onClick:()=>setRole("employer"),style:{width:"100%",padding:"20px",borderRadius:20,border:"2px solid "+C.blue,background:C.blueLight,cursor:"pointer"}},
+      h('div',{style:{fontSize:28,marginBottom:6}},"\uD83C\uDFE2"),
+      h('div',{style:{fontSize:16,fontWeight:800,color:C.blueDark}},"Employeur"),
+      h('div',{style:{fontSize:12,color:C.blue,marginTop:4}},"Je publie des missions")
+    )
   );
 
-  if(mode==="worker") return h('div',{style:{flex:1,padding:24,overflowY:"auto"}},
-    h('button',{onClick:()=>setMode(null),style:{background:"none",border:"none",color:C.textSec,fontSize:14,cursor:"pointer",marginBottom:16}},"\u2190 Retour"),
-    h('div',{style:{fontSize:22,fontWeight:800,color:C.text,marginBottom:4}},"Inscription travailleur"),
-    h('div',{style:{fontSize:13,color:C.textSec,marginBottom:20}},"Gratuite \u00B7 Aucun frais, jamais"),
+  if(role==="worker") return h('div',{style:{flex:1,padding:24,overflowY:"auto"}},
+    h('button',{onClick:()=>setRole(null),style:{background:"none",border:"none",color:C.textSec,fontSize:14,cursor:"pointer",marginBottom:16}},"\u2190 Retour"),
+    h('div',{style:{fontSize:22,fontWeight:800,color:C.text,marginBottom:4}},"Mon profil travailleur"),
+    h('div',{style:{fontSize:13,color:C.textSec,marginBottom:20}},"Gratuit \u00B7 Aucun frais"),
     h(Input,{emoji:"\uD83D\uDC64",label:"Nom complet",value:wForm.fullName,onChange:v=>setWForm(p=>({...p,fullName:v})),placeholder:"Votre nom"}),
     h(Input,{emoji:"\uD83D\uDCF1",label:"T\u00E9l\u00E9phone",value:wForm.phone,onChange:v=>setWForm(p=>({...p,phone:v})),placeholder:"077 XX XX XX"}),
     h(Input,{emoji:"\uD83D\uDCCD",label:"Quartier",value:wForm.neighborhood,onChange:v=>setWForm(p=>({...p,neighborhood:v})),placeholder:"Votre quartier \u00E0 Libreville"}),
-    h('div',{style:{marginBottom:14}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:6}},"\uD83D\uDEE0 Comp\u00E9tences"),h('div',{style:{display:"flex",flexWrap:"wrap",gap:6}},CATEGORIES.map(c=>h('button',{key:c,onClick:()=>setWForm(p=>({...p,skills:p.skills.includes(c)?p.skills.filter(x=>x!==c):[...p.skills,c]})),style:{padding:"7px 12px",borderRadius:50,border:"1.5px solid "+(wForm.skills.includes(c)?C.green:C.border),background:wForm.skills.includes(c)?C.greenLight:C.white,color:wForm.skills.includes(c)?C.greenDark:C.textSec,fontSize:12,fontWeight:600,cursor:"pointer"}},(wForm.skills.includes(c)?"\u2713 ":"")+c)))),
-    h(Btn,{disabled:!wForm.fullName||!wForm.phone||saving,onClick:async()=>{if(wForm.fullName&&wForm.phone&&!saving){setSaving(true);await dispatch({type:"REGISTER_WORKER",payload:wForm});setSaving(false);nav("w_home");}},},saving?"Cr\u00E9ation\u2026":"Cr\u00E9er mon compte")
+    h('div',{style:{marginBottom:14}},
+      h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,marginBottom:6}},"\uD83D\uDEE0 Comp\u00E9tences"),
+      h('div',{style:{display:"flex",flexWrap:"wrap",gap:6}},CATEGORIES.map(c=>h('button',{key:c,onClick:()=>setWForm(p=>({...p,skills:p.skills.includes(c)?p.skills.filter(x=>x!==c):[...p.skills,c]})),style:{padding:"7px 12px",borderRadius:50,border:"1.5px solid "+(wForm.skills.includes(c)?C.green:C.border),background:wForm.skills.includes(c)?C.greenLight:C.white,color:wForm.skills.includes(c)?C.greenDark:C.textSec,fontSize:12,fontWeight:600,cursor:"pointer"}},(wForm.skills.includes(c)?"\u2713 ":"")+c)))
+    ),
+    h(Btn,{disabled:!wForm.fullName||!wForm.phone||saving,onClick:async()=>{
+      if(!wForm.fullName||!wForm.phone||saving)return;
+      setSaving(true);
+      await dispatch({type:"REGISTER_WORKER",payload:wForm,authUserId:authUser.id});
+      setSaving(false);
+      nav("w_home");
+    }},saving?"Cr\u00E9ation\u2026":"Commencer \uD83D\uDE80")
   );
 
   return h('div',{style:{flex:1,padding:24,overflowY:"auto"}},
-    h('button',{onClick:()=>setMode(null),style:{background:"none",border:"none",color:C.textSec,fontSize:14,cursor:"pointer",marginBottom:16}},"\u2190 Retour"),
-    h('div',{style:{fontSize:22,fontWeight:800,color:C.text,marginBottom:4}},"Inscription employeur"),
+    h('button',{onClick:()=>setRole(null),style:{background:"none",border:"none",color:C.textSec,fontSize:14,cursor:"pointer",marginBottom:16}},"\u2190 Retour"),
+    h('div',{style:{fontSize:22,fontWeight:800,color:C.text,marginBottom:4}},"Mon profil employeur"),
     h('div',{style:{fontSize:13,color:C.textSec,marginBottom:20}},"V\u00E9rification B2B requise"),
     h(Input,{emoji:"\uD83C\uDFE2",label:"Raison sociale",value:eForm.companyName,onChange:v=>setEForm(p=>({...p,companyName:v})),placeholder:"Nom de l'entreprise"}),
     h(Input,{emoji:"\uD83D\uDCC4",label:"RCCM",value:eForm.rccm,onChange:v=>setEForm(p=>({...p,rccm:v})),placeholder:"Num\u00E9ro RCCM"}),
     h(Input,{emoji:"\uD83C\uDFED",label:"Secteur",value:eForm.sector,onChange:v=>setEForm(p=>({...p,sector:v})),placeholder:"Logistique, BTP\u2026"}),
     h(Input,{emoji:"\uD83D\uDCCD",label:"Zone g\u00E9ographique",value:eForm.zone,onChange:v=>setEForm(p=>({...p,zone:v})),placeholder:"Libreville, Owendo\u2026"}),
     h(Input,{emoji:"\uD83D\uDCF1",label:"T\u00E9l\u00E9phone",value:eForm.phone,onChange:v=>setEForm(p=>({...p,phone:v})),placeholder:"077 XX XX XX"}),
-    h(Btn,{color:C.blue,disabled:!eForm.companyName||!eForm.rccm||saving,onClick:async()=>{if(eForm.companyName&&eForm.rccm&&!saving){setSaving(true);await dispatch({type:"REGISTER_EMPLOYER",payload:eForm});setSaving(false);nav("e_home");}},},saving?"Cr\u00E9ation\u2026":"Cr\u00E9er le compte")
+    h(Btn,{color:C.blue,disabled:!eForm.companyName||!eForm.rccm||saving,onClick:async()=>{
+      if(!eForm.companyName||!eForm.rccm||saving)return;
+      setSaving(true);
+      await dispatch({type:"REGISTER_EMPLOYER",payload:eForm,authUserId:authUser.id});
+      setSaving(false);
+      nav("e_home");
+    }},saving?"Cr\u00E9ation\u2026":"Cr\u00E9er le compte")
+  );
+}
+
+// ====== ONBOARDING ======
+function Onboarding({nav,authUser}){
+  // Si l'utilisateur est déjà authentifié via OAuth mais n'a pas de profil → RoleChoice
+  if(authUser) return h(RoleChoice,{authUser,nav});
+
+  return h('div',{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32}},
+    h('div',{style:{fontSize:42,fontWeight:800,marginBottom:4,letterSpacing:-1}},
+      h('span',{style:{color:C.green}},"Kaza"),h('span',{style:{color:"#1D4ED8"}},"Job")
+    ),
+    h('div',{style:{fontSize:13,color:C.textSec,marginBottom:40}},"Placement rapide s\u00E9curis\u00E9 \u00B7 Libreville"),
+
+    // BLOC TRAVAILLEUR
+    h('div',{style:{width:"100%",background:C.greenLight,borderRadius:20,padding:"20px 20px 16px",marginBottom:16,border:"1.5px solid #BBF7D0"}},
+      h('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14}},
+        h('span',{style:{fontSize:28}},"\uD83D\uDC77\uD83C\uDFFE"),
+        h('div',null,
+          h('div',{style:{fontSize:16,fontWeight:800,color:C.greenDark}},"Je cherche du travail"),
+          h('div',{style:{fontSize:12,color:C.green}},"Inscription gratuite")
+        )
+      ),
+      h(OAuthBtn,{provider:"google",role:"worker",label:"Continuer avec Google",icon:"\uD83D\uDD35"}),
+      h(OAuthBtn,{provider:"apple",role:"worker",label:"Continuer avec Apple",icon:"\uD83C\uDF4E"})
+    ),
+
+    // BLOC EMPLOYEUR
+    h('div',{style:{width:"100%",background:C.blueLight,borderRadius:20,padding:"20px 20px 16px",border:"1.5px solid #BFDBFE"}},
+      h('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:14}},
+        h('span',{style:{fontSize:28}},"\uD83C\uDFE2"),
+        h('div',null,
+          h('div',{style:{fontSize:16,fontWeight:800,color:C.blueDark}},"Je publie des missions"),
+          h('div',{style:{fontSize:12,color:C.blue}},"V\u00E9rification B2B")
+        )
+      ),
+      h(OAuthBtn,{provider:"google",role:"employer",label:"Continuer avec Google",icon:"\uD83D\uDD35"}),
+      h(OAuthBtn,{provider:"apple",role:"employer",label:"Continuer avec Apple",icon:"\uD83C\uDF4E"})
+    ),
+
+    h('div',{style:{fontSize:11,color:C.textTri,marginTop:20,textAlign:"center"}},"En vous connectant vous acceptez les conditions d'utilisation")
   );
 }
 
@@ -736,11 +827,39 @@ function App(){
   const [screen,setScreen]=useState("onboarding");
   const [params,setParams]=useState(null);
   const [showInstall,setShowInstall]=useState(false);
+  const [authUser,setAuthUser]=useState(null);
 
   const isW=state.currentWorker&&!state.currentEmployer;
   const isE=state.currentEmployer&&!state.currentWorker;
 
   const nav=useCallback((s,p)=>{ setParams(p||null); setScreen(s); },[]);
+
+  // Gérer session OAuth Supabase
+  useEffect(()=>{
+    const checkSession=async()=>{
+      const {data:{session}}=await SB.auth.getSession();
+      if(!session){setAuthUser(null);return;}
+      const user=session.user;
+      const {data:profile}=await SB.from('profiles').select('*').eq('id',user.id).maybeSingle();
+      if(profile&&profile.entity_id){
+        if(profile.role==='worker'){
+          const {data:w}=await SB.from('workers').select('*').eq('id',profile.entity_id).single();
+          if(w){appState.dispatch({type:'SET_WORKER',payload:w});setAuthUser(null);setScreen('w_home');}
+        } else {
+          const {data:e}=await SB.from('employers').select('*').eq('id',profile.entity_id).single();
+          if(e){appState.dispatch({type:'SET_EMPLOYER',payload:e});setAuthUser(null);setScreen('e_home');}
+        }
+      } else {
+        setAuthUser(user);
+        setScreen('onboarding');
+      }
+    };
+    checkSession();
+    const {data:{subscription}}=SB.auth.onAuthStateChange((_ev,session)=>{
+      if(session) checkSession(); else setAuthUser(null);
+    });
+    return ()=>subscription.unsubscribe();
+  },[]);
 
   useEffect(()=>{
     if(!state.loading){
@@ -756,7 +875,7 @@ function App(){
   const render=()=>{
     if(state.loading) return h(LoadingScreen,null);
     switch(screen){
-      case "onboarding": return h(Onboarding,{nav});
+      case "onboarding": return h(Onboarding,{nav,authUser});
       case "w_home": return h(WHome,{nav});
       case "w_search": return h(WSearch,{nav});
       case "w_missions": return h(WMissions,{nav});
