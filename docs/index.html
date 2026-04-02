@@ -555,7 +555,7 @@ function WProfile({nav}){
   return h('div',{style:{flex:1,padding:"0 16px 16px"}},
     h('div',{style:{padding:"16px 0 20px",display:"flex",flexDirection:"column",alignItems:"center"}},h('div',{style:{width:72,height:72,borderRadius:"50%",background:"#E8F5E9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:12}},"\uD83D\uDC77\uD83C\uDFFE"),h('div',{style:{fontSize:20,fontWeight:800,color:C.text}},w.fullName),h(Stars,{rating:w.avgRating})),
     fields.map((f,i)=>h(Card,{key:i,style:{marginBottom:10}},h('div',{style:{display:"flex",alignItems:"center",gap:12}},h('span',{style:{fontSize:20}},f.i),h('div',{style:{flex:1}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1}},f.l),h('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginTop:2}},f.v))))),
-    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();dispatch({type:"SET_WORKER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
+    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();saveSession("worker",null);saveSession("employer",null);dispatch({type:"SET_WORKER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
   );
 }
 
@@ -682,7 +682,7 @@ function EAccount({nav}){
   return h('div',{style:{flex:1,padding:"0 16px 16px"}},
     h('div',{style:{padding:"16px 0 20px",display:"flex",flexDirection:"column",alignItems:"center"}},h('div',{style:{width:72,height:72,borderRadius:"50%",background:C.blueLight,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,marginBottom:12}},"\uD83C\uDFE2"),h('div',{style:{fontSize:20,fontWeight:800,color:C.text}},e.companyName),h(Stars,{rating:e.avgRating})),
     fields.map((f,i)=>h(Card,{key:i,style:{marginBottom:10}},h('div',{style:{display:"flex",alignItems:"center",gap:12}},h('span',{style:{fontSize:20}},f.i),h('div',{style:{flex:1}},h('div',{style:{fontSize:12,fontWeight:600,color:C.textSec,textTransform:"uppercase",letterSpacing:1}},f.l),h('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginTop:2}},f.v||"Non renseign\u00E9"))))),
-    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();dispatch({type:"SET_EMPLOYER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
+    h(Btn,{outline:true,onClick:async()=>{await SB.auth.signOut();saveSession("worker",null);saveSession("employer",null);dispatch({type:"SET_EMPLOYER",payload:null});nav("onboarding");},style:{marginTop:12}},"Se d\u00E9connecter")
   );
 }
 
@@ -836,27 +836,46 @@ function App(){
 
   // Gérer session OAuth Supabase
   useEffect(()=>{
-    const checkSession=async()=>{
-      const {data:{session}}=await SB.auth.getSession();
-      if(!session){setAuthUser(null);return;}
+    let handled=false;
+    const checkSession=async(session)=>{
+      if(!session){
+        setAuthUser(null);
+        return;
+      }
       const user=session.user;
+      // Chercher le profil en base
       const {data:profile}=await SB.from('profiles').select('*').eq('id',user.id).maybeSingle();
       if(profile&&profile.entity_id){
+        // Profil existant → charger l'entité et naviguer directement
         if(profile.role==='worker'){
-          const {data:w}=await SB.from('workers').select('*').eq('id',profile.entity_id).single();
-          if(w){appState.dispatch({type:'SET_WORKER',payload:w});setAuthUser(null);setScreen('w_home');}
+          const {data:w}=await SB.from('workers').select('*').eq('id',profile.entity_id).maybeSingle();
+          if(w){
+            saveSession('worker',w); saveSession('employer',null);
+            appState.setState && appState.setState(p=>({...p,currentWorker:mapW(w),currentEmployer:null}));
+            appState.dispatch({type:'SET_WORKER',payload:mapW(w)});
+            setAuthUser(null);
+            setScreen('w_home');
+          }
         } else {
-          const {data:e}=await SB.from('employers').select('*').eq('id',profile.entity_id).single();
-          if(e){appState.dispatch({type:'SET_EMPLOYER',payload:e});setAuthUser(null);setScreen('e_home');}
+          const {data:e}=await SB.from('employers').select('*').eq('id',profile.entity_id).maybeSingle();
+          if(e){
+            saveSession('employer',e); saveSession('worker',null);
+            appState.dispatch({type:'SET_EMPLOYER',payload:mapE(e)});
+            setAuthUser(null);
+            setScreen('e_home');
+          }
         }
       } else {
+        // Nouveau utilisateur OAuth → choix du rôle
         setAuthUser(user);
         setScreen('onboarding');
       }
     };
-    checkSession();
+    // Vérifier la session au chargement (gère le redirect OAuth)
+    SB.auth.getSession().then(({data:{session}})=>checkSession(session));
+    // Écouter les changements d'état auth
     const {data:{subscription}}=SB.auth.onAuthStateChange((_ev,session)=>{
-      if(session) checkSession(); else setAuthUser(null);
+      checkSession(session);
     });
     return ()=>subscription.unsubscribe();
   },[]);
