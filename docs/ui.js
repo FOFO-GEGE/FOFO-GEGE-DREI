@@ -1,0 +1,131 @@
+// Icons, themes, and the collectible habit card. Presentation layer only —
+// no data access, no network.
+
+const ICONS = {
+  today: '<path d="M12 3a9 9 0 1 0 9 9" /><path d="M8 12l3 3 6-6" />',
+  mirror: '<ellipse cx="12" cy="8.5" rx="6" ry="5.5" /><path d="M8 15.5c1 1.2 2.4 1.9 4 1.9s3-.7 4-1.9" opacity=".55" /><path d="M9.5 19.5h5" opacity=".35" />',
+  plus: '<path d="M12 5v14M5 12h14" />',
+  history: '<rect x="3" y="5" width="18" height="16" rx="2.5" /><path d="M3 10h18M8 3v4M16 3v4" />',
+  flame: '<path d="M12 3c.6 3-1.4 4.2-2.6 5.6A5.6 5.6 0 0 0 8 12.4a4 4 0 0 0 8 .3c0-1.3-.5-2.3-1.2-3.2.3 1-.4 1.8-1 1.8.6-2.6-.7-6.6-1.8-8.3z" />',
+  snow: '<path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9" /><path d="M9.4 4.6L12 7l2.6-2.4M9.4 19.4L12 17l2.6 2.4" opacity=".7" />',
+  check: '<path d="M4 12.5l5 5L20 6.5" />',
+  cross: '<path d="M6 6l12 12M18 6L6 18" />',
+  left: '<path d="M15 5l-7 7 7 7" />',
+  right: '<path d="M9 5l7 7-7 7" />',
+  spark: '<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z" />',
+  // theme icons
+  sommeil: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8.2 8.2 0 1 0 20 14.5z" />',
+  sport: '<path d="M5 9v6M19 9v6M3 10.5v3M21 10.5v3M8 8v8M16 8v8M8 12h8" />',
+  ecrans: '<rect x="6" y="2.5" width="12" height="19" rx="2.5" /><path d="M10.5 18.5h3" />',
+  argent: '<rect x="2.5" y="6" width="19" height="12" rx="2.5" /><circle cx="12" cy="12" r="2.6" />',
+  alimentation: '<path d="M12 20c-3.5 0-5.5-3.4-5.5-7C6.5 9.6 8.6 7.5 11 8.4c.7.3 1.3.3 2 0 2.4-.9 4.5 1.2 4.5 4.6 0 3.6-2 7-5.5 7z" /><path d="M12 8.4c0-2 1-3.4 2.8-3.9" />',
+  travail: '<rect x="2.5" y="7" width="19" height="13" rx="2.5" /><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7" />',
+  lecture: '<path d="M12 6.5C10.5 5 8.4 4.5 4 4.8v13c4.4-.3 6.5.2 8 1.7 1.5-1.5 3.6-2 8-1.7v-13c-4.4-.3-6.5.2-8 1.7z" /><path d="M12 6.5v13" opacity=".5" />',
+  social: '<circle cx="9" cy="9" r="3.2" /><path d="M3.5 19.5c.6-3 2.9-4.6 5.5-4.6s4.9 1.6 5.5 4.6" /><path d="M16 6.4a3.2 3.2 0 0 1 0 6.2M17.5 15.4c2 .5 3.4 2 3.9 4.1" opacity=".6" />',
+  autre: '<circle cx="12" cy="12" r="8.5" /><path d="M12 8v4l2.5 2.5" />',
+};
+
+function icon(name, size = 24, cls = '') {
+  const body = ICONS[name] || ICONS.autre;
+  return `<svg class="icn ${cls}" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none"
+    stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"
+    aria-hidden="true">${body}</svg>`;
+}
+
+const THEMES = [
+  { id: 'sommeil', label: 'Sommeil', hue: 250, suggestions: ['Je dors avant 23h', 'Pas d’écran une heure avant de dormir', 'Je me lève à la première sonnerie'] },
+  { id: 'sport', label: 'Sport', hue: 12, suggestions: ['Je bouge 30 minutes', 'Je vais à la salle', 'Je prends les escaliers'] },
+  { id: 'ecrans', label: 'Écrans', hue: 200, suggestions: ['Moins de 2h de téléphone', 'Pas de réseaux le matin', 'Téléphone hors de la chambre'] },
+  { id: 'argent', label: 'Argent', hue: 150, suggestions: ['Aucun achat impulsif', 'Je note mes dépenses', 'Je mets 10€ de côté'] },
+  { id: 'alimentation', label: 'Alimentation', hue: 95, suggestions: ['Je cuisine au lieu de commander', 'Cinq fruits et légumes', 'Pas de grignotage le soir'] },
+  { id: 'travail', label: 'Travail', hue: 35, suggestions: ['Deux heures sans distraction', 'Je termine ma tâche prioritaire', 'Inbox vide'] },
+  { id: 'lecture', label: 'Lecture', hue: 280, suggestions: ['Je lis 20 pages', 'Je lis 15 minutes', 'Un chapitre par jour'] },
+  { id: 'social', label: 'Social', hue: 330, suggestions: ['J’appelle un proche', 'Je vois quelqu’un en vrai', 'Je réponds à mes messages'] },
+];
+
+function themeById(id) {
+  return THEMES.find(t => t.id === id) || { id: 'autre', label: 'Autre', hue: 40, suggestions: [] };
+}
+
+// ---------- Collectible card ----------
+
+const TIERS = [
+  { id: 'oeuf',       label: 'Œuf',        minDays: 0,   blurb: 'Vient d’éclore.' },
+  { id: 'eclose',     label: 'Éclose',     minDays: 7,   blurb: 'A tenu une semaine.' },
+  { id: 'enracinee',  label: 'Enracinée',  minDays: 30,  blurb: 'Un mois de survie.' },
+  { id: 'gravee',     label: 'Gravée',     minDays: 90,  blurb: 'Trois mois. Ça compte.' },
+  { id: 'legendaire', label: 'Légendaire', minDays: 180, blurb: 'Six mois. Rare.' },
+];
+
+function tierFor(days) {
+  let out = TIERS[0];
+  for (const t of TIERS) if (days >= t.minDays) out = t;
+  return out;
+}
+
+function nextTier(days) {
+  return TIERS.find(t => days < t.minDays) || null;
+}
+
+// stats: { rate, daysAlive, streak, best, kept, total }
+function habitCard(habit, stats, opts = {}) {
+  const theme = themeById(habit.theme);
+  const tier = tierFor(stats.daysAlive);
+  const next = nextTier(stats.daysAlive);
+  const progress = next
+    ? Math.round(100 * (stats.daysAlive - tier.minDays) / (next.minDays - tier.minDays))
+    : 100;
+
+  const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
+
+  return `
+    <article class="pcard tier-${tier.id} ${opts.compact ? 'is-compact' : ''}" style="--card-hue:${theme.hue}"
+      ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
+      <div class="pcard-sheen" aria-hidden="true"></div>
+      <header class="pcard-head">
+        <h3 class="pcard-name">${esc(habit.title || 'Ta promesse')}</h3>
+        <div class="pcard-hp">
+          <span class="pcard-hp-label">SÉRIE</span>
+          <span class="pcard-hp-value">${stats.streak}</span>
+          ${icon('flame', 16, 'pcard-hp-icon')}
+        </div>
+      </header>
+
+      <div class="pcard-art">
+        <div class="pcard-art-glow" aria-hidden="true"></div>
+        ${icon(theme.id, 56, 'pcard-art-icon')}
+        <span class="pcard-theme">${esc(theme.label)}</span>
+      </div>
+
+      <div class="pcard-tier">
+        <span class="pcard-tier-name">${tier.label}</span>
+        <span class="pcard-tier-blurb">${tier.blurb}</span>
+      </div>
+
+      <div class="pcard-stats">
+        <div class="pcard-stat"><span class="k">Taux</span><span class="v">${rateText}</span></div>
+        <div class="pcard-stat"><span class="k">Jours</span><span class="v">${stats.daysAlive}</span></div>
+        <div class="pcard-stat"><span class="k">Record</span><span class="v">${stats.best}</span></div>
+      </div>
+
+      <footer class="pcard-foot">
+        ${next
+          ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
+             <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`
+          : `<span class="pcard-xp-label pcard-xp-max">Palier maximum atteint</span>`}
+      </footer>
+    </article>
+  `;
+}
+
+// ---------- Skeletons ----------
+
+function skeletonList(rows = 3) {
+  return `<div class="skel-wrap">${Array.from({ length: rows }, () =>
+    `<div class="skel-card"><div class="skel-line w60"></div><div class="skel-line w35"></div></div>`
+  ).join('')}</div>`;
+}
+
+function skeletonHero() {
+  return `<div class="skel-wrap"><div class="skel-ring"></div><div class="skel-line w50 center"></div>${skeletonList(2)}</div>`;
+}
