@@ -1,53 +1,57 @@
-const CACHE_NAME = 'kazajob-v1';
+const CACHE_NAME = 'mirroir-v1';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap'
+  './',
+  './index.html',
+  './app.js',
+  './style.css',
+  './manifest.json',
+  './vendor/supabase.js',
+  './config.js'
 ];
 
-// Install — cache core assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
   self.skipWaiting();
 });
 
-// Activate — clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      )
+      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
     )
   );
   self.clients.claim();
 });
 
-// Fetch — network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
+
+  // This SW sits at the site root, so its scope also covers the sibling
+  // KazaJob app. Leave KazaJob's requests to its own service worker so this
+  // app's shell can never be served in its place.
+  if (new URL(event.request.url).pathname.includes('/kazajob/')) return;
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone the response and cache it
         const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, clone);
-        });
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         return response;
       })
-      .catch(() => {
-        // Fallback to cache
-        return caches.match(event.request).then((cached) => {
-          return cached || caches.match('/index.html');
-        });
-      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./index.html')))
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then((clients) => {
+      for (const client of clients) {
+        if ('focus' in client) return client.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow('./index.html#/today');
+    })
   );
 });

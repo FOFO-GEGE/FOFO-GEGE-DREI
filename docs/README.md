@@ -2,10 +2,22 @@
 
 Implémentation V1 du spec MIRROIR, en PWA vanilla JS (pas de build step) avant l'empaquetage Capacitor/iOS.
 
+## Structure du site déployé
+
+Ce dossier `docs/` est la racine servie par GitHub Pages. Il héberge deux apps
+indépendantes :
+
+- `/` → **MIRROIR** (cette app)
+- `/kazajob/` → KazaJob, l'app préexistante du repo, inchangée fonctionnellement
+
+Chacune a son propre `manifest.json` et son propre service worker. Celui de
+MIRROIR est à la racine, donc son scope couvre aussi `/kazajob/` : il ignore
+explicitement ces requêtes pour laisser KazaJob à son propre service worker.
+
 ## Lancer en local
 
 ```
-cd docs/mirroir
+cd docs
 python3 -m http.server 8000
 ```
 
