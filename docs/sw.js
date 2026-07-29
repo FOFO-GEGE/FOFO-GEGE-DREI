@@ -1,9 +1,10 @@
-const CACHE_NAME = 'mirroir-v3';
+const CACHE_NAME = 'mirroir-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './app.js',
   './store.js',
+  './fx.js',
   './ui.js',
   './screens.js',
   './style.css',

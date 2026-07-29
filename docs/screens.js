@@ -55,6 +55,7 @@ function screenOnboarding(onDone) {
 
   function mount(host) {
     host.innerHTML = html();
+    fxBindTilt(host);
     host.querySelector('#ob-skip').addEventListener('click', onDone);
     host.querySelector('#ob-next').addEventListener('click', () => {
       if (i === ONBOARD_SLIDES.length - 1) return onDone();
@@ -233,23 +234,33 @@ function screenRitual() {
         const verdict = btn.dataset.verdict;
         host.querySelectorAll('button').forEach(b => { b.disabled = true; });
 
+        const stage = host.querySelector('.ritual');
+
         if (verdict === 'frozen') {
           freezeCheck(check.id);
           result.frozen++;
           vibrate(12);
+        } else if (verdict === 'success') {
+          markCheck(check.id, verdict);
+          result.kept++;
+          vibrate(25);
+          fxBurstFrom(btn, { count: 54, speed: 8 });
         } else {
           markCheck(check.id, verdict);
-          if (verdict === 'success') { result.kept++; vibrate(25); }
-          else { result.broken++; vibrate([10, 40, 60]); }
+          result.broken++;
+          vibrate([10, 40, 60]);
+          fxShake(stage, 'hard');
+          const r = stage.getBoundingClientRect();
+          fxShatter(r.left + r.width / 2, r.top + r.height * 0.42);
         }
 
         const veil = document.createElement('div');
         veil.className = `ritual-veil is-${verdict}`;
-        veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 64);
-        host.querySelector('.ritual').appendChild(veil);
+        veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 72);
+        stage.appendChild(veil);
         requestAnimationFrame(() => veil.classList.add('show'));
 
-        setTimeout(() => { idx++; mount(host); }, 620);
+        setTimeout(() => { idx++; mount(host); }, 640);
       });
     });
   }
@@ -276,6 +287,16 @@ function screenRitual() {
           <button class="btn-primary" id="ritual-done">Voir mon miroir</button>
         </div>
       </div>`;
+    // Tallies land one after the other rather than all at once.
+    const nums = host.querySelectorAll('.summary-tallies .n');
+    const values = [result.kept, result.broken, result.frozen];
+    nums.forEach((el, i) => {
+      el.textContent = '0';
+      setTimeout(() => fxCountUp(el, values[i], { duration: 700 }), 160 + i * 170);
+    });
+
+    if (perfect) setTimeout(fxConfetti, 260);
+
     host.querySelector('#ritual-done').addEventListener('click', () => navigate('/home'));
   }
 
@@ -291,9 +312,10 @@ function screenHome() {
   const blur = (1 - shown / 100) * 7;
   const crackOpacity = shown >= 70 ? 0 : Math.min(0.85, (70 - shown) / 70);
 
-  const R = 78, C = 2 * Math.PI * R;
+  const R = 104, C = 2 * Math.PI * R;
   const dash = C * (1 - shown / 100);
   const label = score === null ? '—' : `${score}%`;
+  const isLow = score !== null && score < 50;
 
   const phrase = score === null
     ? 'Pas encore assez de données.'
@@ -326,22 +348,29 @@ function screenHome() {
        </div>`;
 
   const html = `
-    <div class="mirror-hero" style="--blur:${blur.toFixed(2)}px">
+    <div class="mirror-hero ${isLow ? 'is-low' : ''}" style="--blur:${blur.toFixed(2)}px">
       <div class="mirror-ring">
-        <svg viewBox="0 0 176 176" aria-hidden="true">
-          <circle class="ring-track" cx="88" cy="88" r="${R}" />
-          <circle class="ring-value" cx="88" cy="88" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${dash}" />
+        <div class="mirror-aura" aria-hidden="true"></div>
+        <svg class="ring" viewBox="0 0 232 232" aria-hidden="true">
+          <defs>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="${isLow ? 'var(--danger)' : 'var(--hot)'}" />
+              <stop offset="100%" stop-color="${isLow ? 'var(--hot)' : 'var(--success)'}" />
+            </linearGradient>
+          </defs>
+          <circle class="ring-track" cx="116" cy="116" r="${R}" />
+          <circle class="ring-value" cx="116" cy="116" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${C}" />
         </svg>
         <div class="mirror-face">
-          <div class="mirror-num">${label}</div>
+          <div class="mirror-num">${score === null ? '—' : '0%'}</div>
           <div class="mirror-reflect" aria-hidden="true">${label}</div>
-          <svg class="mirror-cracks" viewBox="0 0 176 176" style="opacity:${crackOpacity.toFixed(2)}" aria-hidden="true">
-            <path d="M88 74 L80 100 L96 112 L74 150" />
-            <path d="M80 100 L34 92" />
-            <path d="M96 112 L142 100" />
-            <path d="M74 150 L58 124" />
-            <path d="M96 112 L104 148" />
-            <path d="M80 100 L62 78" />
+          <svg class="mirror-cracks" viewBox="0 0 232 232" style="opacity:${crackOpacity.toFixed(2)}" aria-hidden="true">
+            <path d="M116 96 L106 132 L127 148 L98 198" />
+            <path d="M106 132 L45 121" />
+            <path d="M127 148 L188 132" />
+            <path d="M98 198 L77 163" />
+            <path d="M127 148 L137 195" />
+            <path d="M106 132 L82 103" />
           </svg>
         </div>
       </div>
@@ -355,6 +384,16 @@ function screenHome() {
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
     wire(host) {
+      // The ring fills and the figure counts up on arrival — the score is the
+      // headline, so it gets the entrance.
+      if (score !== null) {
+        fxCountUp(host.querySelector('.mirror-num'), score, { suffix: '%', duration: 1100 });
+        requestAnimationFrame(() => {
+          const ring = host.querySelector('.ring-value');
+          if (ring) ring.style.strokeDashoffset = dash;
+        });
+      }
+      fxBindTilt(host);
       host.querySelectorAll('.pcard[data-habit]').forEach(el =>
         el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
     },
@@ -376,17 +415,26 @@ function screenWeek() {
 
   const html = `
     <div class="week-hero">
-      <div class="week-rate">${w.rate === null ? '—' : w.rate + '%'}</div>
+      <div class="week-rate">${w.rate === null ? '—' : '0%'}</div>
       <p class="week-verdict">${esc(verdict)}</p>
     </div>
     <div class="card week-grid">
-      <div class="week-cell is-kept"><span class="n">${w.kept}</span><span class="l">tenues</span></div>
-      <div class="week-cell is-broken"><span class="n">${w.broken}</span><span class="l">rompues</span></div>
-      <div class="week-cell is-frozen"><span class="n">${w.frozen}</span><span class="l">gelées</span></div>
-      <div class="week-cell is-missed"><span class="n">${w.missed}</span><span class="l">sans réponse</span></div>
+      <div class="week-cell is-kept"><span class="n">0</span><span class="l">tenues</span></div>
+      <div class="week-cell is-broken"><span class="n">0</span><span class="l">rompues</span></div>
+      <div class="week-cell is-frozen"><span class="n">0</span><span class="l">gelées</span></div>
+      <div class="week-cell is-missed"><span class="n">0</span><span class="l">sans réponse</span></div>
     </div>`;
 
-  return { title: 'Ma semaine', tab: '/home', chrome: true, back: '/home', html };
+  return {
+    title: 'Ma semaine', tab: '/home', chrome: true, back: '/home', html,
+    wire(host) {
+      if (w.rate !== null) fxCountUp(host.querySelector('.week-rate'), w.rate, { suffix: '%', duration: 1000 });
+      const cells = host.querySelectorAll('.week-cell .n');
+      [w.kept, w.broken, w.frozen, w.missed].forEach((v, i) => {
+        setTimeout(() => fxCountUp(cells[i], v, { duration: 620 }), 120 + i * 110);
+      });
+    },
+  };
 }
 
 // ---------- Nouvelle promesse (parcours guidé) ----------
@@ -485,6 +533,7 @@ function screenNewHabit() {
       </div>`;
 
     const rerender = () => mount(host);
+    fxBindTilt(host);
 
     host.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => {
       draft.theme = b.dataset.theme; rerender();
@@ -652,6 +701,7 @@ function screenHabitDetail(habitId) {
   return {
     title: habit.title, tab: '/home', chrome: true, back: '/home', html,
     wire(host) {
+      fxBindTilt(host);
       host.querySelector('#delete-habit').addEventListener('click', () => openDeleteSheet(habit));
     },
   };
