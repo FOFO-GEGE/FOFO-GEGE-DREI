@@ -49,15 +49,43 @@
   --danger: #ff5c5c;
   --danger-ink: #380707;
   --no-data: #4b5563;
+  --no-data-ink: #e8eaee;
   --frozen: #6ea8d8;
   --frozen-ink: #071a2a;
   --radius: 16px;
+  /* Lightness knobs for the hue-tinted card art/icons and card corner tint —
+     recalibrated per theme below rather than left constant, so a saturated
+     icon that pops on a dark tint doesn't wash out on a paper-white one. */
+  --card-ink-l: 68%;
+  --card-tint-l: 22%;
+  --card-tint-a: .55;
 }
 
-/* MIRROIR commits to a single dark world: the app is a mirror in a dark room.
-   A light variant washed the accent out and softened the confrontation, so the
-   surface is pinned dark rather than following the OS. */
-:root { color-scheme: dark; }
+/* MIRROIR is a mirror in a dark room by default — but it still follows the
+   OS like any other app. The light variant is a deliberate repaint, not an
+   inversion: accents get darker/more saturated so they stay legible as text
+   on paper instead of just being pastel versions of the dark-mode values. */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f2ea;
+    --surface: #ffffff;
+    --surface-2: #efe9dd;
+    --border: #ddd4c2;
+    --text: #1c1712;
+    --text-dim: #7a6f5e;
+    --success: #b8710c;
+    --success-ink: #fff6e9;
+    --danger: #c53434;
+    --danger-ink: #fff3f3;
+    --no-data: #ddd6c4;
+    --no-data-ink: #6b5f4a;
+    --frozen: #2f6fa8;
+    --frozen-ink: #eef6ff;
+    --card-ink-l: 40%;
+    --card-tint-l: 90%;
+    --card-tint-a: .85;
+  }
+}
 
 html, body { height: 100%; }
 body {
@@ -140,7 +168,7 @@ button:disabled { opacity: .45; cursor: default; }
   border-radius: 18px; padding: 14px;
   background:
     linear-gradient(160deg,
-      hsl(var(--card-hue) 42% 22% / .55),
+      hsl(var(--card-hue) 42% var(--card-tint-l) / var(--card-tint-a)),
       var(--surface) 45%),
     var(--surface);
   border: 1px solid hsl(var(--card-hue) 40% 45% / .35);
@@ -164,7 +192,7 @@ button:disabled { opacity: .45; cursor: default; }
   background: hsl(var(--card-hue) 45% 50% / .12);
   border: 1px solid hsl(var(--card-hue) 45% 55% / .18);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
-  color: hsl(var(--card-hue) 70% 68%);
+  color: hsl(var(--card-hue) 70% var(--card-ink-l));
   overflow: hidden;
 }
 .pcard-art-glow {
@@ -423,7 +451,7 @@ button:disabled { opacity: .45; cursor: default; }
   border: 1px solid var(--border); background: var(--surface); color: var(--text-dim);
   transition: transform .15s ease;
 }
-.theme-chip .icn { color: hsl(var(--card-hue) 65% 62%); }
+.theme-chip .icn { color: hsl(var(--card-hue) 65% var(--card-ink-l)); }
 .theme-chip.selected {
   border-color: hsl(var(--card-hue) 60% 55%); color: var(--text);
   background: hsl(var(--card-hue) 55% 50% / .14);
@@ -521,7 +549,7 @@ button:disabled { opacity: .45; cursor: default; }
 .cal-day.success { background: var(--success); color: var(--success-ink); font-weight: 700; }
 .cal-day.failed { background: var(--danger); color: var(--danger-ink); font-weight: 700; }
 .cal-day.frozen { background: var(--frozen); color: var(--frozen-ink); font-weight: 700; }
-.cal-day.no_data { background: var(--no-data); color: var(--bg); }
+.cal-day.no_data { background: var(--no-data); color: var(--no-data-ink); }
 .cal-day.empty { background: transparent; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 .cal-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
