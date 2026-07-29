@@ -97,6 +97,14 @@ window.addEventListener('hashchange', render);
 
 // ---------- Auth screen ----------
 
+const PSEUDO_DOMAIN = 'mirroir.local';
+const PSEUDO_RE = /^[a-zA-Z0-9_.-]{3,20}$/;
+const PASSWORD_RE = /^(?=.*\d).{8,}$/;
+
+function pseudoToEmail(pseudo) {
+  return `${pseudo.toLowerCase()}@${PSEUDO_DOMAIN}`;
+}
+
 async function renderLogin(app) {
   let mode = 'signin';
   app.innerHTML = `
@@ -107,14 +115,16 @@ async function renderLogin(app) {
         <button data-mode="signin" class="active">Connexion</button>
         <button data-mode="signup">Inscription</button>
       </div>
-      <div class="form-group"><label>Email</label><input type="text" id="auth-email" autocomplete="email" /></div>
+      <div class="form-group"><label>Pseudo</label><input type="text" id="auth-pseudo" autocomplete="username" autocapitalize="none" /></div>
       <div class="form-group"><label>Mot de passe</label><input type="password" id="auth-password" autocomplete="current-password" /></div>
+      <p class="hint-msg" id="pw-hint" style="display:none">8 caractères minimum, avec au moins un chiffre.</p>
       <button class="btn-primary" id="auth-submit">Se connecter</button>
       <p class="error-msg" id="auth-error" style="display:none"></p>
     </div>
   `;
 
   const errorEl = app.querySelector('#auth-error');
+  const hintEl = app.querySelector('#pw-hint');
   const submitBtn = app.querySelector('#auth-submit');
   const tabs = app.querySelectorAll('.auth-tabs button');
 
@@ -122,24 +132,43 @@ async function renderLogin(app) {
     mode = tab.dataset.mode;
     tabs.forEach(t => t.classList.toggle('active', t === tab));
     submitBtn.textContent = mode === 'signin' ? 'Se connecter' : "Créer mon compte";
+    hintEl.style.display = mode === 'signup' ? 'block' : 'none';
   }));
 
   submitBtn.addEventListener('click', async () => {
     errorEl.style.display = 'none';
-    const email = app.querySelector('#auth-email').value.trim();
+    const pseudo = app.querySelector('#auth-pseudo').value.trim();
     const password = app.querySelector('#auth-password').value;
-    if (!email || !password) {
-      errorEl.textContent = 'Email et mot de passe requis.';
+    if (!pseudo || !password) {
+      errorEl.textContent = 'Pseudo et mot de passe requis.';
       errorEl.style.display = 'block';
       return;
     }
+    if (!PSEUDO_RE.test(pseudo)) {
+      errorEl.textContent = 'Le pseudo doit faire 3 à 20 caractères (lettres, chiffres, . _ -).';
+      errorEl.style.display = 'block';
+      return;
+    }
+    if (mode === 'signup' && !PASSWORD_RE.test(password)) {
+      errorEl.textContent = 'Le mot de passe doit faire au moins 8 caractères et contenir un chiffre.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const email = pseudoToEmail(pseudo);
     submitBtn.disabled = true;
     const { error } = mode === 'signin'
       ? await sb.auth.signInWithPassword({ email, password })
-      : await sb.auth.signUp({ email, password });
+      : await sb.auth.signUp({ email, password, options: { data: { pseudo } } });
     submitBtn.disabled = false;
     if (error) {
-      errorEl.textContent = error.message;
+      if (/already registered|already exists/i.test(error.message)) {
+        errorEl.textContent = 'Ce pseudo est déjà pris.';
+      } else if (/invalid login credentials/i.test(error.message)) {
+        errorEl.textContent = 'Pseudo ou mot de passe incorrect.';
+      } else {
+        errorEl.textContent = error.message;
+      }
       errorEl.style.display = 'block';
     }
   });
