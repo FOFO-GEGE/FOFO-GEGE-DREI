@@ -6,6 +6,21 @@ const sb = window.supabase.createClient(
 const DOW_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 const MONTH_LABELS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 
+const CHECK_SVG = '<svg viewBox="0 0 16 16"><path d="M3 8.5L6.5 12L13 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CROSS_SVG = '<svg viewBox="0 0 16 16"><path d="M4 4L12 12M12 4L4 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+const SURPRISE_MESSAGES = [
+  'Jour parfait.',
+  'Tu tiens le rythme.',
+  'Plus régulier que la moyenne cette semaine.',
+];
+
+const GUILT_MESSAGES = (title, failCount, total) => [
+  `Tu as échoué ${failCount} fois sur tes ${total} derniers jours pour "${title}". Encore une fois ?`,
+  `"${title}" : tu abandonnes plus souvent que tu ne tiens. On continue comme ça ?`,
+  `Ta promesse "${title}" part en fumée. Dernière chance aujourd'hui.`,
+];
+
 const state = {
   user: null,
   habits: [],
@@ -15,8 +30,10 @@ const state = {
 function pad(n) { return String(n).padStart(2, '0'); }
 function dateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
 function todayStr() { return dateStr(new Date()); }
+function currentMonthKey() { return todayStr().slice(0, 7); }
 function dowOf(isoDate) { const [y,m,d] = isoDate.split('-').map(Number); return new Date(y, m-1, d).getDay(); }
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function vibrate(pattern) { if (navigator.vibrate) navigator.vibrate(pattern); }
 
 // ---------- Data layer ----------
 
@@ -55,6 +72,32 @@ async function refreshData() {
   await ensureTodayChecks();
 }
 
+async function markCheck(checkId, habitId, status) {
+  await sb.from('habit_checks').update({ status }).eq('id', checkId);
+  const habit = state.habits.find(h => h.id === habitId);
+  if (!habit) return null;
+  if (status === 'success') {
+    const newStreak = (habit.current_streak || 0) + 1;
+    const newBest = Math.max(habit.best_streak || 0, newStreak);
+    await sb.from('habits').update({ current_streak: newStreak, best_streak: newBest }).eq('id', habitId);
+    habit.current_streak = newStreak;
+    habit.best_streak = newBest;
+  } else if (status === 'failed') {
+    await sb.from('habits').update({ current_streak: 0 }).eq('id', habitId);
+    habit.current_streak = 0;
+  }
+  return habit;
+}
+
+async function freezeCheck(checkId, habitId) {
+  const habit = state.habits.find(h => h.id === habitId);
+  const ym = currentMonthKey();
+  if (!habit || habit.freeze_used_month === ym) return;
+  await sb.from('habit_checks').update({ status: 'frozen' }).eq('id', checkId);
+  await sb.from('habits').update({ freeze_used_month: ym }).eq('id', habitId);
+  habit.freeze_used_month = ym;
+}
+
 // ---------- Router ----------
 
 const routes = { '/login': renderLogin, '/today': renderToday, '/home': renderHome, '/new': renderNewHabit, '/history': renderHistory };
@@ -72,7 +115,11 @@ async function render() {
 
   if (!state.user) {
     app.innerHTML = '';
-    await renderLogin(app);
+    if (!localStorage.getItem('mirroir_onboarded')) {
+      renderOnboarding(app);
+    } else {
+      await renderLogin(app);
+    }
     return;
   }
 
@@ -94,6 +141,68 @@ async function render() {
 }
 
 window.addEventListener('hashchange', render);
+
+// ---------- Onboarding ----------
+
+function renderOnboarding(app) {
+  const slides = [
+    {
+      eyebrow: 'MIRROIR',
+      title: 'Tu as dit que tu allais le faire.',
+      body: "On ne compte pas les intentions. On compte ce qui s'est vraiment passé.",
+    },
+    {
+      eyebrow: 'Un exemple concret',
+      title: 'Aucune place pour l’à-peu-près.',
+      body: 'Chaque promesse devient une série de faits, jour après jour.',
+      example: { title: 'Je dors avant 23h', line: '31 promesses. 18 tenues. 13 rompues.' },
+    },
+    {
+      eyebrow: 'Aucune excuse, aucun mensonge',
+      title: 'Pas de coach, pas de likes.',
+      body: 'Juste le miroir.',
+    },
+  ];
+
+  let i = 0;
+
+  function paint() {
+    const s = slides[i];
+    app.innerHTML = `
+      <div class="onboard-wrap">
+        <div class="onboard-slide">
+          <div class="eyebrow">${esc(s.eyebrow)}</div>
+          <h2>${esc(s.title)}</h2>
+          <p>${esc(s.body)}</p>
+          ${s.example ? `
+            <div class="onboard-example">
+              <div class="ex-title">${esc(s.example.title)}</div>
+              <div>${esc(s.example.line)}</div>
+            </div>` : ''}
+        </div>
+        <div class="onboard-dots">
+          ${slides.map((_, idx) => `<span class="${idx === i ? 'active' : ''}"></span>`).join('')}
+        </div>
+        <div class="onboard-actions">
+          <button class="btn-skip" id="ob-skip">Passer</button>
+          <button class="btn-primary" id="ob-next">${i === slides.length - 1 ? 'Commencer' : 'Suivant'}</button>
+        </div>
+      </div>
+    `;
+    app.querySelector('#ob-skip').addEventListener('click', finish);
+    app.querySelector('#ob-next').addEventListener('click', () => {
+      if (i === slides.length - 1) finish();
+      else { i++; paint(); }
+    });
+  }
+
+  function finish() {
+    localStorage.setItem('mirroir_onboarded', '1');
+    renderLogin(app);
+  }
+
+  paint();
+}
 
 // ---------- Auth screen ----------
 
@@ -201,13 +310,25 @@ function wireShell(app) {
   if (signout) signout.addEventListener('click', async () => { await sb.auth.signOut(); });
 }
 
+function showSurpriseToast(app, text) {
+  const toast = document.createElement('div');
+  toast.className = 'surprise-toast';
+  toast.textContent = text;
+  app.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('show'));
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 500);
+  }, 2200);
+}
+
 // ---------- Objectifs du jour ----------
 
 async function renderToday(app) {
   const today = todayStr();
   const { data: checks } = await sb
     .from('habit_checks')
-    .select('id, status, habit_id, habits(title)')
+    .select('id, status, habit_id, habits(title, current_streak, freeze_used_month)')
     .eq('date', today)
     .eq('status', 'created');
 
@@ -221,26 +342,73 @@ async function renderToday(app) {
 
   const content = notifBanner + (items.length === 0
     ? '<p class="empty-state">Rien en attente aujourd’hui.</p>'
-    : items.map(c => `
-      <div class="card check-row" data-check="${c.id}">
-        <span class="title">${esc(c.habits?.title || '')}</span>
+    : items.map(c => {
+      const streak = c.habits?.current_streak || 0;
+      const freezeAvailable = streak > 0 && c.habits?.freeze_used_month !== currentMonthKey();
+      return `
+      <div class="card check-row" data-check="${c.id}" data-habit="${c.habit_id}">
+        <div>
+          <span class="title">${esc(c.habits?.title || '')}</span>
+          ${streak > 0 ? `<div class="streak-line">🔥 Série de ${streak} jour${streak > 1 ? 's' : ''}</div>` : ''}
+        </div>
         <div class="check-actions">
-          <button class="btn-yes" data-check="${c.id}" data-value="success">Fait</button>
-          <button class="btn-no" data-check="${c.id}" data-value="failed">Pas fait</button>
+          ${freezeAvailable ? `<button class="btn-freeze" data-freeze="${c.id}" data-freeze-habit="${c.habit_id}" title="Geler ce jour (1x/mois, gratuit)">❄️</button>` : ''}
+          <button class="btn-yes" data-check="${c.id}" data-habit="${c.habit_id}" data-value="success">Fait</button>
+          <button class="btn-no" data-check="${c.id}" data-habit="${c.habit_id}" data-value="failed">Pas fait</button>
         </div>
       </div>
-    `).join(''));
+    `;
+    }).join(''));
 
   app.innerHTML = shell('Objectifs du jour', content, '/today');
   wireShell(app);
   const notifBtn = app.querySelector('#notif-enable');
   if (notifBtn) notifBtn.addEventListener('click', async () => { await Notification.requestPermission(); render(); });
+
+  app.querySelectorAll('[data-freeze]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      await freezeCheck(btn.dataset.freeze, btn.dataset.freezeHabit);
+      render();
+    });
+  });
+
   app.querySelectorAll('[data-check][data-value]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const checkId = btn.dataset.check;
+      const habitId = btn.dataset.habit;
       const status = btn.dataset.value;
-      await sb.from('habit_checks').update({ status }).eq('id', checkId);
-      render();
+      const row = btn.closest('.check-row');
+      const otherBtn = row.querySelector(status === 'success' ? '.btn-no' : '.btn-yes');
+      const freezeBtn = row.querySelector('.btn-freeze');
+
+      row.querySelectorAll('button').forEach(b => b.disabled = true);
+      btn.classList.add('done');
+      btn.innerHTML = (status === 'success' ? CHECK_SVG : CROSS_SVG) + btn.innerHTML;
+      row.classList.add(status === 'success' ? 'pending-success' : 'pending-failed');
+      if (otherBtn) otherBtn.style.display = 'none';
+      if (freezeBtn) freezeBtn.style.display = 'none';
+
+      vibrate(status === 'success' ? 25 : [10, 40, 60]);
+
+      const habit = await markCheck(checkId, habitId, status);
+
+      if (status === 'success' && habit) {
+        const badge = document.createElement('span');
+        badge.className = 'streak-badge pop';
+        badge.textContent = `+1 (${habit.current_streak})`;
+        row.querySelector('.title').after(badge);
+
+        if (Math.random() < 0.15) {
+          const msg = SURPRISE_MESSAGES[Math.floor(Math.random() * SURPRISE_MESSAGES.length)];
+          showSurpriseToast(app, msg);
+        }
+      }
+
+      setTimeout(() => {
+        row.classList.add('leaving');
+        setTimeout(render, 480);
+      }, 550);
     });
   });
 }
@@ -253,12 +421,25 @@ async function renderHome(app) {
   const successCount = decided.filter(c => c.status === 'success').length;
   const globalPct = decided.length ? Math.round((successCount / decided.length) * 100) : null;
 
+  let socialLine = '';
+  try {
+    const { data: rows } = await sb.rpc('global_today_success_rate');
+    const row = Array.isArray(rows) ? rows[0] : rows;
+    if (row && row.success_rate !== null && row.sample_size >= 5) {
+      socialLine = `<div class="score-social"><b>${Math.round(row.success_rate)}%</b> des gens comme toi ont réussi aujourd'hui.</div>`;
+    }
+  } catch (e) { /* aggregate stat is best-effort */ }
+
   const habitRows = state.habits.map(h => {
     const own = decided.filter(c => c.habit_id === h.id);
     const s = own.filter(c => c.status === 'success').length;
     const pct = own.length ? Math.round((s / own.length) * 100) : null;
+    const streak = h.current_streak || 0;
     return `<div class="habit-row" data-habit="${h.id}">
-      <span class="title">${esc(h.title)}</span>
+      <div>
+        <span class="title">${esc(h.title)}</span>
+        ${streak > 0 ? `<div class="streak-mini">🔥 ${streak}</div>` : ''}
+      </div>
       <span class="rate-num">${pct === null ? '—' : pct + '%'}</span>
     </div>`;
   }).join('') || '<p class="empty-state">Aucune promesse pour l’instant.</p>';
@@ -267,10 +448,29 @@ async function renderHome(app) {
     ? 'Pas encore assez de données.'
     : `Tu tiens ${globalPct}% de tes engagements.`;
 
+  const ringR = 78;
+  const circumference = 2 * Math.PI * ringR;
+  const pctForRing = globalPct === null ? 0 : globalPct;
+  const dashoffset = circumference * (1 - pctForRing / 100);
+  const displayScore = globalPct === null ? '—' : `${globalPct}%`;
+
   const content = `
     <div class="score-hero">
-      <div class="pct">${globalPct === null ? '—' : globalPct + '%'}</div>
-      <div class="phrase">${esc(phrase)}</div>
+      <div class="score-ring-wrap">
+        <svg viewBox="0 0 176 176">
+          <circle class="score-ring-track" cx="88" cy="88" r="${ringR}" />
+          <circle class="score-ring-value" cx="88" cy="88" r="${ringR}"
+            stroke-dasharray="${circumference}" stroke-dashoffset="${dashoffset}" />
+        </svg>
+        <div class="score-ring-center">
+          <div class="score-num-wrap">
+            <div class="score-num">${displayScore}</div>
+            <div class="score-num-reflection" aria-hidden="true">${displayScore}</div>
+          </div>
+        </div>
+      </div>
+      <div class="score-phrase">${esc(phrase)}</div>
+      ${socialLine}
     </div>
     <div class="card">${habitRows}</div>
   `;
@@ -378,6 +578,13 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
+const CAL_LEGEND = [
+  { cls: 'success', label: 'Tenu' },
+  { cls: 'failed', label: 'Non tenu' },
+  { cls: 'frozen', label: 'Gelé' },
+  { cls: 'no_data', label: 'Pas de donnée' },
+];
+
 async function renderHistory(app, year, month) {
   const now = new Date();
   year = year ?? now.getFullYear();
@@ -391,6 +598,7 @@ async function renderHistory(app, year, month) {
     if (!statuses || statuses.length === 0) return 'empty';
     if (statuses.includes('failed')) return 'failed';
     if (statuses.includes('no_data')) return 'no_data';
+    if (statuses.includes('frozen')) return 'frozen';
     if (statuses.includes('success')) return 'success';
     return 'empty';
   }
@@ -404,14 +612,19 @@ async function renderHistory(app, year, month) {
   }).join('');
 
   const content = `
-    <div class="month-nav">
-      <button id="cal-prev">‹</button>
-      <span class="label">${MONTH_LABELS[month]} ${year}</span>
-      <button id="cal-next">›</button>
-    </div>
-    <div class="cal-grid">
-      ${DOW_LABELS.slice(1).concat(DOW_LABELS[0]).map(l => `<div class="cal-dow">${l}</div>`).join('')}
-      ${grid}
+    <div class="cal-wrap">
+      <div class="month-nav">
+        <button id="cal-prev">‹</button>
+        <span class="label">${MONTH_LABELS[month]} ${year}</span>
+        <button id="cal-next">›</button>
+      </div>
+      <div class="cal-grid">
+        ${DOW_LABELS.slice(1).concat(DOW_LABELS[0]).map(l => `<div class="cal-dow">${l}</div>`).join('')}
+        ${grid}
+      </div>
+      <div class="cal-legend">
+        ${CAL_LEGEND.map(l => `<div class="cal-legend-item"><span class="cal-legend-swatch ${l.cls}"></span>${l.label}</div>`).join('')}
+      </div>
     </div>
   `;
 
@@ -439,7 +652,6 @@ async function renderHabitDetail(app, habitId) {
   const list = checks || [];
   const decided = list.filter(c => c.status === 'success' || c.status === 'failed');
   const successCount = decided.filter(c => c.status === 'success').length;
-  const failedCount = decided.filter(c => c.status === 'failed').length;
 
   const byDow = Array.from({ length: 7 }, () => ({ success: 0, total: 0 }));
   decided.forEach(c => { const d = dowOf(c.date); byDow[d].total++; if (c.status === 'success') byDow[d].success++; });
@@ -453,11 +665,14 @@ async function renderHabitDetail(app, habitId) {
   }
 
   const ageDays = Math.max(0, Math.floor((new Date(todayStr()) - new Date(habit.start_date)) / 86400000));
+  const streak = habit.current_streak || 0;
+  const best = habit.best_streak || 0;
 
   const cal = list.map(c => `<div class="cal-day ${c.status === 'created' ? 'empty' : c.status}">${Number(c.date.split('-')[2])}</div>`).join('');
 
   const content = `
     <div class="card">
+      <div class="stat-line streak-line-big">Série actuelle : <strong>${streak} jour${streak > 1 ? 's' : ''}</strong> (record : ${best})</div>
       <div class="stat-line">Tu as promis <strong>"${esc(habit.title)}"</strong> ${decided.length} fois. Tu l'as fait ${successCount} fois.</div>
       ${bestLine}
       ${worstLine}
@@ -466,6 +681,7 @@ async function renderHabitDetail(app, habitId) {
     <div class="card">
       <div class="cal-grid" style="grid-template-columns: repeat(7, 1fr);">${cal}</div>
     </div>
+    <button class="btn-danger-text" id="delete-habit-btn">Supprimer cette promesse</button>
   `;
 
   app.innerHTML = `
@@ -477,28 +693,66 @@ async function renderHabitDetail(app, habitId) {
     <div class="screen">${content}</div>
   `;
   app.querySelector('#back-btn').addEventListener('click', () => { location.hash = '#/home'; });
+  app.querySelector('#delete-habit-btn').addEventListener('click', () => openDeleteModal(app, habit));
+}
+
+function openDeleteModal(app, habit) {
+  const streak = habit.current_streak || 0;
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet">
+      <h3>Abandonner "${esc(habit.title)}" ?</h3>
+      <p>${streak > 0
+        ? `Tu vas perdre ta série de <strong>${streak} jour${streak > 1 ? 's' : ''}</strong> et tout l'historique de cette promesse. Cette action est définitive.`
+        : `Tout l'historique de cette promesse sera perdu. Cette action est définitive.`}</p>
+      <button class="btn-primary" id="modal-keep">Continuer ma série</button>
+      <button class="btn-ghost-danger" id="modal-delete">Abandonner quand même</button>
+    </div>
+  `;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#modal-keep').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#modal-delete').addEventListener('click', async () => {
+    await sb.from('habits').update({ active: false }).eq('id', habit.id);
+    backdrop.remove();
+    location.hash = '#/home';
+  });
 }
 
 // ---------- Notifications (mode PWA — voir README pour les limites) ----------
 
-function checkReminders() {
+async function reminderBody(habit) {
+  const { data } = await sb.from('habit_checks').select('status').eq('habit_id', habit.id).order('date', { ascending: false }).limit(7);
+  const decided = (data || []).filter(c => c.status === 'success' || c.status === 'failed');
+  const failCount = decided.filter(c => c.status === 'failed').length;
+  const failRatio = decided.length ? failCount / decided.length : 0;
+  if (decided.length >= 2 && failRatio >= 0.5) {
+    const lines = GUILT_MESSAGES(habit.title, failCount, decided.length);
+    return lines[Math.floor(Math.random() * lines.length)];
+  }
+  return `Tu avais promis : ${habit.title}`;
+}
+
+async function checkReminders() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const now = new Date();
   const hh = pad(now.getHours()), mm = pad(now.getMinutes());
   const today = todayStr();
   const d = dowOf(today);
 
-  state.habits.forEach(h => {
-    if (!h.target_days.includes(d)) return;
+  for (const h of state.habits) {
+    if (!h.target_days.includes(d)) continue;
     const [rh, rm] = (h.reminder_time || '20:00').split(':');
-    if (rh !== hh || rm !== mm) return;
+    if (rh !== hh || rm !== mm) continue;
     const key = `${h.id}-${today}`;
-    if (state.notifiedThisSession.has(key)) return;
+    if (state.notifiedThisSession.has(key)) continue;
     state.notifiedThisSession.add(key);
+    const body = await reminderBody(h);
     navigator.serviceWorker?.ready.then(reg => {
-      reg.showNotification('Promesse du jour', { body: `Tu avais promis : ${h.title}`, icon: 'icons/icon-192.png' });
+      reg.showNotification('Promesse du jour', { body, icon: 'icons/icon-192.png' });
     });
-  });
+  }
 }
 
 // ---------- Boot ----------
