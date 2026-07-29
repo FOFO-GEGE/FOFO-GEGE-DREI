@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mirroir-v1';
+const CACHE_NAME = 'mirroir-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -6,7 +6,12 @@ const ASSETS_TO_CACHE = [
   './style.css',
   './manifest.json',
   './vendor/supabase.js',
-  './config.js'
+  './config.js',
+  './fonts/inter-400.woff2',
+  './fonts/inter-600.woff2',
+  './fonts/inter-700.woff2',
+  './fonts/fraunces-600.woff2',
+  './fonts/fraunces-700.woff2'
 ];
 
 self.addEventListener('install', (event) => {
