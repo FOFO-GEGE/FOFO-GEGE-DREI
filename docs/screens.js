@@ -1175,7 +1175,7 @@ function openDeleteSheet(habit) {
   backdrop.innerHTML = `
     <div class="modal-sheet" role="dialog" aria-modal="true">
       <h3>Abandonner « ${esc(habit.title)} » ?</h3>
-      <p>Ta carte <strong>${tier.label}</strong> de ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}${streak > 0 ? ` et ta série de <strong>${streak} jour${streak > 1 ? 's' : ''}</strong>` : ''} disparaîtront. Cette action est définitive.</p>
+      <p>Ta carte <strong>${tier.label}</strong> de ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}${streak > 0 ? ` et ta série de <strong>${streak} jour${streak > 1 ? 's' : ''}</strong>` : ''} ${streak > 0 ? 'disparaîtront' : 'disparaîtra'}. Cette action est définitive.</p>
       <button class="btn-primary" id="sheet-keep">Garder ma carte</button>
       <button class="btn-ghost-danger" id="sheet-delete">Abandonner quand même</button>
     </div>`;

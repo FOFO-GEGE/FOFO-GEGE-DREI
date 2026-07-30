@@ -76,7 +76,16 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('.day-picker');
   await page.click('#nh-next');
   await page.waitForSelector('#nh-time');
-  const future = new Date(Date.now() + 3 * 3600000);
+  // reminder_time is a bare time-of-day, reinterpreted against *today's*
+  // date — so if "+3h" crosses midnight, the stored time reads as earlier
+  // today (already past), the window is already closed instead of "not open
+  // yet", and reconcileToday() never creates a check for it at all. Clamp to
+  // just before midnight instead when the run happens to start late enough.
+  const now = new Date();
+  let future = new Date(now.getTime() + 3 * 3600000);
+  if (future.getDate() !== now.getDate() || future.getMonth() !== now.getMonth()) {
+    future = new Date(now); future.setHours(23, 59, 0, 0);
+  }
   await page.fill('#nh-time', `${String(future.getHours()).padStart(2, '0')}:${String(future.getMinutes()).padStart(2, '0')}`);
   await page.click('#nh-next');
   await page.waitForFunction(() => location.hash === '#/home');

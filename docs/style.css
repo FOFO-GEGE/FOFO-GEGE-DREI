@@ -789,6 +789,12 @@ button:disabled { opacity: .4; cursor: default; }
   display: flex; flex-direction: column;
 }
 .auth-wrap { justify-content: center; }
+/* .btn-primary's base flex:1 assumes it shares a row with a sibling (the
+   onboarding/creator/ritual actions rows) that absorbs the container's free
+   space instead. #auth-submit sits directly in .auth-wrap's column with no
+   such sibling, so without this it grows to fill the column's entire
+   leftover height — a submit button hundreds of pixels tall. */
+.auth-wrap .btn-primary { flex: none; }
 .auth-wrap h1 {
   font-family: 'Fraunces', Georgia, serif; font-size: 46px; font-weight: 700; letter-spacing: -.03em;
   background: linear-gradient(150deg, var(--text), var(--success) 60%, var(--hot));
@@ -903,7 +909,11 @@ button:disabled { opacity: .4; cursor: default; }
 }
 
 .toast {
-  position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 50%;
+  /* Below the topbar, not over it — it used to sit at the same 14px offset
+     as the title and, with a much higher z-index, blot it out for the
+     ~2.6s the toast is up, on every habit creation, push-enable, tier-up
+     and perfect-day celebration. */
+  position: fixed; top: calc(70px + env(safe-area-inset-top)); left: 50%;
   transform: translateX(-50%) translateY(-180%);
   background: linear-gradient(135deg, var(--success), var(--hot));
   color: #fff; font-weight: 800; font-size: 14.5px; padding: 13px 24px; border-radius: 999px;
@@ -1047,7 +1057,13 @@ button:disabled { opacity: .4; cursor: default; }
 
 .day-sheet .day-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .day-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  /* flex-wrap is what actually makes .day-row-reason's flex-basis:100% push
+     onto its own line below — without it the row stays a single nowrap
+     line and reason gets squeezed in beside the badge instead. Top-aligned
+     rather than centered so a title long enough to wrap to two lines
+     doesn't leave the status badge floating at the row's vertical middle,
+     landing on top of the wrapped second line. */
+  display: flex; align-items: flex-start; flex-wrap: wrap; gap: 10px; width: 100%; text-align: left;
   padding: 12px 14px; border-radius: 13px;
   background: var(--surface-2); border: 1px solid var(--border);
 }
