@@ -177,8 +177,11 @@ function reminderBody(habit, left) {
   return `Tu avais promis : ${habit.title}. Une heure pour répondre.`;
 }
 
-// Fires at the reminder time, then every 15 minutes until the hour is up.
+// Fallback path only: fires at the reminder time, then every 15 minutes until
+// the hour is up, but exclusively while a tab is alive. Once a push
+// subscription exists the server owns the pings and this would double them.
 function checkReminders() {
+  if (store.pushActive) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const today = todayStr();
   const now = Date.now();
@@ -227,6 +230,7 @@ async function bootSignedIn() {
   }));
 
   await loadAll();
+  await detectPushState();
   renderRoute();
 
   // Best-effort, non-blocking: refresh the aggregate line once it lands.

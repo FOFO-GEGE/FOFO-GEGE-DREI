@@ -16,6 +16,7 @@ const store = {
   socialRate: null,
   loaded: false,
   sync: 'idle', // 'idle' | 'pending' | 'offline'
+  pushActive: false,
 };
 
 // ---------- Write queue ----------
@@ -195,6 +196,75 @@ async function reconcileToday() {
     const rows = missing.map(h => ({ habit_id: h.id, date: today, status: 'created' }));
     const { data } = await sb.from('habit_checks').insert(rows).select();
     store.checks.push(...(data && data.length ? data : rows));
+  }
+}
+
+// ---------- Push subscription ----------
+// Reminders have to arrive with the app closed, which only Web Push can do.
+// On iOS that means the app must be installed to the home screen first —
+// Safari refuses the subscription in an ordinary tab.
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+// iOS is the one platform that gates push behind installation, so only there
+// does "not installed" mean "not available".
+function pushNeedsInstall() {
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return ios && !isStandalone();
+}
+
+function urlBase64ToUint8Array(base64) {
+  const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4))
+    .replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(padded);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function registerPush() {
+  if (!pushSupported() || !window.MIRROIR_CONFIG.vapidPublicKey) return { ok: false, reason: 'unsupported' };
+  if (pushNeedsInstall()) return { ok: false, reason: 'needs-install' };
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return { ok: false, reason: 'denied' };
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(window.MIRROIR_CONFIG.vapidPublicKey),
+    });
+  }
+
+  const json = sub.toJSON();
+  const { error } = await sb.from('push_subscriptions').upsert({
+    user_id: store.user.id,
+    endpoint: json.endpoint,
+    p256dh: json.keys.p256dh,
+    auth: json.keys.auth,
+  }, { onConflict: 'endpoint' });
+
+  if (error) return { ok: false, reason: error.message };
+  store.pushActive = true;
+  return { ok: true };
+}
+
+// Once the server is pinging, the in-page timer would only duplicate it.
+async function detectPushState() {
+  if (!pushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    store.pushActive = !!(await reg.pushManager.getSubscription());
+  } catch (e) {
+    store.pushActive = false;
   }
 }
 

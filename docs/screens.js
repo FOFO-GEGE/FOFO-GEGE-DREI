@@ -150,18 +150,38 @@ function screenLogin() {
   return { chrome: false, html, wire };
 }
 
+// A reminder that only fires while a tab is open is not a reminder, so the
+// banner pushes towards installing when that is what stands in the way.
+function pushBanner() {
+  if (!store.habits.length || !pushSupported()) return '';
+
+  if (pushNeedsInstall()) {
+    return `<div class="card notif-card">
+        <p><strong>Pour recevoir les rappels</strong>, ajoute MIRROIR à ton écran d'accueil : bouton Partager, puis « Sur l'écran d'accueil ». iOS n'autorise pas les notifications depuis un simple onglet.</p>
+      </div>`;
+  }
+  if (Notification.permission === 'denied') {
+    return `<div class="card notif-card">
+        <p>Les notifications sont bloquées pour MIRROIR. Sans elles, personne ne te rappellera tes promesses — tu peux les réautoriser dans les réglages de ton navigateur.</p>
+      </div>`;
+  }
+  if (Notification.permission === 'default') {
+    return `<div class="card notif-card">
+        <p>Active les rappels pour être confronté à l'heure que tu as choisie, même app fermée.</p>
+        <button class="btn-secondary" id="notif-enable">Activer les rappels</button>
+        <p class="error-msg" id="notif-error" style="display:none"></p>
+      </div>`;
+  }
+  return '';
+}
+
 // ---------- Aujourd'hui : entrée du rituel ----------
 
 function screenToday() {
   const pending = pendingToday();
   const tally = todayTally();
 
-  const notifBanner = ('Notification' in window && Notification.permission === 'default' && store.habits.length > 0)
-    ? `<div class="card notif-card">
-         <p>Active les rappels pour être confronté à l'heure que tu as choisie.</p>
-         <button class="btn-secondary" id="notif-enable">Activer les rappels</button>
-       </div>`
-    : '';
+  const notifBanner = pushBanner();
 
   let body;
   if (!store.habits.length) {
@@ -211,7 +231,23 @@ function screenToday() {
     html: notifBanner + body,
     wire(host) {
       const nb = host.querySelector('#notif-enable');
-      if (nb) nb.addEventListener('click', async () => { await Notification.requestPermission(); navigate('/today'); });
+      if (nb) {
+        nb.addEventListener('click', async () => {
+          nb.disabled = true;
+          const res = await registerPush();
+          if (res.ok) { toast('Rappels activés.'); return navigate('/today'); }
+          nb.disabled = false;
+          const err = host.querySelector('#notif-error');
+          if (err) {
+            err.textContent = res.reason === 'denied'
+              ? 'Tu as refusé les notifications. Réautorise-les dans les réglages du navigateur.'
+              : res.reason === 'needs-install'
+              ? "Ajoute d'abord MIRROIR à ton écran d'accueil."
+              : `Impossible d'activer les rappels : ${res.reason}`;
+            err.style.display = 'block';
+          }
+        });
+      }
       const start = host.querySelector('#start-ritual');
       if (start) start.addEventListener('click', () => navigate('/ritual'));
     },
