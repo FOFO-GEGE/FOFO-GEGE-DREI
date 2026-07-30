@@ -86,7 +86,7 @@ function habitCard(habit, stats, opts = {}) {
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
 
   return `
-    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
+    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''} ${opts.awake ? 'is-awake' : ''}"
       style="--card-hue:${theme.hue}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>

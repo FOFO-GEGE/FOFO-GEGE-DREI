@@ -38,6 +38,10 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForFunction(() => location.hash === '#/home');
   step('habit created with reminder', hhmm, '(window open, ~50 min left)');
 
+  // --- Daily rhythm: the card looks awake while its window is open ---
+  await page.waitForSelector('.deck-grid .pcard');
+  step('card is awake while its window is open:', await page.locator('.deck-grid .pcard.is-awake').count(), '(expect 1)');
+
   // --- Countdown on Today ---
   await page.click('[data-nav="/today"]');
   await page.waitForSelector('.ritual-intro');
@@ -92,6 +96,9 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   // --- Sync queue drained ---
   const sync = await page.evaluate(() => ({ state: store.sync, queued: JSON.parse(localStorage.getItem('mirroir_write_queue') || '[]').length }));
   step('sync state:', sync.state, '| queued ops left:', sync.queued);
+
+  // --- Daily rhythm: no longer awake once answered, even mid-window ---
+  step('card no longer awake once answered:', await page.locator('.deck-grid .pcard.is-awake').count(), '(expect 0)');
 
   // --- Card focus: the card only pivots in place — it never translates.
   // One finger tilts it around X/Y far enough to carry it past a full

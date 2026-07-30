@@ -483,7 +483,7 @@ function screenHome() {
     ? `<section class="deck">
          <h4 class="section-label">Tes cartes <span class="deck-count">${store.habits.length}</span></h4>
          <div class="deck-grid">
-           ${store.habits.map(h => habitCard(h, habitStats(h), { compact: true, habitId: h.id })).join('')}
+           ${store.habits.map(h => habitCard(h, habitStats(h), { compact: true, habitId: h.id, awake: isAwake(h) })).join('')}
          </div>
        </section>`
     : `<div class="empty-rich">
@@ -908,7 +908,7 @@ function openCardFocus(habit, opts = {}) {
   const stats = habitStats(habit);
   const cardOpts = opts.dead
     ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
-    : {};
+    : { awake: isAwake(habit) };
 
   const overlay = document.createElement('div');
   overlay.className = 'card-focus-backdrop';
@@ -1067,7 +1067,7 @@ function screenHabitDetail(habitId) {
   const html = `
     <div class="detail-card">${habitCard(habit, stats, dead
       ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
-      : {})}</div>
+      : { awake: isAwake(habit) })}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
       ${lines}
