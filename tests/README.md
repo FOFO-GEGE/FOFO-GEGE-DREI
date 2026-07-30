@@ -36,12 +36,14 @@ and has to be verified against the project itself.
 
 - `flow.spec.js` — signup, guided creation, the answer-window countdown, the
   ritual, the failure-reason step, the write queue draining, the card-focus
-  overlay (the card drags freely and springs back, a real drag doesn't also
-  count as the tap that closes it, a plain tap or a backdrop tap does),
-  reminder-time editing (blocked while today's check is live, allowed once it
-  isn't), the cemetery (abandon, toggle open **and** closed — checked via
-  computed style, not just the `hidden` attribute), and the clickable
-  calendar day sheet.
+  overlay (the card pivots around X/Y on a one-finger drag without ever
+  translating — checked by asserting its on-screen center barely moves while
+  its rotation passes 90° — springs back flat on release, and a real turn
+  doesn't also count as the tap that closes it, while a plain tap or a
+  backdrop tap does), reminder-time editing (blocked while today's check is
+  live, allowed once it isn't), the cemetery (abandon, toggle open **and**
+  closed — checked via computed style, not just the `hidden` attribute), and
+  the clickable calendar day sheet.
 - `expiry.spec.js` — the core rule: silence past the one-hour window becomes a
   failure with the `expired` flag, breaks the streak, and a window that has
   already closed never opens a check at all.
