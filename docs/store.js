@@ -15,7 +15,73 @@ const store = {
   checks: [],
   socialRate: null,
   loaded: false,
+  sync: 'idle', // 'idle' | 'pending' | 'offline'
+  pushActive: false,
 };
+
+// ---------- Write queue ----------
+// Taps update memory first so the UI never waits on the network. That means a
+// write can fail after the screen has already moved on, so every write goes
+// through a queue that survives a reload and retries with backoff. Without it
+// the app could show "tenu" for something the database never received.
+
+const QUEUE_KEY = 'mirroir_write_queue';
+let writeQueue = [];
+let flushTimer = null;
+let syncListener = null;
+
+try { writeQueue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch (e) { writeQueue = []; }
+
+function onSyncChange(fn) { syncListener = fn; }
+
+function setSync(state) {
+  if (store.sync === state) return;
+  store.sync = state;
+  if (syncListener) syncListener(state);
+}
+
+function persistQueue() {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(writeQueue)); } catch (e) { /* quota */ }
+  setSync(writeQueue.length ? (writeQueue.some(o => o.tries >= 3) ? 'offline' : 'pending') : 'idle');
+}
+
+function enqueue(op) {
+  writeQueue.push({ ...op, tries: 0 });
+  persistQueue();
+  flushQueue();
+}
+
+async function runOp(op) {
+  let q = sb.from(op.table).update(op.values);
+  if (op.matchId) q = q.eq('id', op.matchId);
+  else if (op.inIds) q = q.in('id', op.inIds);
+  else throw new Error('op without a target');
+  const { error } = await q;
+  if (error) throw new Error(error.message);
+}
+
+async function flushQueue() {
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (!writeQueue.length || !store.user) return;
+
+  while (writeQueue.length) {
+    const op = writeQueue[0];
+    try {
+      await runOp(op);
+      writeQueue.shift();
+      persistQueue();
+    } catch (e) {
+      op.tries++;
+      persistQueue();
+      // Exponential backoff, capped — a phone in a tunnel shouldn't spin.
+      const delay = Math.min(30000, 1000 * Math.pow(2, op.tries));
+      flushTimer = setTimeout(flushQueue, delay);
+      return;
+    }
+  }
+}
+
+window.addEventListener('online', flushQueue);
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function dateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -36,6 +102,49 @@ function isDue(habit, iso) {
   return true;
 }
 
+// ---------- The answer window ----------
+// A promise opens at its reminder time and stays answerable for one hour.
+// Silence past that hour is not missing data — it counts as broken, and it
+// breaks the streak exactly like an explicit "pas fait" would.
+
+const ANSWER_WINDOW_MIN = 60;
+const REMINDER_STEPS = [0, 15, 30, 45];
+
+function windowOpensAt(habit, iso) {
+  const [hh, mm] = (habit.reminder_time || '20:00').slice(0, 5).split(':').map(Number);
+  const [y, mo, d] = iso.split('-').map(Number);
+  return new Date(y, mo - 1, d, hh, mm, 0, 0);
+}
+
+function deadlineFor(habit, iso) {
+  return new Date(windowOpensAt(habit, iso).getTime() + ANSWER_WINDOW_MIN * 60000);
+}
+
+function habitOf(check) {
+  return store.habits.find(h => h.id === check.habit_id);
+}
+
+// null when the habit is gone; negative once the hour has run out.
+function minutesLeft(check) {
+  const habit = habitOf(check);
+  if (!habit) return null;
+  return Math.ceil((deadlineFor(habit, check.date).getTime() - Date.now()) / 60000);
+}
+
+function windowIsOpen(check) {
+  const habit = habitOf(check);
+  if (!habit) return false;
+  const now = Date.now();
+  return now >= windowOpensAt(habit, check.date).getTime()
+      && now <= deadlineFor(habit, check.date).getTime();
+}
+
+function isExpired(check) {
+  const habit = habitOf(check);
+  if (!habit) return false;
+  return Date.now() > deadlineFor(habit, check.date).getTime();
+}
+
 // ---------- Loading ----------
 
 async function loadAll() {
@@ -50,32 +159,112 @@ async function loadAll() {
   store.loaded = true;
 }
 
-// Close yesterday's unanswered checks and open today's — both as single
-// batched statements rather than one round-trip per habit.
+// Expire every check whose hour has run out, then open today's. Both are
+// batched rather than one round-trip per habit. The server cron does the same
+// work for users who never open the app; this is the client-side guard-rail
+// so the screen is never stale on arrival.
 async function reconcileToday() {
   const today = todayStr();
 
-  const stale = store.checks.filter(c => c.status === 'created' && c.date < today);
-  if (stale.length) {
-    stale.forEach(c => { c.status = 'no_data'; });
-    await sb.from('habit_checks').update({ status: 'no_data' }).lt('date', today).eq('status', 'created');
-    // A missed day breaks the streak.
-    const brokenIds = new Set(stale.map(c => c.habit_id));
-    for (const id of brokenIds) {
+  const expired = store.checks.filter(c => c.status === 'created' && isExpired(c));
+  if (expired.length) {
+    expired.forEach(c => { c.status = 'failed'; c.expired = true; });
+    // One statement per date keeps this bounded — in practice a single day.
+    const dates = [...new Set(expired.map(c => c.date))];
+    for (const d of dates) {
+      const ids = expired.filter(c => c.date === d).map(c => c.id);
+      enqueue({ table: 'habit_checks', values: { status: 'failed' }, inIds: ids });
+    }
+    for (const id of new Set(expired.map(c => c.habit_id))) {
       const h = store.habits.find(x => x.id === id);
       if (h && h.current_streak > 0) {
         h.current_streak = 0;
-        sb.from('habits').update({ current_streak: 0 }).eq('id', id);
+        enqueue({ table: 'habits', values: { current_streak: 0 }, matchId: id });
       }
     }
   }
 
+  // Only open a check while its window can still be answered. A promise made
+  // at 22h with an 08h reminder starts counting tomorrow — opening it now
+  // would create an already-expired check and score a failure the user never
+  // had a chance to avoid.
   const haveToday = new Set(store.checks.filter(c => c.date === today).map(c => c.habit_id));
-  const missing = store.habits.filter(h => isDue(h, today) && !haveToday.has(h.id));
+  const now = Date.now();
+  const missing = store.habits.filter(h =>
+    isDue(h, today) && !haveToday.has(h.id) && now <= deadlineFor(h, today).getTime());
   if (missing.length) {
     const rows = missing.map(h => ({ habit_id: h.id, date: today, status: 'created' }));
     const { data } = await sb.from('habit_checks').insert(rows).select();
     store.checks.push(...(data && data.length ? data : rows));
+  }
+}
+
+// ---------- Push subscription ----------
+// Reminders have to arrive with the app closed, which only Web Push can do.
+// On iOS that means the app must be installed to the home screen first —
+// Safari refuses the subscription in an ordinary tab.
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+// iOS is the one platform that gates push behind installation, so only there
+// does "not installed" mean "not available".
+function pushNeedsInstall() {
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  return ios && !isStandalone();
+}
+
+function urlBase64ToUint8Array(base64) {
+  const padded = (base64 + '='.repeat((4 - base64.length % 4) % 4))
+    .replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(padded);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function registerPush() {
+  if (!pushSupported() || !window.MIRROIR_CONFIG.vapidPublicKey) return { ok: false, reason: 'unsupported' };
+  if (pushNeedsInstall()) return { ok: false, reason: 'needs-install' };
+
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return { ok: false, reason: 'denied' };
+
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(window.MIRROIR_CONFIG.vapidPublicKey),
+    });
+  }
+
+  const json = sub.toJSON();
+  const { error } = await sb.from('push_subscriptions').upsert({
+    user_id: store.user.id,
+    endpoint: json.endpoint,
+    p256dh: json.keys.p256dh,
+    auth: json.keys.auth,
+  }, { onConflict: 'endpoint' });
+
+  if (error) return { ok: false, reason: error.message };
+  store.pushActive = true;
+  return { ok: true };
+}
+
+// Once the server is pinging, the in-page timer would only duplicate it.
+async function detectPushState() {
+  if (!pushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    store.pushActive = !!(await reg.pushManager.getSubscription());
+  } catch (e) {
+    store.pushActive = false;
   }
 }
 
@@ -139,24 +328,28 @@ function canFreeze(habit) {
 
 // ---------- Mutations (optimistic: local first, network after) ----------
 
-function markCheck(checkId, status) {
+function markCheck(checkId, status, reason) {
   const check = store.checks.find(c => c.id === checkId);
   if (!check) return null;
   check.status = status;
+  if (reason) check.reason = reason;
   const habit = store.habits.find(h => h.id === check.habit_id);
 
-  sb.from('habit_checks').update({ status }).eq('id', checkId).then(() => {});
+  const values = reason ? { status, reason } : { status };
+  enqueue({ table: 'habit_checks', values, matchId: checkId });
 
   if (habit) {
     if (status === 'success') {
       habit.current_streak = (habit.current_streak || 0) + 1;
       habit.best_streak = Math.max(habit.best_streak || 0, habit.current_streak);
-      sb.from('habits')
-        .update({ current_streak: habit.current_streak, best_streak: habit.best_streak })
-        .eq('id', habit.id).then(() => {});
+      enqueue({
+        table: 'habits',
+        values: { current_streak: habit.current_streak, best_streak: habit.best_streak },
+        matchId: habit.id,
+      });
     } else if (status === 'failed') {
       habit.current_streak = 0;
-      sb.from('habits').update({ current_streak: 0 }).eq('id', habit.id).then(() => {});
+      enqueue({ table: 'habits', values: { current_streak: 0 }, matchId: habit.id });
     }
   }
   return habit;
@@ -169,8 +362,19 @@ function freezeCheck(checkId) {
   if (!habit || !canFreeze(habit)) return;
   check.status = 'frozen';
   habit.freeze_used_month = currentMonthKey();
-  sb.from('habit_checks').update({ status: 'frozen' }).eq('id', checkId).then(() => {});
-  sb.from('habits').update({ freeze_used_month: habit.freeze_used_month }).eq('id', habit.id).then(() => {});
+  enqueue({ table: 'habit_checks', values: { status: 'frozen' }, matchId: checkId });
+  enqueue({ table: 'habits', values: { freeze_used_month: habit.freeze_used_month }, matchId: habit.id });
+}
+
+async function updateHabit(habitId, fields) {
+  const habit = store.habits.find(h => h.id === habitId);
+  if (!habit) return { error: { message: 'Promesse introuvable.' } };
+  Object.assign(habit, fields);
+  const { error } = await sb.from('habits').update(fields).eq('id', habitId);
+  if (error) return { error };
+  // A changed schedule can make today due (or no longer due).
+  await reconcileToday();
+  return { habit };
 }
 
 async function createHabit(fields) {
@@ -204,6 +408,18 @@ async function deleteHabit(habitId) {
 
 // Every insight carries its own sample floor: below it, we stay silent rather
 // than dress up a coincidence as a pattern.
+const REASONS = [
+  { id: 'oubli', label: 'Oublié' },
+  { id: 'fatigue', label: 'Trop fatigué' },
+  { id: 'imprevu', label: 'Imprévu' },
+  { id: 'envie', label: 'Pas envie' },
+];
+
+function reasonLabel(id) {
+  const r = REASONS.find(x => x.id === id);
+  return r ? r.label.toLowerCase() : null;
+}
+
 function buildInsights() {
   const out = [];
   const decided = store.checks.filter(c => c.status === 'success' || c.status === 'failed');
@@ -261,6 +477,35 @@ function buildInsights() {
         ? { tone: 'good', text: `Tu remontes : ${rr}% ces 7 derniers jours contre ${rp}% la semaine d’avant.` }
         : { tone: 'bad', text: `Tu décroches : ${rr}% ces 7 derniers jours contre ${rp}% la semaine d’avant.` });
     }
+  }
+
+  // What the failures are actually made of. This is the one insight family
+  // that can be acted on directly, so it goes near the top.
+  const failed = store.checks.filter(c => c.status === 'failed');
+  const withReason = failed.filter(c => c.reason);
+  if (withReason.length >= 4) {
+    const counts = {};
+    withReason.forEach(c => { counts[c.reason] = (counts[c.reason] || 0) + 1; });
+    const [topId, topN] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const share = Math.round(100 * topN / withReason.length);
+    if (share >= 45) {
+      const label = reasonLabel(topId);
+      const extra = topId === 'oubli'
+        ? ' Ton heure de rappel est peut-être mal placée.'
+        : topId === 'fatigue'
+        ? ' Tu places peut-être tes promesses trop tard dans la journée.'
+        : '';
+      out.unshift({ tone: 'bad', text: `${share}% de tes échecs, c’est « ${label} ».${extra}` });
+    }
+  }
+
+  // Promises lost to silence rather than to a decision.
+  const expiredCount = failed.filter(c => c.expired).length;
+  if (failed.length >= 5 && expiredCount / failed.length >= 0.4) {
+    out.push({
+      tone: 'bad',
+      text: `${Math.round(100 * expiredCount / failed.length)}% de tes échecs sont des non-réponses : tu n’as même pas ouvert l’app dans l’heure.`,
+    });
   }
 
   return out;

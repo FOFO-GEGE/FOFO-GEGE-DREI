@@ -1,9 +1,10 @@
-const CACHE_NAME = 'mirroir-v3';
+const CACHE_NAME = 'mirroir-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './app.js',
   './store.js',
+  './fx.js',
   './ui.js',
   './screens.js',
   './style.css',
@@ -52,14 +53,36 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+// Server-sent reminder. This is the path that works with the app closed —
+// the in-page timer only ever fired while a tab was alive.
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try { payload = event.data ? event.data.json() : {}; } catch (e) { /* keep defaults */ }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || 'Promesse du jour', {
+      body: payload.body || 'Tu as une promesse à confirmer.',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-96.png',
+      tag: payload.tag || 'mirroir-reminder',
+      renotify: true,
+      data: { url: './index.html#/today' },
+    })
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || './index.html#/today';
   event.waitUntil(
-    self.clients.matchAll({ type: 'window' }).then((clients) => {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          if ('navigate' in client) client.navigate(target).catch(() => {});
+          return client.focus();
+        }
       }
-      if (self.clients.openWindow) return self.clients.openWindow('./index.html#/today');
+      if (self.clients.openWindow) return self.clients.openWindow(target);
     })
   );
 });

@@ -6,6 +6,23 @@ const MONTH_LABELS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 
 const SURPRISE_MESSAGES = ['Jour parfait.', 'Tu tiens le rythme.', 'Plus régulier que la moyenne cette semaine.'];
 
+// Shared chip describing where a pending check sits in its hour.
+function countdownChip(check) {
+  const habit = store.habits.find(h => h.id === check.habit_id);
+  if (!habit) return '';
+  if (isExpired(check)) {
+    return `<p class="countdown is-urgent">${icon('spark', 14)} Le temps est écoulé</p>`;
+  }
+  if (!windowIsOpen(check)) {
+    const at = (habit.reminder_time || '20:00').slice(0, 5);
+    return `<p class="countdown is-waiting">Ouvre à ${at}</p>`;
+  }
+  const left = minutesLeft(check);
+  return `<p class="countdown ${left <= 15 ? 'is-urgent' : ''}">
+    ${icon('spark', 14)} ${left} min avant « non tenu »
+  </p>`;
+}
+
 // ---------- Onboarding ----------
 
 const ONBOARD_SLIDES = [
@@ -55,6 +72,7 @@ function screenOnboarding(onDone) {
 
   function mount(host) {
     host.innerHTML = html();
+    fxBindTilt(host);
     host.querySelector('#ob-skip').addEventListener('click', onDone);
     host.querySelector('#ob-next').addEventListener('click', () => {
       if (i === ONBOARD_SLIDES.length - 1) return onDone();
@@ -132,18 +150,38 @@ function screenLogin() {
   return { chrome: false, html, wire };
 }
 
+// A reminder that only fires while a tab is open is not a reminder, so the
+// banner pushes towards installing when that is what stands in the way.
+function pushBanner() {
+  if (!store.habits.length || !pushSupported()) return '';
+
+  if (pushNeedsInstall()) {
+    return `<div class="card notif-card">
+        <p><strong>Pour recevoir les rappels</strong>, ajoute MIRROIR à ton écran d'accueil : bouton Partager, puis « Sur l'écran d'accueil ». iOS n'autorise pas les notifications depuis un simple onglet.</p>
+      </div>`;
+  }
+  if (Notification.permission === 'denied') {
+    return `<div class="card notif-card">
+        <p>Les notifications sont bloquées pour MIRROIR. Sans elles, personne ne te rappellera tes promesses — tu peux les réautoriser dans les réglages de ton navigateur.</p>
+      </div>`;
+  }
+  if (Notification.permission === 'default') {
+    return `<div class="card notif-card">
+        <p>Active les rappels pour être confronté à l'heure que tu as choisie, même app fermée.</p>
+        <button class="btn-secondary" id="notif-enable">Activer les rappels</button>
+        <p class="error-msg" id="notif-error" style="display:none"></p>
+      </div>`;
+  }
+  return '';
+}
+
 // ---------- Aujourd'hui : entrée du rituel ----------
 
 function screenToday() {
   const pending = pendingToday();
   const tally = todayTally();
 
-  const notifBanner = ('Notification' in window && Notification.permission === 'default' && store.habits.length > 0)
-    ? `<div class="card notif-card">
-         <p>Active les rappels pour être confronté à l'heure que tu as choisie.</p>
-         <button class="btn-secondary" id="notif-enable">Activer les rappels</button>
-       </div>`
-    : '';
+  const notifBanner = pushBanner();
 
   let body;
   if (!store.habits.length) {
@@ -161,13 +199,28 @@ function screenToday() {
         <button class="btn-secondary" data-nav="/home">Voir mon miroir</button>
       </div>`;
   } else {
+    // The tightest deadline across everything still open drives the urgency.
+    const open = pending.filter(p => windowIsOpen(p.check));
+    const soonest = open.length ? Math.min(...open.map(p => minutesLeft(p.check))) : null;
+
     body = `
       <div class="ritual-intro">
         <div class="ritual-count">${pending.length}</div>
-        <h3>promesse${pending.length > 1 ? 's' : ''} en attente</h3>
-        <p>Une par une. Pas de liste à cocher à la va-vite.</p>
+        <h3>promesse${pending.length > 1 ? 's' : ''} pas encore faite${pending.length > 1 ? 's' : ''}</h3>
+        ${soonest !== null
+          ? `<p class="deadline-banner ${soonest <= 15 ? 'is-urgent' : ''}">
+               Sans réponse dans <strong>${soonest} min</strong>, c'est compté comme non tenu.
+             </p>`
+          : `<p>Une par une. Pas de liste à cocher à la va-vite.</p>`}
         <ul class="ritual-preview">
-          ${pending.map(p => `<li>${icon(themeById(p.habit.theme).id, 18)}<span>${esc(p.habit.title)}</span></li>`).join('')}
+          ${pending.map(p => `
+            <li>
+              ${icon(themeById(p.habit.theme).id, 18)}
+              <span class="rp-title">${esc(p.habit.title)}</span>
+              ${windowIsOpen(p.check)
+                ? `<span class="rp-left ${minutesLeft(p.check) <= 15 ? 'is-urgent' : ''}">${minutesLeft(p.check)} min</span>`
+                : `<span class="rp-left is-waiting">${(p.habit.reminder_time || '20:00').slice(0, 5)}</span>`}
+            </li>`).join('')}
         </ul>
         <button class="btn-primary" id="start-ritual">Commencer le check-in</button>
       </div>`;
@@ -178,7 +231,23 @@ function screenToday() {
     html: notifBanner + body,
     wire(host) {
       const nb = host.querySelector('#notif-enable');
-      if (nb) nb.addEventListener('click', async () => { await Notification.requestPermission(); navigate('/today'); });
+      if (nb) {
+        nb.addEventListener('click', async () => {
+          nb.disabled = true;
+          const res = await registerPush();
+          if (res.ok) { toast('Rappels activés.'); return navigate('/today'); }
+          nb.disabled = false;
+          const err = host.querySelector('#notif-error');
+          if (err) {
+            err.textContent = res.reason === 'denied'
+              ? 'Tu as refusé les notifications. Réautorise-les dans les réglages du navigateur.'
+              : res.reason === 'needs-install'
+              ? "Ajoute d'abord MIRROIR à ton écran d'accueil."
+              : `Impossible d'activer les rappels : ${res.reason}`;
+            err.style.display = 'block';
+          }
+        });
+      }
       const start = host.querySelector('#start-ritual');
       if (start) start.addEventListener('click', () => navigate('/ritual'));
     },
@@ -215,6 +284,7 @@ function screenRitual() {
           ${streak > 0
             ? `<p class="ritual-streak">${icon('flame', 16)} Série de ${streak} jour${streak > 1 ? 's' : ''} en jeu</p>`
             : '<p class="ritual-streak muted">Aucune série en cours.</p>'}
+          ${countdownChip(check)}
         </div>
 
         <div class="ritual-actions">
@@ -233,25 +303,67 @@ function screenRitual() {
         const verdict = btn.dataset.verdict;
         host.querySelectorAll('button').forEach(b => { b.disabled = true; });
 
+        const stage = host.querySelector('.ritual');
+
         if (verdict === 'frozen') {
           freezeCheck(check.id);
           result.frozen++;
           vibrate(12);
-        } else {
+        } else if (verdict === 'success') {
           markCheck(check.id, verdict);
-          if (verdict === 'success') { result.kept++; vibrate(25); }
-          else { result.broken++; vibrate([10, 40, 60]); }
+          result.kept++;
+          vibrate(25);
+          fxBurstFrom(btn, { count: 54, speed: 8 });
+        } else {
+          // Commit happens on the reason step so the answer and its reason
+          // land as one write instead of two.
+          result.broken++;
+          vibrate([10, 40, 60]);
+          fxShake(stage, 'hard');
+          const r = stage.getBoundingClientRect();
+          fxShatter(r.left + r.width / 2, r.top + r.height * 0.42);
         }
 
         const veil = document.createElement('div');
         veil.className = `ritual-veil is-${verdict}`;
-        veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 64);
-        host.querySelector('.ritual').appendChild(veil);
+        veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 72);
+        stage.appendChild(veil);
         requestAnimationFrame(() => veil.classList.add('show'));
 
-        setTimeout(() => { idx++; mount(host); }, 620);
+        setTimeout(() => {
+          if (verdict === 'failed') return mountReason(host, check);
+          idx++;
+          mount(host);
+        }, 640);
       });
     });
+  }
+
+  // Optional, one tap, always skippable — the point is to learn what the
+  // failures are made of, not to interrogate anyone.
+  function mountReason(host, check) {
+    host.innerHTML = `
+      <div class="ritual reason-step">
+        <div class="ritual-body">
+          <p class="ritual-prompt">Pourquoi ?</p>
+          <h2 class="ritual-title">Une raison, en un tap.</h2>
+          <div class="reason-grid">
+            ${REASONS.map(r => `<button class="reason-chip" data-reason="${r.id}">${esc(r.label)}</button>`).join('')}
+          </div>
+        </div>
+        <div class="ritual-actions single">
+          <button class="btn-secondary" id="reason-skip">Ne pas préciser</button>
+        </div>
+      </div>`;
+
+    const commit = reason => {
+      markCheck(check.id, 'failed', reason);
+      idx++;
+      mount(host);
+    };
+    host.querySelectorAll('[data-reason]').forEach(b =>
+      b.addEventListener('click', () => commit(b.dataset.reason)));
+    host.querySelector('#reason-skip').addEventListener('click', () => commit(null));
   }
 
   function mountSummary(host) {
@@ -276,6 +388,16 @@ function screenRitual() {
           <button class="btn-primary" id="ritual-done">Voir mon miroir</button>
         </div>
       </div>`;
+    // Tallies land one after the other rather than all at once.
+    const nums = host.querySelectorAll('.summary-tallies .n');
+    const values = [result.kept, result.broken, result.frozen];
+    nums.forEach((el, i) => {
+      el.textContent = '0';
+      setTimeout(() => fxCountUp(el, values[i], { duration: 700 }), 160 + i * 170);
+    });
+
+    if (perfect) setTimeout(fxConfetti, 260);
+
     host.querySelector('#ritual-done').addEventListener('click', () => navigate('/home'));
   }
 
@@ -291,9 +413,10 @@ function screenHome() {
   const blur = (1 - shown / 100) * 7;
   const crackOpacity = shown >= 70 ? 0 : Math.min(0.85, (70 - shown) / 70);
 
-  const R = 78, C = 2 * Math.PI * R;
+  const R = 104, C = 2 * Math.PI * R;
   const dash = C * (1 - shown / 100);
   const label = score === null ? '—' : `${score}%`;
+  const isLow = score !== null && score < 50;
 
   const phrase = score === null
     ? 'Pas encore assez de données.'
@@ -326,22 +449,29 @@ function screenHome() {
        </div>`;
 
   const html = `
-    <div class="mirror-hero" style="--blur:${blur.toFixed(2)}px">
+    <div class="mirror-hero ${isLow ? 'is-low' : ''}" style="--blur:${blur.toFixed(2)}px">
       <div class="mirror-ring">
-        <svg viewBox="0 0 176 176" aria-hidden="true">
-          <circle class="ring-track" cx="88" cy="88" r="${R}" />
-          <circle class="ring-value" cx="88" cy="88" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${dash}" />
+        <div class="mirror-aura" aria-hidden="true"></div>
+        <svg class="ring" viewBox="0 0 232 232" aria-hidden="true">
+          <defs>
+            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="${isLow ? 'var(--danger)' : 'var(--hot)'}" />
+              <stop offset="100%" stop-color="${isLow ? 'var(--hot)' : 'var(--success)'}" />
+            </linearGradient>
+          </defs>
+          <circle class="ring-track" cx="116" cy="116" r="${R}" />
+          <circle class="ring-value" cx="116" cy="116" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${C}" />
         </svg>
         <div class="mirror-face">
-          <div class="mirror-num">${label}</div>
+          <div class="mirror-num">${score === null ? '—' : '0%'}</div>
           <div class="mirror-reflect" aria-hidden="true">${label}</div>
-          <svg class="mirror-cracks" viewBox="0 0 176 176" style="opacity:${crackOpacity.toFixed(2)}" aria-hidden="true">
-            <path d="M88 74 L80 100 L96 112 L74 150" />
-            <path d="M80 100 L34 92" />
-            <path d="M96 112 L142 100" />
-            <path d="M74 150 L58 124" />
-            <path d="M96 112 L104 148" />
-            <path d="M80 100 L62 78" />
+          <svg class="mirror-cracks" viewBox="0 0 232 232" style="opacity:${crackOpacity.toFixed(2)}" aria-hidden="true">
+            <path d="M116 96 L106 132 L127 148 L98 198" />
+            <path d="M106 132 L45 121" />
+            <path d="M127 148 L188 132" />
+            <path d="M98 198 L77 163" />
+            <path d="M127 148 L137 195" />
+            <path d="M106 132 L82 103" />
           </svg>
         </div>
       </div>
@@ -355,6 +485,16 @@ function screenHome() {
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
     wire(host) {
+      // The ring fills and the figure counts up on arrival — the score is the
+      // headline, so it gets the entrance.
+      if (score !== null) {
+        fxCountUp(host.querySelector('.mirror-num'), score, { suffix: '%', duration: 1100 });
+        requestAnimationFrame(() => {
+          const ring = host.querySelector('.ring-value');
+          if (ring) ring.style.strokeDashoffset = dash;
+        });
+      }
+      fxBindTilt(host);
       host.querySelectorAll('.pcard[data-habit]').forEach(el =>
         el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
     },
@@ -376,17 +516,26 @@ function screenWeek() {
 
   const html = `
     <div class="week-hero">
-      <div class="week-rate">${w.rate === null ? '—' : w.rate + '%'}</div>
+      <div class="week-rate">${w.rate === null ? '—' : '0%'}</div>
       <p class="week-verdict">${esc(verdict)}</p>
     </div>
     <div class="card week-grid">
-      <div class="week-cell is-kept"><span class="n">${w.kept}</span><span class="l">tenues</span></div>
-      <div class="week-cell is-broken"><span class="n">${w.broken}</span><span class="l">rompues</span></div>
-      <div class="week-cell is-frozen"><span class="n">${w.frozen}</span><span class="l">gelées</span></div>
-      <div class="week-cell is-missed"><span class="n">${w.missed}</span><span class="l">sans réponse</span></div>
+      <div class="week-cell is-kept"><span class="n">0</span><span class="l">tenues</span></div>
+      <div class="week-cell is-broken"><span class="n">0</span><span class="l">rompues</span></div>
+      <div class="week-cell is-frozen"><span class="n">0</span><span class="l">gelées</span></div>
+      <div class="week-cell is-missed"><span class="n">0</span><span class="l">sans réponse</span></div>
     </div>`;
 
-  return { title: 'Ma semaine', tab: '/home', chrome: true, back: '/home', html };
+  return {
+    title: 'Ma semaine', tab: '/home', chrome: true, back: '/home', html,
+    wire(host) {
+      if (w.rate !== null) fxCountUp(host.querySelector('.week-rate'), w.rate, { suffix: '%', duration: 1000 });
+      const cells = host.querySelectorAll('.week-cell .n');
+      [w.kept, w.broken, w.frozen, w.missed].forEach((v, i) => {
+        setTimeout(() => fxCountUp(cells[i], v, { duration: 620 }), 120 + i * 110);
+      });
+    },
+  };
 }
 
 // ---------- Nouvelle promesse (parcours guidé) ----------
@@ -485,6 +634,7 @@ function screenNewHabit() {
       </div>`;
 
     const rerender = () => mount(host);
+    fxBindTilt(host);
 
     host.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => {
       draft.theme = b.dataset.theme; rerender();
@@ -556,8 +706,8 @@ function screenNewHabit() {
 const CAL_LEGEND = [
   { cls: 'success', label: 'Tenu' },
   { cls: 'failed', label: 'Non tenu' },
+  { cls: 'created', label: 'Pas encore fait' },
   { cls: 'frozen', label: 'Gelé' },
-  { cls: 'no_data', label: 'Sans réponse' },
 ];
 
 function buildMonthGrid(year, month) {
@@ -573,8 +723,11 @@ function screenHistory() {
   const now = new Date();
   let year = now.getFullYear(), month = now.getMonth();
 
+  // Worst outcome wins, so a day never looks better than it was. 'created'
+  // ranks above 'failed' because it is still answerable, not yet a verdict.
   function dayClass(statuses) {
     if (!statuses || !statuses.length) return 'empty';
+    if (statuses.includes('created')) return 'created';
     if (statuses.includes('failed')) return 'failed';
     if (statuses.includes('no_data')) return 'no_data';
     if (statuses.includes('frozen')) return 'frozen';
@@ -618,6 +771,132 @@ function screenHistory() {
   return { title: 'Historique', tab: '/history', chrome: true, mount };
 }
 
+// ---------- Modifier une promesse ----------
+// Editing keeps the card and its history — only the terms change. Deleting and
+// recreating used to be the only route, which cost the user their tier.
+
+function screenEditHabit(habitId) {
+  const habit = store.habits.find(h => h.id === habitId);
+  if (!habit) return { redirect: '/home' };
+
+  const draft = {
+    title: habit.title,
+    theme: habit.theme || 'autre',
+    type: habit.type,
+    frequency: habit.frequency || 3,
+    target_days: new Set(habit.target_days),
+    reminder_time: (habit.reminder_time || '20:00').slice(0, 5),
+    end_date: habit.end_date || '',
+  };
+
+  function mount(host) {
+    host.innerHTML = `
+      <div class="creator">
+        <div class="creator-preview">
+          ${habitCard({ ...habit, title: draft.title, theme: draft.theme }, habitStats(habit))}
+        </div>
+        <h3 class="step-title">Domaine</h3>
+        <div class="theme-grid">
+          ${THEMES.map(th => `
+            <button class="theme-chip ${draft.theme === th.id ? 'selected' : ''}" data-theme="${th.id}" style="--card-hue:${th.hue}">
+              ${icon(th.id, 22)}<span>${th.label}</span>
+            </button>`).join('')}
+        </div>
+        <div class="form-group">
+          <label for="ed-title">Ta promesse</label>
+          <input type="text" id="ed-title" value="${esc(draft.title)}" />
+        </div>
+        <h3 class="step-title">Rythme</h3>
+        <div class="type-toggle">
+          <button data-type="daily" class="${draft.type === 'daily' ? 'selected' : ''}">Chaque jour choisi</button>
+          <button data-type="frequency" class="${draft.type === 'frequency' ? 'selected' : ''}">X fois / semaine</button>
+        </div>
+        ${draft.type === 'frequency' ? `
+          <div class="form-group">
+            <label for="ed-frequency">Combien de fois par semaine ?</label>
+            <input type="number" id="ed-frequency" min="1" max="7" value="${draft.frequency}" />
+          </div>` : ''}
+        <div class="form-group">
+          <label>Jours concernés</label>
+          <div class="day-picker">
+            ${[1, 2, 3, 4, 5, 6, 0].map(d => `
+              <button type="button" class="day-chip ${draft.target_days.has(d) ? 'selected' : ''}" data-day="${d}">${DOW_LABELS[d]}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ed-time">Heure de vérification</label>
+          <input type="time" id="ed-time" value="${draft.reminder_time}" />
+        </div>
+        <div class="form-group">
+          <label for="ed-end">Date de fin (optionnel)</label>
+          <input type="date" id="ed-end" value="${draft.end_date}" />
+        </div>
+        <p class="hint-msg">Tu gardes ta carte, ton palier et tout ton historique.</p>
+        <p class="error-msg" id="ed-error" style="display:none"></p>
+        <div class="creator-actions">
+          <button class="btn-secondary" data-nav="/habit/${habit.id}">Annuler</button>
+          <button class="btn-primary" id="ed-save">Enregistrer</button>
+        </div>
+      </div>`;
+
+    const rerender = () => mount(host);
+    fxBindTilt(host);
+
+    host.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => {
+      draft.theme = b.dataset.theme; rerender();
+    }));
+    host.querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', () => {
+      draft.type = b.dataset.type; rerender();
+    }));
+    host.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => {
+      const d = Number(b.dataset.day);
+      if (draft.target_days.has(d)) draft.target_days.delete(d); else draft.target_days.add(d);
+      rerender();
+    }));
+
+    const title = host.querySelector('#ed-title');
+    title.addEventListener('input', () => {
+      draft.title = title.value;
+      host.querySelector('.creator-preview').innerHTML =
+        habitCard({ ...habit, title: draft.title, theme: draft.theme }, habitStats(habit));
+    });
+    const freq = host.querySelector('#ed-frequency');
+    if (freq) freq.addEventListener('input', () => { draft.frequency = Number(freq.value); });
+    host.querySelector('#ed-time').addEventListener('input', e => { draft.reminder_time = e.target.value; });
+    host.querySelector('#ed-end').addEventListener('input', e => { draft.end_date = e.target.value; });
+
+    host.querySelector('#ed-save').addEventListener('click', async () => {
+      const errorEl = host.querySelector('#ed-error');
+      errorEl.style.display = 'none';
+      const fail = m => { errorEl.textContent = m; errorEl.style.display = 'block'; };
+
+      const t = draft.title.trim();
+      if (!t) return fail('Donne un nom à ta promesse.');
+      if (draft.target_days.size === 0) return fail('Sélectionne au moins un jour.');
+      if (draft.type === 'frequency' && (draft.frequency < 1 || draft.frequency > draft.target_days.size)) {
+        return fail('La fréquence doit être inférieure ou égale au nombre de jours sélectionnés.');
+      }
+
+      const btn = host.querySelector('#ed-save');
+      btn.disabled = true;
+      const { error } = await updateHabit(habit.id, {
+        title: t,
+        theme: draft.theme,
+        type: draft.type,
+        frequency: draft.type === 'frequency' ? draft.frequency : null,
+        target_days: Array.from(draft.target_days),
+        reminder_time: draft.reminder_time,
+        end_date: draft.end_date || null,
+      });
+      if (error) { btn.disabled = false; return fail(error.message); }
+      toast('Promesse modifiée.');
+      navigate('/habit/' + habit.id);
+    });
+  }
+
+  return { title: 'Modifier', tab: '/home', chrome: true, back: '/habit/' + habitId, mount };
+}
+
 // ---------- Détail d'une carte ----------
 
 function screenHabitDetail(habitId) {
@@ -640,18 +919,36 @@ function screenHabitDetail(habitId) {
     if (worst.rate < 1 && worst.d !== best.d) lines += `<div class="stat-line">Tes échecs arrivent surtout le <strong>${DOW_FULL[worst.d]}</strong>.</div>`;
   }
 
+  // Where the failures came from, when there's enough to be honest about.
+  const reasoned = own.filter(c => c.status === 'failed' && c.reason);
+  let reasonLine = '';
+  if (reasoned.length >= 3) {
+    const counts = {};
+    reasoned.forEach(c => { counts[c.reason] = (counts[c.reason] || 0) + 1; });
+    const [topId, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    reasonLine = `<div class="stat-line">Quand tu la romps, c'est surtout « <strong>${esc(reasonLabel(topId))}</strong> » (${n} fois sur ${reasoned.length}).</div>`;
+  }
+  const expiredN = own.filter(c => c.status === 'failed' && c.expired).length;
+  const expiredLine = expiredN
+    ? `<div class="stat-line"><strong>${expiredN}</strong> fois, tu n'as simplement pas répondu dans l'heure.</div>`
+    : '';
+
   const html = `
     <div class="detail-card">${habitCard(habit, stats)}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
       ${lines}
+      ${reasonLine}
+      ${expiredLine}
       <div class="stat-line">Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.</div>
     </div>
+    <button class="btn-secondary" data-nav="/edit/${habit.id}">Modifier cette promesse</button>
     <button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>`;
 
   return {
     title: habit.title, tab: '/home', chrome: true, back: '/home', html,
     wire(host) {
+      fxBindTilt(host);
       host.querySelector('#delete-habit').addEventListener('click', () => openDeleteSheet(habit));
     },
   };

@@ -17,6 +17,7 @@ function buildShell() {
     <header class="topbar" id="topbar">
       <button class="icon-btn topbar-back" id="topbar-back" hidden aria-label="Retour">${icon('left', 20)}</button>
       <h1 id="topbar-title"></h1>
+      <span class="sync-dot" id="sync-dot" hidden></span>
       <button class="icon-btn" id="signout-btn">Quitter</button>
     </header>
     <main class="screen" id="screen-host"></main>
@@ -25,6 +26,18 @@ function buildShell() {
     </nav>`;
 
   app.querySelector('#signout-btn').addEventListener('click', () => sb.auth.signOut());
+
+  // Writes are optimistic, so the user needs a way to see that something has
+  // not landed yet — otherwise a failed sync is invisible.
+  onSyncChange(state => {
+    const dot = document.getElementById('sync-dot');
+    if (!dot) return;
+    dot.hidden = state === 'idle';
+    dot.className = `sync-dot is-${state}`;
+    dot.title = state === 'offline'
+      ? "Des réponses n'ont pas encore été enregistrées. Nouvelle tentative en cours."
+      : 'Enregistrement en cours…';
+  });
   app.querySelector('#topbar-back').addEventListener('click', () => {
     const back = app.dataset.back || '/home';
     navigate(back);
@@ -63,6 +76,8 @@ function resolveScreen() {
   const hash = location.hash.replace(/^#/, '') || '/today';
   const habit = hash.match(/^\/habit\/(.+)$/);
   if (habit) return screenHabitDetail(habit[1]);
+  const edit = hash.match(/^\/edit\/(.+)$/);
+  if (edit) return screenEditHabit(edit[1]);
   switch (hash) {
     case '/today': return screenToday();
     case '/home': return screenHome();
@@ -138,38 +153,63 @@ function toast(text) {
 
 const notified = new Set();
 
-function reminderBody(habit) {
+// The first ping states the promise; the later ones state the clock. Tone
+// hardens for habits the user breaks more often than not.
+function reminderBody(habit, left) {
+  if (left <= 15) return `Il te reste ${left} min pour répondre. Sans réponse, « ${habit.title} » est compté comme non tenu.`;
+
   const own = store.checks
     .filter(c => c.habit_id === habit.id && (c.status === 'success' || c.status === 'failed'))
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .slice(0, 7);
   const fails = own.filter(c => c.status === 'failed').length;
+
+  if (left <= 45) return `« ${habit.title} » — ${left} min avant que ce soit non tenu.`;
+
   if (own.length >= 2 && fails / own.length >= 0.5) {
     const variants = [
       `Tu as rompu ${fails} fois sur tes ${own.length} derniers jours. Encore aujourd'hui ?`,
       `« ${habit.title} » : tu abandonnes plus souvent que tu ne tiens.`,
-      `Ta promesse « ${habit.title} » part en fumée. Dernière chance.`,
+      `Ta promesse « ${habit.title} » part en fumée. Une heure pour répondre.`,
     ];
     return variants[Math.floor(Math.random() * variants.length)];
   }
-  return `Tu avais promis : ${habit.title}`;
+  return `Tu avais promis : ${habit.title}. Une heure pour répondre.`;
 }
 
+// Fallback path only: fires at the reminder time, then every 15 minutes until
+// the hour is up, but exclusively while a tab is alive. Once a push
+// subscription exists the server owns the pings and this would double them.
 function checkReminders() {
+  if (store.pushActive) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  const now = new Date();
-  const hhmm = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const today = todayStr();
+  const now = Date.now();
 
-  for (const h of store.habits) {
-    if (!isDue(h, today)) continue;
-    if ((h.reminder_time || '20:00').slice(0, 5) !== hhmm) continue;
-    const key = `${h.id}-${today}`;
+  for (const c of store.checks) {
+    if (c.date !== today || c.status !== 'created') continue;
+    const habit = store.habits.find(h => h.id === c.habit_id);
+    if (!habit) continue;
+
+    const opensAt = windowOpensAt(habit, today).getTime();
+    const elapsed = Math.floor((now - opensAt) / 60000);
+    if (elapsed < 0 || elapsed >= ANSWER_WINDOW_MIN) continue;
+
+    // Which of the four slots we are in, and only once per slot.
+    const step = REMINDER_STEPS.filter(s => elapsed >= s).pop();
+    if (step === undefined) continue;
+    const key = `${habit.id}-${today}-${step}`;
     if (notified.has(key)) continue;
     notified.add(key);
-    const body = reminderBody(h);
+
+    const left = ANSWER_WINDOW_MIN - step;
     navigator.serviceWorker?.ready.then(reg =>
-      reg.showNotification('Promesse du jour', { body, icon: 'icons/icon-192.png' }));
+      reg.showNotification(left <= 15 ? 'Dernière chance' : 'Promesse du jour', {
+        body: reminderBody(habit, left),
+        icon: 'icons/icon-192.png',
+        tag: `${habit.id}-${today}`,
+        renotify: true,
+      }));
   }
 }
 
@@ -190,6 +230,7 @@ async function bootSignedIn() {
   }));
 
   await loadAll();
+  await detectPushState();
   renderRoute();
 
   // Best-effort, non-blocking: refresh the aggregate line once it lands.
@@ -220,3 +261,19 @@ sb.auth.onAuthStateChange((event, session) => {
 });
 
 setInterval(() => { if (store.user && store.loaded) checkReminders(); }, 30000);
+
+// The answer window is a live clock: re-render the pending screen every 30s so
+// the countdown ticks, and expire checks the moment their hour runs out.
+setInterval(async () => {
+  if (!store.user || !store.loaded) return;
+  const hadPending = pendingToday().length;
+  const expiring = store.checks.some(c => c.status === 'created' && isExpired(c));
+  if (expiring) await reconcileToday();
+  const onLiveScreen = location.hash === '#/today' || location.hash === '';
+  if (expiring || (onLiveScreen && hadPending)) renderRoute();
+}, 30000);
+
+// Retry anything still queued when the app comes back to the foreground.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) flushQueue();
+});
