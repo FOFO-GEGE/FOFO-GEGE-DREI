@@ -67,11 +67,18 @@ function nextTier(days) {
   return TIERS.find(t => days < t.minDays) || null;
 }
 
+function tierIndex(id) {
+  const i = TIERS.findIndex(t => t.id === id);
+  return i === -1 ? 0 : i;
+}
+
 // stats: { rate, daysAlive, streak, best, kept, total }
+// opts.dead: the habit was abandoned — greyed out, frozen at its tier of
+// death instead of showing progress toward a next one that will never come.
 function habitCard(habit, stats, opts = {}) {
   const theme = themeById(habit.theme);
   const tier = tierFor(stats.daysAlive);
-  const next = nextTier(stats.daysAlive);
+  const next = opts.dead ? null : nextTier(stats.daysAlive);
   const progress = next
     ? Math.round(100 * (stats.daysAlive - tier.minDays) / (next.minDays - tier.minDays))
     : 100;
@@ -79,7 +86,7 @@ function habitCard(habit, stats, opts = {}) {
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
 
   return `
-    <article class="pcard tier-${tier.id} ${opts.compact ? 'is-compact' : ''}" style="--card-hue:${theme.hue}"
+    <article class="pcard tier-${tier.id} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}" style="--card-hue:${theme.hue}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">
@@ -99,7 +106,7 @@ function habitCard(habit, stats, opts = {}) {
 
       <div class="pcard-tier">
         <span class="pcard-tier-name">${tier.label}</span>
-        <span class="pcard-tier-blurb">${tier.blurb}</span>
+        <span class="pcard-tier-blurb">${opts.dead ? `Abandonnée après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.` : tier.blurb}</span>
       </div>
 
       <div class="pcard-stats">
@@ -109,7 +116,9 @@ function habitCard(habit, stats, opts = {}) {
       </div>
 
       <footer class="pcard-foot">
-        ${next
+        ${opts.dead
+          ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} Morte le ${opts.deathDate || ''}</span>`
+          : next
           ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
              <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`
           : `<span class="pcard-xp-label pcard-xp-max">Palier maximum atteint</span>`}

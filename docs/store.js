@@ -12,6 +12,7 @@ const HISTORY_DAYS = 400;
 const store = {
   user: null,
   habits: [],
+  cemetery: [], // abandoned habits — kept, never hard-deleted, shown greyed out
   checks: [],
   socialRate: null,
   loaded: false,
@@ -149,11 +150,13 @@ function isExpired(check) {
 
 async function loadAll() {
   const since = dateStr(new Date(Date.now() - HISTORY_DAYS * 86400000));
-  const [habitsRes, checksRes] = await Promise.all([
+  const [habitsRes, deadRes, checksRes] = await Promise.all([
     sb.from('habits').select('*').eq('active', true).order('created_at'),
+    sb.from('habits').select('*').eq('active', false).order('deleted_at', { ascending: false }),
     sb.from('habit_checks').select('*').gte('date', since),
   ]);
   store.habits = habitsRes.data || [];
+  store.cemetery = deadRes.data || [];
   store.checks = checksRes.data || [];
   await reconcileToday();
   store.loaded = true;
@@ -305,11 +308,14 @@ function habitStats(habit) {
   const own = store.checks.filter(c => c.habit_id === habit.id);
   const decided = own.filter(c => c.status === 'success' || c.status === 'failed');
   const kept = decided.filter(c => c.status === 'success').length;
+  // A dead card's age freezes at the moment it was abandoned — otherwise a
+  // card buried a year ago would keep reporting itself as older every day.
+  const asOf = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
   return {
     rate: decided.length ? Math.round((kept / decided.length) * 100) : null,
     kept,
     total: decided.length,
-    daysAlive: Math.max(0, daysBetween(habit.start_date, todayStr())),
+    daysAlive: Math.max(0, daysBetween(habit.start_date, asOf)),
     streak: habit.current_streak || 0,
     best: habit.best_streak || 0,
   };
@@ -366,17 +372,6 @@ function freezeCheck(checkId) {
   enqueue({ table: 'habits', values: { freeze_used_month: habit.freeze_used_month }, matchId: habit.id });
 }
 
-async function updateHabit(habitId, fields) {
-  const habit = store.habits.find(h => h.id === habitId);
-  if (!habit) return { error: { message: 'Promesse introuvable.' } };
-  Object.assign(habit, fields);
-  const { error } = await sb.from('habits').update(fields).eq('id', habitId);
-  if (error) return { error };
-  // A changed schedule can make today due (or no longer due).
-  await reconcileToday();
-  return { habit };
-}
-
 async function createHabit(fields) {
   const row = {
     user_id: store.user.id,
@@ -398,10 +393,18 @@ async function createHabit(fields) {
   return { habit: created };
 }
 
+// Abandoning a promise moves its card to the cemetery — it is never erased,
+// checks and all, because the whole point of the mirror is that the past
+// cannot be edited away.
 async function deleteHabit(habitId) {
+  const habit = store.habits.find(h => h.id === habitId);
+  if (!habit) return;
+  const deletedAt = new Date().toISOString();
+  habit.active = false;
+  habit.deleted_at = deletedAt;
   store.habits = store.habits.filter(h => h.id !== habitId);
-  store.checks = store.checks.filter(c => c.habit_id !== habitId);
-  await sb.from('habits').update({ active: false }).eq('id', habitId);
+  store.cemetery.unshift(habit);
+  await sb.from('habits').update({ active: false, deleted_at: deletedAt }).eq('id', habitId);
 }
 
 // ---------- Insight engine ----------
@@ -509,6 +512,28 @@ function buildInsights() {
   }
 
   return out;
+}
+
+// The direct confrontation: what has actually been broken lately, plainly
+// listed rather than folded into a single percentage. Includes cemetery
+// habits — abandoning a promise doesn't erase what it recorded on the way out.
+function recentFailures(limit = 8) {
+  const byId = new Map([...store.habits, ...store.cemetery].map(h => [h.id, h]));
+  return store.checks
+    .filter(c => c.status === 'failed' && byId.has(c.habit_id))
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, limit)
+    .map(c => ({ check: c, habit: byId.get(c.habit_id) }));
+}
+
+// Every promise touched on a given date, active or buried, each stamped with
+// that day's own verdict — used by the calendar's day view so a mixed day
+// (one kept, one broken) no longer collapses into a single colour.
+function checksOnDate(iso) {
+  const byId = new Map([...store.habits, ...store.cemetery].map(h => [h.id, h]));
+  return store.checks
+    .filter(c => c.date === iso && byId.has(c.habit_id))
+    .map(c => ({ check: c, habit: byId.get(c.habit_id) }));
 }
 
 function weekSummary() {

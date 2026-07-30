@@ -79,20 +79,47 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   const sync = await page.evaluate(() => ({ state: store.sync, queued: JSON.parse(localStorage.getItem('mirroir_write_queue') || '[]').length }));
   step('sync state:', sync.state, '| queued ops left:', sync.queued);
 
-  // --- Edit a habit, keeping the card ---
+  // --- Card focus: tap brings it forward, tap again repositions it ---
   await page.click('.deck-grid .pcard');
+  await page.waitForSelector('.card-focus-backdrop.show', { timeout: 4000 });
+  step('card focus opened:', await page.locator('.card-focus-stage .pcard').count());
+  await page.click('.card-focus-backdrop');
+  await page.waitForSelector('.card-focus-backdrop', { state: 'detached', timeout: 4000 });
+  step('card focus closed after re-click (repositioned)');
+
+  // --- Reopen and go to the detail screen from inside the focused view ---
+  await page.click('.deck-grid .pcard');
+  await page.waitForSelector('.card-focus-backdrop.show');
+  await page.click('#card-focus-open');
   await page.waitForSelector('.detail-card');
   step('detail reason line:', await page.locator('.card .stat-line').nth(1).textContent());
-  await page.click('[data-nav^="/edit/"]');
-  await page.waitForSelector('#ed-title');
-  await page.fill('#ed-title', 'Sport renommé');
-  await page.click('[data-theme="lecture"]');
-  await page.waitForSelector('#ed-title');
-  await page.click('#ed-save');
-  await page.waitForFunction(() => location.hash.startsWith('#/habit/'), { timeout: 6000 });
-  await page.waitForTimeout(400);
-  step('after edit, title:', await page.locator('#topbar-title').textContent());
-  step('history preserved (card still present):', await page.locator('.detail-card .pcard').count());
+  step('no edit button present:', await page.locator('[data-nav^="/edit/"]').count(), '(expect 0)');
+
+  // --- Abandon it: card must survive, greyed, in the cemetery ---
+  await page.click('#delete-habit');
+  await page.waitForSelector('.modal-sheet');
+  await page.click('#sheet-delete');
+  await page.waitForFunction(() => location.hash === '#/home');
+  await page.waitForTimeout(300);
+  step('deck size after abandon:', await page.locator('section.deck .pcard').count(), '(expect 0 — an empty-state renders instead)');
+  await page.click('#cemetery-toggle');
+  await page.waitForSelector('#cemetery-grid:not([hidden])');
+  step('cemetery cards:', await page.locator('.cemetery-grid .pcard.is-dead').count());
+  step('death stamp:', await page.locator('.cemetery-grid .pcard-xp-dead').textContent());
+
+  // --- Calendar day now shows the stamped, still-visible failure ---
+  await page.click('[data-nav="/history"]');
+  await page.waitForSelector('.cal-legend');
+  await page.click('.cal-day.failed');
+  await page.waitForSelector('.day-sheet');
+  step('day sheet status:', await page.locator('.day-row-status').first().textContent());
+  step('day sheet reason:', await page.locator('.day-row-reason').textContent());
+  await page.click('#day-close');
+
+  // --- "Ce que tu n'as pas tenu" survives the abandon ---
+  await page.click('[data-nav="/home"]');
+  await page.waitForSelector('.failures', { timeout: 4000 });
+  step('failure row present after abandon:', await page.locator('.failure-row.is-buried').count());
 
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();

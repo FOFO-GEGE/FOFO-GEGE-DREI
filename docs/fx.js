@@ -143,6 +143,24 @@ function fxBurstFrom(el, opts) {
   fxBurst(r.left + r.width / 2, r.top + r.height / 2, opts);
 }
 
+// Reserved for a tier crossing — the rarest moment in a card's life, not
+// something that should show up on an ordinary "Fait" or it would stop
+// meaning anything within a week. Several bursts staggered like real
+// fireworks, rising from low on the screen rather than exploding in place.
+function fxFireworks() {
+  if (REDUCED.matches) return;
+  const w = window.innerWidth, h = window.innerHeight;
+  const palettes = [HOT, ['#8b5cf6', '#c4b5fd', '#4c1d95', '#ede9fe'], HOT.concat(['#4fc3f7'])];
+  const rounds = 5;
+  for (let i = 0; i < rounds; i++) {
+    setTimeout(() => {
+      const x = w * (0.25 + Math.random() * 0.5);
+      const y = h * (0.25 + Math.random() * 0.35);
+      fxBurst(x, y, { count: 70, speed: 9, colors: palettes[i % palettes.length] });
+    }, i * 260);
+  }
+}
+
 // ---------- Number count-up ----------
 
 function fxCountUp(el, to, opts = {}) {

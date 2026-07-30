@@ -60,7 +60,7 @@
     lt(col, val) { this.filters.push(['lt', col, val]); return this; }
     gte(col, val) { this.filters.push(['gte', col, val]); return this; }
     in(col, vals) { this.filters.push(['in', col, vals]); return this; }
-    order(col) { this._order = col; return this; }
+    order(col, opts) { this._order = col; this._orderDesc = !!(opts && opts.ascending === false); return this; }
     maybeSingle() { this._maybeSingle = true; return this; }
     single() { this._single = true; return this; }
     insert(obj) { this._insert = obj; return this; }
@@ -73,6 +73,7 @@
         const rows = incoming.map(o => ({
           id: uuid(), created_at: new Date().toISOString(),
           current_streak: 0, best_streak: 0, freeze_used_month: null,
+          deleted_at: null, celebrated_tier: 'oeuf',
           ...o,
         }));
         db[table].push(...rows);
@@ -84,7 +85,10 @@
         return { data: rows, error: null };
       }
       let rows = applyFilters(db[table].filter(r => rlsScope(table, r)), this.filters);
-      if (this._order) rows = [...rows].sort((a, b) => (a[this._order] > b[this._order] ? 1 : -1));
+      if (this._order) {
+        const dir = this._orderDesc ? -1 : 1;
+        rows = [...rows].sort((a, b) => (a[this._order] > b[this._order] ? dir : a[this._order] < b[this._order] ? -dir : 0));
+      }
       if (typeof this._select === 'string' && this._select.includes('habits(')) {
         rows = rows.map(r => ({ ...r, habits: { title: db.habits.find(h => h.id === r.habit_id)?.title } }));
       }
