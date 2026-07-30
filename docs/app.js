@@ -76,6 +76,8 @@ function resolveScreen() {
   const hash = location.hash.replace(/^#/, '') || '/today';
   const habit = hash.match(/^\/habit\/(.+)$/);
   if (habit) return screenHabitDetail(habit[1]);
+  const ritualAt = hash.match(/^\/ritual\/(.+)$/);
+  if (ritualAt) return screenRitual(ritualAt[1]);
   switch (hash) {
     case '/today': return screenToday();
     case '/home': return screenHome();
