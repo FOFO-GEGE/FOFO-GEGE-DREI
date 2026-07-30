@@ -312,6 +312,10 @@ button:disabled { opacity: .4; cursor: default; }
 
 /* Wraps to two lines on a compact card rather than spilling past its edge. */
 .pcard-xp-dying { color: var(--danger); font-weight: 800; line-height: 1.3; text-wrap: balance; }
+.pcard-xp-missed {
+  display: flex; align-items: flex-start; gap: 4px;
+  color: var(--text-dim); font-weight: 700; line-height: 1.3; text-wrap: balance;
+}
 
 /* ---------- Daily rhythm ----------
    The one thing that changes a card purely with the clock, with no tap from

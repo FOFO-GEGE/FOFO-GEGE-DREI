@@ -68,6 +68,13 @@ and has to be verified against the project itself.
   from the forced sequence entirely, "Plus tard" requeues without recording a
   verdict, and a click on Aujourd'hui's preview list enters the ritual at that
   specific promise rather than the most urgent one.
+- `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
+  only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
+  (including that `ageTierFor()` ignores vitality entirely, by design), a
+  card gated below its age ceiling rendering the missed-evolution message
+  in place of the ordinary progress bar, the card's own CSS class reflecting
+  the earned (lower) tier rather than the age ceiling, and recovery: once
+  vitality clears the bar again, the tier is regained.
 
 ## Not covered here
 

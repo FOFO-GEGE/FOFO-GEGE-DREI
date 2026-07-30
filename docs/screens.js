@@ -595,14 +595,15 @@ function screenHome() {
   };
 }
 
-// A tier is age-based, not success-based — it climbs just by not being
-// abandoned. That means the moment worth marking isn't a daily "Fait", it's
-// the rare day a card actually crosses into a new one. celebrated_tier
-// remembers what has already been shown so this fires exactly once.
+// A tier now has to be earned on both age and vitality, so it can also be
+// lost and reclaimed — celebrated_tier is a high-water mark, never lowered,
+// so a dip-and-recovery through a tier already shown doesn't fire again;
+// only a genuinely new one, never reached before, does.
 function celebrateTierUps(host) {
   const crossed = [];
   for (const h of store.habits) {
-    const tier = tierFor(habitStats(h).daysAlive);
+    const stats = habitStats(h);
+    const tier = tierFor(stats.daysAlive, stats.vitality);
     if (tierIndex(tier.id) > tierIndex(h.celebrated_tier || 'oeuf')) {
       crossed.push({ habit: h, tier });
       h.celebrated_tier = tier.id;
@@ -1168,7 +1169,7 @@ function openReminderTimeSheet(habit) {
 function openDeleteSheet(habit) {
   const streak = habit.current_streak || 0;
   const stats = habitStats(habit);
-  const tier = tierFor(stats.daysAlive);
+  const tier = tierFor(stats.daysAlive, stats.vitality);
 
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';

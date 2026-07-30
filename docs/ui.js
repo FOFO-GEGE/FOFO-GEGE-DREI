@@ -49,17 +49,37 @@ function themeById(id) {
 
 // ---------- Collectible card ----------
 
+// minVitality gates the tier as much as minDays does — age alone used to be
+// both necessary and sufficient, which meant a tier, once reached, was never
+// at risk. Thresholds increase with the tier so satisfying a higher one
+// always satisfies every lower one too.
 const TIERS = [
-  { id: 'oeuf',       label: 'Œuf',        minDays: 0,   blurb: 'Vient d’éclore.' },
-  { id: 'eclose',     label: 'Éclose',     minDays: 7,   blurb: 'A tenu une semaine.' },
-  { id: 'enracinee',  label: 'Enracinée',  minDays: 30,  blurb: 'Un mois de survie.' },
-  { id: 'gravee',     label: 'Gravée',     minDays: 90,  blurb: 'Trois mois. Ça compte.' },
-  { id: 'legendaire', label: 'Légendaire', minDays: 180, blurb: 'Six mois. Rare.' },
+  { id: 'oeuf',       label: 'Œuf',        minDays: 0,   minVitality: 0,  blurb: 'Vient d’éclore.' },
+  { id: 'eclose',     label: 'Éclose',     minDays: 7,   minVitality: 30, blurb: 'A tenu une semaine.' },
+  { id: 'enracinee',  label: 'Enracinée',  minDays: 30,  minVitality: 55, blurb: 'Un mois de survie.' },
+  { id: 'gravee',     label: 'Gravée',     minDays: 90,  minVitality: 70, blurb: 'Trois mois. Ça compte.' },
+  { id: 'legendaire', label: 'Légendaire', minDays: 180, minVitality: 85, blurb: 'Six mois. Rare.' },
 ];
 
-function tierFor(days) {
+// The ceiling age alone allows — used only to detect a missed evolution
+// (see tierFor below), never as the displayed tier by itself.
+function ageTierFor(days) {
   let out = TIERS[0];
   for (const t of TIERS) if (days >= t.minDays) out = t;
+  return out;
+}
+
+// The tier actually earned: age raises the ceiling, vitality decides whether
+// the card has actually climbed up to it. Bidirectional — a card whose
+// vitality drops below a tier's threshold loses that tier immediately, and
+// won't reclaim it until vitality clears the bar again, independent of how
+// much further its age has advanced in the meantime.
+function tierFor(days, vitality = 100) {
+  let out = TIERS[0];
+  for (const t of TIERS) {
+    if (days < t.minDays) break;
+    if (vitality >= t.minVitality) out = t;
+  }
   return out;
 }
 
@@ -77,8 +97,13 @@ function tierIndex(id) {
 // death instead of showing progress toward a next one that will never come.
 function habitCard(habit, stats, opts = {}) {
   const theme = themeById(habit.theme);
-  const tier = tierFor(stats.daysAlive);
-  const next = opts.dead ? null : nextTier(stats.daysAlive);
+  const tier = tierFor(stats.daysAlive, stats.vitality);
+  // What age alone would allow — when it's ahead of the earned tier, the
+  // card has missed an evolution it should already have had, and the
+  // footer says so instead of showing progress toward a tier further still.
+  const ageTier = opts.dead ? tier : ageTierFor(stats.daysAlive);
+  const missedEvolution = !opts.dead && ageTier.id !== tier.id;
+  const next = opts.dead || missedEvolution ? null : nextTier(stats.daysAlive);
   const progress = next
     ? Math.round(100 * (stats.daysAlive - tier.minDays) / (next.minDays - tier.minDays))
     : 100;
@@ -132,6 +157,11 @@ function habitCard(habit, stats, opts = {}) {
           // scolding — and counted at the cost of silence, so answering
           // honestly always buys more days than the warning promised.
           ? `<span class="pcard-xp-label pcard-xp-dying">Encore ${stats.rupturesLeft} rupture${stats.rupturesLeft > 1 ? 's' : ''} et elle meurt</span>`
+          : missedEvolution
+          // Age alone no longer promotes a card — it has to be earned. Stated
+          // as a fact already true, not a countdown: the day has passed, it
+          // just didn't happen.
+          ? `<span class="pcard-xp-label pcard-xp-missed">${icon('cross', 12)} Aurait dû devenir « ${ageTier.label} ». Ce n'est pas encore fait.</span>`
           : next
           ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
              <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`
