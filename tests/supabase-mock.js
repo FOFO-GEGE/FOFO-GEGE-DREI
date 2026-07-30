@@ -70,11 +70,21 @@
       const table = this.table;
       if (this._insert) {
         const incoming = Array.isArray(this._insert) ? this._insert : [this._insert];
+        // Column defaults matter: vitality reads `expired`, so a check
+        // inserted without it must default to false exactly as the real
+        // schema does, or the fold silently scores silence as a declared
+        // failure.
+        const defaults = {
+          habits: {
+            current_streak: 0, best_streak: 0, freeze_used_month: null,
+            deleted_at: null, celebrated_tier: 'oeuf',
+            death_cause: null, death_announced: false, active: true,
+          },
+          habit_checks: { expired: false, reason: null },
+          profiles: {},
+        }[table] || {};
         const rows = incoming.map(o => ({
-          id: uuid(), created_at: new Date().toISOString(),
-          current_streak: 0, best_streak: 0, freeze_used_month: null,
-          deleted_at: null, celebrated_tier: 'oeuf',
-          ...o,
+          id: uuid(), created_at: new Date().toISOString(), ...defaults, ...o,
         }));
         db[table].push(...rows);
         return { data: rows, error: null };

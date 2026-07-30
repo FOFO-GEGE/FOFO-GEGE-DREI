@@ -231,6 +231,9 @@ async function bootSignedIn() {
   await detectPushState();
   renderRoute();
 
+  // Anything that starved while the app was shut is reported now, once.
+  openDeathNotice(unannouncedDeaths());
+
   // Best-effort, non-blocking: refresh the aggregate line once it lands.
   loadSocialRate().then(() => {
     if (location.hash === '#/home' || location.hash === '') renderRoute();
