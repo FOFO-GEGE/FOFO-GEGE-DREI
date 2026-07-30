@@ -221,3 +221,50 @@ function fxBindTilt(root) {
     reset();
   });
 }
+
+// ---------- Card focus: pick up, throw, flip ----------
+
+// Binds a physical drag to `handle` (the visible card) that moves and rotates
+// `mover` (its wrapper) with the pointer — a small drag springs back, a big
+// one dismisses like a card flung aside. A tap that barely moved is treated
+// as a tap rather than a drag, and flips the card instead of closing it.
+function fxBindCardDrag(handle, mover, { onTap, onDismiss } = {}) {
+  if (REDUCED.matches) {
+    handle.addEventListener('click', () => onTap && onTap());
+    return;
+  }
+  let startX = 0, startY = 0, dragging = false, pointerId = null;
+
+  handle.addEventListener('pointerdown', e => {
+    pointerId = e.pointerId;
+    startX = e.clientX; startY = e.clientY;
+    dragging = true;
+    mover.style.transition = 'none';
+    handle.setPointerCapture(pointerId);
+  });
+
+  handle.addEventListener('pointermove', e => {
+    if (!dragging || e.pointerId !== pointerId) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    mover.style.transform = `translate(${dx * 0.7}px, ${dy}px) rotate(${dx * 0.05}deg)`;
+  });
+
+  const end = e => {
+    if (!dragging || e.pointerId !== pointerId) return;
+    dragging = false;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    const dist = Math.hypot(dx, dy);
+    mover.style.transition = 'transform .4s cubic-bezier(.16,1,.3,1)';
+
+    if (Math.abs(dy) > 130 || dist > 170) {
+      mover.style.transform = `translate(${dx * 1.5}px, ${dy * 1.7}px) rotate(${dx * 0.09}deg)`;
+      mover.style.opacity = '0';
+      onDismiss && onDismiss();
+    } else {
+      mover.style.transform = 'translate(0,0) rotate(0deg)';
+      if (dist < 6) onTap && onTap();
+    }
+  };
+  handle.addEventListener('pointerup', end);
+  handle.addEventListener('pointercancel', end);
+}

@@ -798,6 +798,16 @@ button:disabled { opacity: .4; cursor: default; }
 .modal-sheet p strong { color: var(--danger); font-weight: 700; }
 .modal-sheet .btn-primary { margin-top: 0; }
 .btn-ghost-danger { width: 100%; color: var(--text-dim); font-size: 13px; padding: 14px; margin-top: 8px; }
+.btn-ghost { width: 100%; color: var(--text-dim); font-size: 13px; padding: 14px; margin-top: 4px; }
+.modal-sheet .form-group { margin-bottom: 20px; }
+.reminder-error { color: var(--danger) !important; font-size: 13px !important; margin: -8px 0 16px !important; }
+
+.reminder-row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 15px 16px; margin-top: 14px; font-size: 14px;
+}
+.reminder-row-edit { color: var(--hot); font-weight: 700; font-size: 12.5px; }
 
 .toast {
   position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 50%;
@@ -928,6 +938,7 @@ button:disabled { opacity: .4; cursor: default; }
 .cemetery-chevron { margin-left: auto; transition: transform .2s ease; display: flex; }
 .cemetery-toggle.is-open .cemetery-chevron { transform: rotate(90deg); }
 .cemetery-grid { margin-top: 10px; }
+.cemetery-grid[hidden] { display: none; }
 
 .pcard.is-dead {
   filter: grayscale(0.85) brightness(0.72);
@@ -977,3 +988,44 @@ button:disabled { opacity: .4; cursor: default; }
 .card-focus-backdrop.show .card-focus-stage { transform: scale(1); }
 .card-focus-stage .pcard { box-shadow: 0 24px 70px #000000a0, inset 0 1px 0 #ffffff14; }
 .card-focus-detail { margin-top: 14px; }
+.card-focus-hint {
+  text-align: center; font-size: 11.5px; color: var(--text-dim);
+  margin-top: 12px; letter-spacing: .01em;
+}
+
+/* The focused card is a physical object: it picks up, tilts and flies with a
+   drag (fxBindCardDrag translates .card-focus-stage), and a plain tap flips
+   it end over end to reveal the back plate. */
+.flip-card { perspective: 1600px; touch-action: none; cursor: grab; }
+.flip-card:active { cursor: grabbing; }
+.flip-card-inner {
+  position: relative; transform-style: preserve-3d;
+  transition: transform .62s cubic-bezier(.2, .9, .2, 1.05);
+}
+.flip-card.is-flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flip-card-back { position: absolute; inset: 0; transform: rotateY(180deg); }
+
+.pcard-back {
+  align-items: center; justify-content: center; text-align: center; gap: 10px;
+  min-height: 100%; box-sizing: border-box;
+}
+.pcard-back-glow {
+  position: absolute; inset: -30% -10% auto; height: 140%;
+  background: radial-gradient(ellipse at 50% 30%, hsl(var(--card-hue) 90% 62% / .35), transparent 68%);
+  pointer-events: none;
+}
+.pcard-back-icon { color: hsl(var(--card-hue) 85% var(--card-ink-l)); filter: drop-shadow(0 0 14px hsl(var(--card-hue) 85% 60% / .5)); }
+.pcard-back-brand {
+  font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 13px;
+  letter-spacing: .28em; color: var(--text-dim);
+}
+.pcard-back-tier {
+  font-size: 12px; font-weight: 700; padding: 3px 12px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text);
+}
+.pcard-back-grid { display: flex; gap: 20px; margin-top: 6px; }
+.pcard-back-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.pcard-back-stat .v { font-family: 'Fraunces', Georgia, serif; font-size: 20px; font-weight: 700; }
+.pcard-back-stat .k { font-size: 9.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-dim); }
+.pcard-back-foot { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; text-wrap: balance; }

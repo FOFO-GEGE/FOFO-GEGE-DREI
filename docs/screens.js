@@ -873,21 +873,36 @@ function openCardFocus(habit, opts = {}) {
   overlay.className = 'card-focus-backdrop';
   overlay.innerHTML = `
     <div class="card-focus-stage">
-      ${habitCard(habit, stats, cardOpts)}
+      <div class="flip-card" id="focus-flip">
+        <div class="flip-card-inner">
+          <div class="flip-card-front">${habitCard(habit, stats, cardOpts)}</div>
+          <div class="flip-card-back">${habitCardBack(habit, stats, cardOpts)}</div>
+        </div>
+      </div>
+      <p class="card-focus-hint">Glisse la carte pour la reposer • Tape-la pour la retourner</p>
       <button class="btn-primary card-focus-detail" id="card-focus-open">Voir le détail</button>
     </div>`;
   document.body.appendChild(overlay);
+  const stage = overlay.querySelector('.card-focus-stage');
+  const flip = overlay.querySelector('#focus-flip');
   fxBindTilt(overlay);
   requestAnimationFrame(() => overlay.classList.add('show'));
 
-  const close = () => {
+  const close = (afterMs = 260) => {
     overlay.classList.remove('show');
-    setTimeout(() => overlay.remove(), 260);
+    setTimeout(() => overlay.remove(), afterMs);
   };
-  // Repositioning is the point of a second tap on the card itself; the detail
-  // button is the one thing inside that must not also close it.
+  fxBindCardDrag(flip, stage, {
+    onTap: () => flip.classList.toggle('is-flipped'),
+    onDismiss: () => close(420),
+  });
+  // Tapping the backdrop still closes/repositions the overlay; the card
+  // itself now answers to the drag handler above instead (flip on a tap,
+  // fling to dismiss on a real drag), and the detail button keeps its own
+  // handler so it never triggers either.
   overlay.addEventListener('click', e => {
     if (e.target.closest('#card-focus-open')) return;
+    if (e.target.closest('.flip-card')) return;
     close();
   });
   overlay.querySelector('#card-focus-open').addEventListener('click', () => {
@@ -987,6 +1002,11 @@ function screenHabitDetail(habitId) {
         ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, jusqu'à son abandon.`
         : `Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.`}</div>
     </div>
+    ${dead ? '' : `
+    <button class="reminder-row" id="edit-reminder-time">
+      <span>Rappel à <strong>${(habit.reminder_time || '20:00').slice(0, 5)}</strong></span>
+      <span class="reminder-row-edit">Modifier l'heure</span>
+    </button>`}
     ${dead ? '' : '<button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>'}`;
 
   return {
@@ -995,8 +1015,45 @@ function screenHabitDetail(habitId) {
       fxBindTilt(host);
       const del = host.querySelector('#delete-habit');
       if (del) del.addEventListener('click', () => openDeleteSheet(habit));
+      const editTime = host.querySelector('#edit-reminder-time');
+      if (editTime) editTime.addEventListener('click', () => openReminderTimeSheet(habit));
     },
   };
+}
+
+// The one field a promise may change after creation — see updateReminderTime.
+function openReminderTimeSheet(habit) {
+  const current = (habit.reminder_time || '20:00').slice(0, 5);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" role="dialog" aria-modal="true">
+      <h3>Modifier l'heure de rappel</h3>
+      <p>Le titre, le thème et le rythme restent figés. Seule l'heure peut changer.</p>
+      <div class="form-group">
+        <label for="rt-time">Heure de vérification</label>
+        <input type="time" id="rt-time" value="${current}" />
+      </div>
+      <p class="reminder-error" id="rt-error" hidden>Cette promesse attend encore ta réponse aujourd'hui. Réessaie une fois qu'elle est résolue.</p>
+      <button class="btn-primary" id="rt-save">Enregistrer</button>
+      <button class="btn-ghost" id="rt-cancel">Annuler</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+  backdrop.querySelector('#rt-cancel').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#rt-save').addEventListener('click', async () => {
+    const value = backdrop.querySelector('#rt-time').value;
+    if (!value) return;
+    const res = await updateReminderTime(habit.id, value);
+    if (res.error === 'live') {
+      backdrop.querySelector('#rt-error').hidden = false;
+      return;
+    }
+    close();
+    renderRoute();
+  });
 }
 
 function openDeleteSheet(habit) {

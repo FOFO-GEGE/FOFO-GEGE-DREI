@@ -51,6 +51,20 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('legend entries:', (await page.locator('.cal-legend-item').allTextContents()).join(' | '));
   step('created cells:', await page.locator('.cal-day.created').count());
 
+  // --- Reminder time cannot be edited while today's check is still live ---
+  const habitId = await page.evaluate(() => store.habits[0].id);
+  await page.evaluate(id => { location.hash = '#/habit/' + id; }, habitId);
+  await page.waitForSelector('#edit-reminder-time');
+  await page.click('#edit-reminder-time');
+  await page.waitForSelector('.modal-sheet');
+  await page.fill('#rt-time', '06:30');
+  await page.click('#rt-save');
+  await page.waitForSelector('#rt-error:not([hidden])', { timeout: 3000 });
+  step('reminder-time edit blocked while promise is live: OK');
+  await page.click('#rt-cancel');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached' });
+  step('reminder_time unchanged:', await page.evaluate(() => store.habits[0].reminder_time));
+
   // --- Ritual: countdown chip, then failure -> reason picker ---
   await page.click('[data-nav="/today"]');
   await page.waitForSelector('.ritual-intro');
@@ -79,13 +93,33 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   const sync = await page.evaluate(() => ({ state: store.sync, queued: JSON.parse(localStorage.getItem('mirroir_write_queue') || '[]').length }));
   step('sync state:', sync.state, '| queued ops left:', sync.queued);
 
-  // --- Card focus: tap brings it forward, tap again repositions it ---
+  // --- Card focus: tap brings it forward; a plain tap on the card flips it
+  // (front/back), a real drag repositions/dismisses it, and tapping the
+  // backdrop outside the card still closes the overlay ---
   await page.click('.deck-grid .pcard');
   await page.waitForSelector('.card-focus-backdrop.show', { timeout: 4000 });
   step('card focus opened:', await page.locator('.card-focus-stage .pcard').count());
-  await page.click('.card-focus-backdrop');
+
+  await page.click('#focus-flip');
+  await page.waitForSelector('#focus-flip.is-flipped', { timeout: 3000 });
+  step('tap on the card flips it (overlay stays open)');
+  await page.click('#focus-flip');
+  await page.waitForFunction(() => !document.querySelector('#focus-flip').classList.contains('is-flipped'), { timeout: 3000 });
+  step('second tap flips it back to front');
+
+  const flipBox = await page.locator('#focus-flip').boundingBox();
+  await page.mouse.move(flipBox.x + flipBox.width / 2, flipBox.y + flipBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(flipBox.x + flipBox.width / 2, flipBox.y + flipBox.height / 2 + 220, { steps: 12 });
+  await page.mouse.up();
   await page.waitForSelector('.card-focus-backdrop', { state: 'detached', timeout: 4000 });
-  step('card focus closed after re-click (repositioned)');
+  step('dragging the card down far enough dismisses it (thrown aside)');
+
+  await page.click('.deck-grid .pcard');
+  await page.waitForSelector('.card-focus-backdrop.show', { timeout: 4000 });
+  await page.locator('.card-focus-backdrop').click({ position: { x: 6, y: 6 } });
+  await page.waitForSelector('.card-focus-backdrop', { state: 'detached', timeout: 4000 });
+  step('tapping the backdrop outside the card still closes it');
 
   // --- Reopen and go to the detail screen from inside the focused view ---
   await page.click('.deck-grid .pcard');
@@ -107,6 +141,16 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('cemetery cards:', await page.locator('.cemetery-grid .pcard.is-dead').count());
   step('death stamp:', await page.locator('.cemetery-grid .pcard-xp-dead').textContent());
 
+  // Regression check for the toggle bug: the [hidden] attribute alone did not
+  // catch it (an author .deck-grid{display:grid} rule was silently beating
+  // the UA [hidden] rule), so assert the *computed* style instead.
+  await page.click('#cemetery-toggle');
+  await page.waitForFunction(
+    () => getComputedStyle(document.querySelector('#cemetery-grid')).display === 'none',
+    { timeout: 3000 }
+  );
+  step('cemetery panel is actually display:none after a second toggle click');
+
   // --- Calendar day now shows the stamped, still-visible failure ---
   await page.click('[data-nav="/history"]');
   await page.waitForSelector('.cal-legend');
@@ -120,6 +164,40 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.click('[data-nav="/home"]');
   await page.waitForSelector('.failures', { timeout: 4000 });
   step('failure row present after abandon:', await page.locator('.failure-row.is-buried').count());
+
+  // --- Reminder time edit succeeds once there is no live check to game ---
+  // (a habit not due today never gets a 'created' check, so nothing blocks it)
+  // All days are selected by default; deselecting today is enough to keep
+  // the other six and still exclude today from target_days.
+  await page.click('[data-nav="/new"]');
+  await page.waitForSelector('.creator');
+  await page.click('[data-theme="lecture"]');
+  await page.waitForSelector('.suggestions');
+  await page.locator('.suggestion').first().click();
+  await page.click('#nh-next');
+  await page.waitForSelector('.day-picker');
+  await page.click(`[data-day="${new Date().getDay()}"]`); // deselect today
+  await page.click('#nh-next');
+  await page.waitForSelector('#nh-time');
+  await page.fill('#nh-time', '07:00');
+  await page.click('#nh-next');
+  await page.waitForFunction(() => location.hash === '#/home');
+  const restHabitId = await page.evaluate(() => store.habits[0].id);
+  step('created a rest-day habit not due today');
+
+  await page.evaluate(id => { location.hash = '#/habit/' + id; }, restHabitId);
+  await page.waitForSelector('#edit-reminder-time');
+  step('no live check for it today:', await page.evaluate(
+    id => !store.checks.some(c => c.habit_id === id && c.date === new Date().toISOString().slice(0, 10) && c.status === 'created'),
+    restHabitId
+  ), '(expect true)');
+  await page.click('#edit-reminder-time');
+  await page.waitForSelector('.modal-sheet');
+  await page.fill('#rt-time', '07:45');
+  await page.click('#rt-save');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached', timeout: 3000 });
+  step('reminder time after edit:', await page.evaluate(id => store.habits.find(h => h.id === id).reminder_time, restHabitId));
+  step('reminder row now shows:', (await page.locator('.reminder-row').textContent()).trim().replace(/\s+/g, ' '));
 
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();
