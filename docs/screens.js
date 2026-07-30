@@ -873,36 +873,28 @@ function openCardFocus(habit, opts = {}) {
   overlay.className = 'card-focus-backdrop';
   overlay.innerHTML = `
     <div class="card-focus-stage">
-      <div class="flip-card" id="focus-flip">
-        <div class="flip-card-inner">
-          <div class="flip-card-front">${habitCard(habit, stats, cardOpts)}</div>
-          <div class="flip-card-back">${habitCardBack(habit, stats, cardOpts)}</div>
-        </div>
-      </div>
-      <p class="card-focus-hint">Glisse la carte pour la reposer • Tape-la pour la retourner</p>
+      ${habitCard(habit, stats, cardOpts)}
+      <p class="card-focus-hint">Glisse la carte pour la déplacer • Pivote-la à deux doigts pour la faire tourner</p>
       <button class="btn-primary card-focus-detail" id="card-focus-open">Voir le détail</button>
     </div>`;
   document.body.appendChild(overlay);
   const stage = overlay.querySelector('.card-focus-stage');
-  const flip = overlay.querySelector('#focus-flip');
+  const card = overlay.querySelector('.pcard');
   fxBindTilt(overlay);
   requestAnimationFrame(() => overlay.classList.add('show'));
 
-  const close = (afterMs = 260) => {
+  const close = () => {
     overlay.classList.remove('show');
-    setTimeout(() => overlay.remove(), afterMs);
+    setTimeout(() => overlay.remove(), 260);
   };
-  fxBindCardDrag(flip, stage, {
-    onTap: () => flip.classList.toggle('is-flipped'),
-    onDismiss: () => close(420),
-  });
-  // Tapping the backdrop still closes/repositions the overlay; the card
-  // itself now answers to the drag handler above instead (flip on a tap,
-  // fling to dismiss on a real drag), and the detail button keeps its own
+  const move = fxBindCardMove(card, stage);
+  // Tapping the backdrop (or the card, without dragging it) closes/repositions
+  // the overlay; a real drag or pivot on the card is consumed here so letting
+  // go of it doesn't also close the view, and the detail button keeps its own
   // handler so it never triggers either.
   overlay.addEventListener('click', e => {
     if (e.target.closest('#card-focus-open')) return;
-    if (e.target.closest('.flip-card')) return;
+    if (move.consumeDrag()) return;
     close();
   });
   overlay.querySelector('#card-focus-open').addEventListener('click', () => {

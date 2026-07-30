@@ -222,49 +222,83 @@ function fxBindTilt(root) {
   });
 }
 
-// ---------- Card focus: pick up, throw, flip ----------
+// ---------- Card focus: pick up and pivot ----------
 
-// Binds a physical drag to `handle` (the visible card) that moves and rotates
-// `mover` (its wrapper) with the pointer — a small drag springs back, a big
-// one dismisses like a card flung aside. A tap that barely moved is treated
-// as a tap rather than a drag, and flips the card instead of closing it.
-function fxBindCardDrag(handle, mover, { onTap, onDismiss } = {}) {
-  if (REDUCED.matches) {
-    handle.addEventListener('click', () => onTap && onTap());
-    return;
-  }
-  let startX = 0, startY = 0, dragging = false, pointerId = null;
+// Binds `handle` (the visible card) so it can be picked up like a physical
+// object: one finger drags `mover` freely and completely across the screen
+// (no dampening — it goes exactly where the pointer goes), two fingers pivot
+// it, rotating by the same angle the fingers turn through. Both spring back
+// to neutral the moment every pointer lifts. Returns `consumeDrag()`, which
+// a caller can use right after a click to tell a real drag/pivot apart from
+// a plain tap (so releasing a drag doesn't also fire whatever the tap does).
+function fxBindCardMove(handle, mover) {
+  if (REDUCED.matches) return { consumeDrag: () => false };
+
+  const pointers = new Map(); // pointerId -> {x, y}
+  let translate = { x: 0, y: 0 };
+  let rotation = 0;
+  let dragOrigin = null;   // pointer position that maps to the current translate
+  let pivotStartAngle = 0;
+  let pivotBaseRotation = 0;
+  let gestureStartRotation = 0; // rotation when this gesture began — the moved() baseline
+  let moved = false;
+
+  const angleBetween = pts => {
+    const [a, b] = pts;
+    return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+  };
+  const apply = () => {
+    mover.style.transform = `translate(${translate.x}px, ${translate.y}px) rotate(${rotation}deg)`;
+  };
+  const startDragFromOnePointer = () => {
+    const [p] = pointers.values();
+    dragOrigin = { x: p.x - translate.x, y: p.y - translate.y };
+  };
 
   handle.addEventListener('pointerdown', e => {
-    pointerId = e.pointerId;
-    startX = e.clientX; startY = e.clientY;
-    dragging = true;
-    mover.style.transition = 'none';
-    handle.setPointerCapture(pointerId);
+    handle.setPointerCapture(e.pointerId);
+    if (pointers.size === 0) {
+      gestureStartRotation = rotation;
+      mover.style.transition = 'none';
+    }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      startDragFromOnePointer();
+    } else if (pointers.size === 2) {
+      pivotStartAngle = angleBetween([...pointers.values()]);
+      pivotBaseRotation = rotation;
+    }
   });
 
   handle.addEventListener('pointermove', e => {
-    if (!dragging || e.pointerId !== pointerId) return;
-    const dx = e.clientX - startX, dy = e.clientY - startY;
-    mover.style.transform = `translate(${dx * 0.7}px, ${dy}px) rotate(${dx * 0.05}deg)`;
+    if (!pointers.has(e.pointerId)) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.size >= 2) {
+      rotation = pivotBaseRotation + (angleBetween([...pointers.values()]) - pivotStartAngle);
+    } else if (dragOrigin) {
+      const [p] = pointers.values();
+      translate = { x: p.x - dragOrigin.x, y: p.y - dragOrigin.y };
+    }
+    if (Math.abs(translate.x) > 6 || Math.abs(translate.y) > 6 || Math.abs(rotation - gestureStartRotation) > 3) moved = true;
+    apply();
   });
 
-  const end = e => {
-    if (!dragging || e.pointerId !== pointerId) return;
-    dragging = false;
-    const dx = e.clientX - startX, dy = e.clientY - startY;
-    const dist = Math.hypot(dx, dy);
-    mover.style.transition = 'transform .4s cubic-bezier(.16,1,.3,1)';
+  const release = e => {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size === 1) startDragFromOnePointer(); // keep tracking the remaining finger
+    if (pointers.size > 0) return;
 
-    if (Math.abs(dy) > 130 || dist > 170) {
-      mover.style.transform = `translate(${dx * 1.5}px, ${dy * 1.7}px) rotate(${dx * 0.09}deg)`;
-      mover.style.opacity = '0';
-      onDismiss && onDismiss();
-    } else {
-      mover.style.transform = 'translate(0,0) rotate(0deg)';
-      if (dist < 6) onTap && onTap();
-    }
+    mover.style.transition = 'transform .45s cubic-bezier(.16,1,.3,1)';
+    translate = { x: 0, y: 0 };
+    rotation = 0;
+    apply();
   };
-  handle.addEventListener('pointerup', end);
-  handle.addEventListener('pointercancel', end);
+  handle.addEventListener('pointerup', release);
+  handle.addEventListener('pointercancel', release);
+
+  return {
+    consumeDrag: () => { const m = moved; moved = false; return m; },
+  };
 }
