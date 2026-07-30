@@ -46,10 +46,18 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
 
   // Push the habit's reminder back 2h so the window is now closed, then
   // reconcile: silence must become a failure and break the streak.
+  // reminder_time is a bare time-of-day, reinterpreted against *today's*
+  // date — if "-2h" crosses midnight (a run starting between 00:00 and
+  // 02:00), the stored time would read as later today, i.e. still open,
+  // inverting the scenario. Clamp to just after midnight instead.
   await page.evaluate(async () => {
     const h = store.habits[0];
     h.current_streak = 5;
-    const d = new Date(Date.now() - 2 * 3600000);
+    const now = new Date();
+    let d = new Date(now.getTime() - 2 * 3600000);
+    if (d.getDate() !== now.getDate() || d.getMonth() !== now.getMonth()) {
+      d = new Date(now); d.setHours(0, 1, 0, 0);
+    }
     h.reminder_time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
     await reconcileToday();
   });
