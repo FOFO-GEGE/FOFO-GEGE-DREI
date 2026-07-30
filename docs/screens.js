@@ -2,6 +2,12 @@
 // synchronously from the store — no awaiting inside a navigation.
 
 const DOW_LABELS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+function formatDay(iso) {
+  if (!iso) return '';
+  const [, m, d] = iso.split('-');
+  return `${d}/${m}`;
+}
 const MONTH_LABELS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 const SURPRISE_MESSAGES = ['Jour parfait.', 'Tu tiens le rythme.', 'Plus régulier que la moyenne cette semaine.'];
@@ -411,7 +417,8 @@ function screenHome() {
   const shown = score === null ? 0 : score;
   // The reflection degrades as the score drops — the mirror stops being clear.
   const blur = (1 - shown / 100) * 7;
-  const crackOpacity = shown >= 70 ? 0 : Math.min(0.85, (70 - shown) / 70);
+  // No score yet isn't the same as a bad one — nothing to fracture over.
+  const crackOpacity = score === null || shown >= 70 ? 0 : Math.min(0.85, (70 - shown) / 70);
 
   const R = 104, C = 2 * Math.PI * R;
   const dash = C * (1 - shown / 100);
@@ -448,6 +455,35 @@ function screenHome() {
          <button class="btn-primary" data-nav="/new">Créer ma première carte</button>
        </div>`;
 
+  const failures = recentFailures(6);
+  const failuresBlock = failures.length
+    ? `<section class="failures">
+         <h4 class="section-label">Ce que tu n'as pas tenu</h4>
+         ${failures.map(({ check, habit }) => `
+           <div class="failure-row ${habit.active === false ? 'is-buried' : ''}" data-habit="${habit.id}">
+             ${icon(themeById(habit.theme).id, 18)}
+             <div class="failure-body">
+               <span class="failure-title">${esc(habit.title)}</span>
+               <span class="failure-meta">${formatDay(check.date)}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</span>
+             </div>
+           </div>`).join('')}
+       </section>`
+    : '';
+
+  const cemetery = store.cemetery.length
+    ? `<section class="cemetery">
+         <button class="cemetery-toggle" id="cemetery-toggle" aria-expanded="false">
+           ${icon('cross', 15)} Cimetière <span class="deck-count">${store.cemetery.length}</span>
+           <span class="cemetery-chevron">${icon('right', 14)}</span>
+         </button>
+         <div class="deck-grid cemetery-grid" id="cemetery-grid" hidden>
+           ${store.cemetery.map(h => habitCard(h, habitStats(h), {
+             compact: true, habitId: h.id, dead: true, deathDate: formatDay(h.deleted_at?.slice(0, 10)),
+           })).join('')}
+         </div>
+       </section>`
+    : '';
+
   const html = `
     <div class="mirror-hero ${isLow ? 'is-low' : ''}" style="--blur:${blur.toFixed(2)}px">
       <div class="mirror-ring">
@@ -480,7 +516,9 @@ function screenHome() {
       <button class="btn-week" data-nav="/week">Voir ma semaine ${icon('right', 15)}</button>
     </div>
     ${insightBlock}
-    ${cards}`;
+    ${failuresBlock}
+    ${cards}
+    ${cemetery}`;
 
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
@@ -495,10 +533,48 @@ function screenHome() {
         });
       }
       fxBindTilt(host);
-      host.querySelectorAll('.pcard[data-habit]').forEach(el =>
+      wireCardFocus(host, '.deck-grid .pcard[data-habit]', store.habits);
+      host.querySelectorAll('.failure-row[data-habit]').forEach(el =>
         el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
+
+      wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', store.cemetery, { dead: true });
+
+      const toggle = host.querySelector('#cemetery-toggle');
+      if (toggle) {
+        toggle.addEventListener('click', () => {
+          const grid = host.querySelector('#cemetery-grid');
+          const open = !grid.hidden;
+          grid.hidden = open;
+          toggle.setAttribute('aria-expanded', String(!open));
+          toggle.classList.toggle('is-open', !open);
+          if (!open) fxBindTilt(host);
+        });
+      }
+
+      celebrateTierUps(host);
     },
   };
+}
+
+// A tier is age-based, not success-based — it climbs just by not being
+// abandoned. That means the moment worth marking isn't a daily "Fait", it's
+// the rare day a card actually crosses into a new one. celebrated_tier
+// remembers what has already been shown so this fires exactly once.
+function celebrateTierUps(host) {
+  const crossed = [];
+  for (const h of store.habits) {
+    const tier = tierFor(habitStats(h).daysAlive);
+    if (tierIndex(tier.id) > tierIndex(h.celebrated_tier || 'oeuf')) {
+      crossed.push({ habit: h, tier });
+      h.celebrated_tier = tier.id;
+      enqueue({ table: 'habits', values: { celebrated_tier: tier.id }, matchId: h.id });
+    }
+  }
+  if (!crossed.length) return;
+  fxFireworks();
+  crossed.forEach(({ habit, tier }, i) => {
+    setTimeout(() => toast(`« ${habit.title} » devient ${tier.label}.`), i * 2600);
+  });
 }
 
 // ---------- Ma semaine ----------
@@ -750,7 +826,8 @@ function screenHistory() {
           ${['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(l => `<div class="cal-dow">${l}</div>`).join('')}
           ${buildMonthGrid(year, month).map(date => {
             if (!date) return '<div class="cal-day empty"></div>';
-            return `<div class="cal-day ${dayClass(byDate[date])}">${Number(date.split('-')[2])}</div>`;
+            const cls = dayClass(byDate[date]);
+            return `<button type="button" class="cal-day ${cls}" ${cls !== 'empty' ? `data-date="${date}"` : 'disabled'}>${Number(date.split('-')[2])}</button>`;
           }).join('')}
         </div>
         <div class="cal-legend">
@@ -766,142 +843,108 @@ function screenHistory() {
       if (month === 11) { month = 0; year++; } else month++;
       mount(host);
     });
+    host.querySelectorAll('.cal-day[data-date]').forEach(el =>
+      el.addEventListener('click', () => openDaySheet(el.dataset.date)));
   }
 
   return { title: 'Historique', tab: '/history', chrome: true, mount };
 }
 
-// ---------- Modifier une promesse ----------
-// Editing keeps the card and its history — only the terms change. Deleting and
-// recreating used to be the only route, which cost the user their tier.
+// ---------- Card focus (foreground + blurred backdrop) ----------
+// Tapping a card in a deck brings it forward for a closer look instead of
+// leaving immediately for the detail screen; tapping it again puts it back.
+// Deeper stats and the abandon action still live one tap further, inside the
+// focused view.
 
-function screenEditHabit(habitId) {
-  const habit = store.habits.find(h => h.id === habitId);
-  if (!habit) return { redirect: '/home' };
+function wireCardFocus(host, selector, list, opts = {}) {
+  host.querySelectorAll(selector).forEach(el => {
+    el.addEventListener('click', () => {
+      const habit = list.find(h => h.id === el.dataset.habit);
+      if (habit) openCardFocus(habit, opts);
+    });
+  });
+}
 
-  const draft = {
-    title: habit.title,
-    theme: habit.theme || 'autre',
-    type: habit.type,
-    frequency: habit.frequency || 3,
-    target_days: new Set(habit.target_days),
-    reminder_time: (habit.reminder_time || '20:00').slice(0, 5),
-    end_date: habit.end_date || '',
+function openCardFocus(habit, opts = {}) {
+  const stats = habitStats(habit);
+  const cardOpts = opts.dead ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)) } : {};
+
+  const overlay = document.createElement('div');
+  overlay.className = 'card-focus-backdrop';
+  overlay.innerHTML = `
+    <div class="card-focus-stage">
+      ${habitCard(habit, stats, cardOpts)}
+      <button class="btn-primary card-focus-detail" id="card-focus-open">Voir le détail</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  fxBindTilt(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  const close = () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 260);
   };
+  // Repositioning is the point of a second tap on the card itself; the detail
+  // button is the one thing inside that must not also close it.
+  overlay.addEventListener('click', e => {
+    if (e.target.closest('#card-focus-open')) return;
+    close();
+  });
+  overlay.querySelector('#card-focus-open').addEventListener('click', () => {
+    close();
+    navigate('/habit/' + habit.id);
+  });
+}
 
-  function mount(host) {
-    host.innerHTML = `
-      <div class="creator">
-        <div class="creator-preview">
-          ${habitCard({ ...habit, title: draft.title, theme: draft.theme }, habitStats(habit))}
-        </div>
-        <h3 class="step-title">Domaine</h3>
-        <div class="theme-grid">
-          ${THEMES.map(th => `
-            <button class="theme-chip ${draft.theme === th.id ? 'selected' : ''}" data-theme="${th.id}" style="--card-hue:${th.hue}">
-              ${icon(th.id, 22)}<span>${th.label}</span>
+const STATUS_LABEL = {
+  success: 'Tenu', failed: 'Non tenu', frozen: 'Gelé', created: 'Pas encore fait', no_data: 'Sans réponse',
+};
+
+// A day used to collapse into one colour even when it held a mix of kept and
+// broken promises. Tapping it now shows every card that was live that day,
+// each stamped with its own verdict — the information the aggregate colour
+// was throwing away.
+function openDaySheet(iso) {
+  const rows = checksOnDate(iso);
+  const [y, m, d] = iso.split('-');
+  const label = `${Number(d)} ${MONTH_LABELS[Number(m) - 1]} ${y}`;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet day-sheet" role="dialog" aria-modal="true">
+      <h3>${label}</h3>
+      ${rows.length ? `
+        <div class="day-rows">
+          ${rows.map(({ check, habit }) => `
+            <button type="button" class="day-row" data-habit="${habit.id}">
+              ${icon(themeById(habit.theme).id, 18)}
+              <span class="day-row-title">${esc(habit.title)}</span>
+              <span class="day-row-status is-${check.status}">${STATUS_LABEL[check.status] || check.status}</span>
+              ${check.reason ? `<span class="day-row-reason">${esc(reasonLabel(check.reason))}</span>` : ''}
             </button>`).join('')}
-        </div>
-        <div class="form-group">
-          <label for="ed-title">Ta promesse</label>
-          <input type="text" id="ed-title" value="${esc(draft.title)}" />
-        </div>
-        <h3 class="step-title">Rythme</h3>
-        <div class="type-toggle">
-          <button data-type="daily" class="${draft.type === 'daily' ? 'selected' : ''}">Chaque jour choisi</button>
-          <button data-type="frequency" class="${draft.type === 'frequency' ? 'selected' : ''}">X fois / semaine</button>
-        </div>
-        ${draft.type === 'frequency' ? `
-          <div class="form-group">
-            <label for="ed-frequency">Combien de fois par semaine ?</label>
-            <input type="number" id="ed-frequency" min="1" max="7" value="${draft.frequency}" />
-          </div>` : ''}
-        <div class="form-group">
-          <label>Jours concernés</label>
-          <div class="day-picker">
-            ${[1, 2, 3, 4, 5, 6, 0].map(d => `
-              <button type="button" class="day-chip ${draft.target_days.has(d) ? 'selected' : ''}" data-day="${d}">${DOW_LABELS[d]}</button>`).join('')}
-          </div>
-        </div>
-        <div class="form-group">
-          <label for="ed-time">Heure de vérification</label>
-          <input type="time" id="ed-time" value="${draft.reminder_time}" />
-        </div>
-        <div class="form-group">
-          <label for="ed-end">Date de fin (optionnel)</label>
-          <input type="date" id="ed-end" value="${draft.end_date}" />
-        </div>
-        <p class="hint-msg">Tu gardes ta carte, ton palier et tout ton historique.</p>
-        <p class="error-msg" id="ed-error" style="display:none"></p>
-        <div class="creator-actions">
-          <button class="btn-secondary" data-nav="/habit/${habit.id}">Annuler</button>
-          <button class="btn-primary" id="ed-save">Enregistrer</button>
-        </div>
-      </div>`;
+        </div>`
+        : `<p>Aucune promesse ce jour-là.</p>`}
+      <button class="btn-secondary" id="day-close">Fermer</button>
+    </div>`;
+  document.body.appendChild(backdrop);
 
-    const rerender = () => mount(host);
-    fxBindTilt(host);
-
-    host.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => {
-      draft.theme = b.dataset.theme; rerender();
-    }));
-    host.querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', () => {
-      draft.type = b.dataset.type; rerender();
-    }));
-    host.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => {
-      const d = Number(b.dataset.day);
-      if (draft.target_days.has(d)) draft.target_days.delete(d); else draft.target_days.add(d);
-      rerender();
-    }));
-
-    const title = host.querySelector('#ed-title');
-    title.addEventListener('input', () => {
-      draft.title = title.value;
-      host.querySelector('.creator-preview').innerHTML =
-        habitCard({ ...habit, title: draft.title, theme: draft.theme }, habitStats(habit));
-    });
-    const freq = host.querySelector('#ed-frequency');
-    if (freq) freq.addEventListener('input', () => { draft.frequency = Number(freq.value); });
-    host.querySelector('#ed-time').addEventListener('input', e => { draft.reminder_time = e.target.value; });
-    host.querySelector('#ed-end').addEventListener('input', e => { draft.end_date = e.target.value; });
-
-    host.querySelector('#ed-save').addEventListener('click', async () => {
-      const errorEl = host.querySelector('#ed-error');
-      errorEl.style.display = 'none';
-      const fail = m => { errorEl.textContent = m; errorEl.style.display = 'block'; };
-
-      const t = draft.title.trim();
-      if (!t) return fail('Donne un nom à ta promesse.');
-      if (draft.target_days.size === 0) return fail('Sélectionne au moins un jour.');
-      if (draft.type === 'frequency' && (draft.frequency < 1 || draft.frequency > draft.target_days.size)) {
-        return fail('La fréquence doit être inférieure ou égale au nombre de jours sélectionnés.');
-      }
-
-      const btn = host.querySelector('#ed-save');
-      btn.disabled = true;
-      const { error } = await updateHabit(habit.id, {
-        title: t,
-        theme: draft.theme,
-        type: draft.type,
-        frequency: draft.type === 'frequency' ? draft.frequency : null,
-        target_days: Array.from(draft.target_days),
-        reminder_time: draft.reminder_time,
-        end_date: draft.end_date || null,
-      });
-      if (error) { btn.disabled = false; return fail(error.message); }
-      toast('Promesse modifiée.');
-      navigate('/habit/' + habit.id);
-    });
-  }
-
-  return { title: 'Modifier', tab: '/home', chrome: true, back: '/habit/' + habitId, mount };
+  const close = () => backdrop.remove();
+  backdrop.querySelector('#day-close').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelectorAll('[data-habit]').forEach(el =>
+    el.addEventListener('click', () => { close(); navigate('/habit/' + el.dataset.habit); }));
 }
 
 // ---------- Détail d'une carte ----------
+// No editing screen, deliberately: a promise that can be rewritten stops being
+// a record of what was actually said. The only way out is abandoning it
+// outright — to the cemetery, not into oblivion.
 
 function screenHabitDetail(habitId) {
-  const habit = store.habits.find(h => h.id === habitId);
+  const habit = store.habits.find(h => h.id === habitId) || store.cemetery.find(h => h.id === habitId);
   if (!habit) return { redirect: '/home' };
+  const dead = habit.active === false;
 
   const stats = habitStats(habit);
   const own = store.checks.filter(c => c.habit_id === habit.id);
@@ -934,22 +977,24 @@ function screenHabitDetail(habitId) {
     : '';
 
   const html = `
-    <div class="detail-card">${habitCard(habit, stats)}</div>
+    <div class="detail-card">${habitCard(habit, stats, dead ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)) } : {})}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
       ${lines}
       ${reasonLine}
       ${expiredLine}
-      <div class="stat-line">Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.</div>
+      <div class="stat-line">${dead
+        ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, jusqu'à son abandon.`
+        : `Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.`}</div>
     </div>
-    <button class="btn-secondary" data-nav="/edit/${habit.id}">Modifier cette promesse</button>
-    <button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>`;
+    ${dead ? '' : '<button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>'}`;
 
   return {
     title: habit.title, tab: '/home', chrome: true, back: '/home', html,
     wire(host) {
       fxBindTilt(host);
-      host.querySelector('#delete-habit').addEventListener('click', () => openDeleteSheet(habit));
+      const del = host.querySelector('#delete-habit');
+      if (del) del.addEventListener('click', () => openDeleteSheet(habit));
     },
   };
 }

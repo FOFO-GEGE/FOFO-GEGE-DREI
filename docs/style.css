@@ -746,9 +746,13 @@ button:disabled { opacity: .4; cursor: default; }
 .cal-dow { text-align: center; font-size: 10px; font-weight: 700; color: var(--text-dim); padding-bottom: 5px; }
 .cal-day {
   aspect-ratio: 1; border-radius: 10px; display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  font-size: 12px; font-weight: 600; color: var(--text-dim); font-family: inherit;
   background: var(--surface-2); font-variant-numeric: tabular-nums;
+  transition: transform .12s ease;
 }
+.cal-day[data-date] { cursor: pointer; }
+.cal-day[data-date]:active { transform: scale(.9); }
+.cal-day:disabled { cursor: default; }
 .cal-day.success {
   background: linear-gradient(150deg, var(--success), #ff9a3d); color: var(--success-ink);
   font-weight: 800; box-shadow: 0 0 14px #ffc53d4d;
@@ -895,3 +899,81 @@ button:disabled { opacity: .4; cursor: default; }
 .sync-dot[hidden] { display: none; }
 .sync-dot.is-pending { animation: pulse-urgent 1.4s ease-in-out infinite; }
 .sync-dot.is-offline { background: var(--danger); }
+
+/* ---------- Ce que tu n'as pas tenu ---------- */
+
+.failures { display: flex; flex-direction: column; gap: 8px; }
+.failure-row {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: 13px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  transition: transform .12s ease;
+}
+.failure-row:active { transform: scale(.98); }
+.failure-row.is-buried { opacity: .55; border-left-color: var(--text-dim); }
+.failure-body { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.failure-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.failure-meta { font-size: 11.5px; color: var(--text-dim); }
+
+/* ---------- Cemetery ---------- */
+
+.cemetery { margin-top: 26px; }
+.cemetery-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-dim); padding: 10px 2px;
+}
+.cemetery-toggle .deck-count { background: var(--surface-2); }
+.cemetery-chevron { margin-left: auto; transition: transform .2s ease; display: flex; }
+.cemetery-toggle.is-open .cemetery-chevron { transform: rotate(90deg); }
+.cemetery-grid { margin-top: 10px; }
+
+.pcard.is-dead {
+  filter: grayscale(0.85) brightness(0.72);
+  box-shadow: none;
+}
+.pcard.is-dead .pcard-sheen { display: none; }
+.pcard.is-dead:active { transform: perspective(760px) scale(.97); }
+.pcard-xp-dead {
+  display: flex; align-items: center; gap: 5px; color: var(--text-dim); font-weight: 700;
+}
+
+/* ---------- Day sheet ---------- */
+
+.day-sheet .day-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
+.day-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 12px 14px; border-radius: 13px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.day-row-title { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.day-row-status {
+  flex: none; font-size: 11px; font-weight: 800; letter-spacing: .04em;
+  padding: 4px 10px; border-radius: 999px; text-transform: uppercase;
+}
+.day-row-status.is-success { background: var(--success); color: var(--success-ink); }
+.day-row-status.is-failed { background: var(--danger); color: #fff; }
+.day-row-status.is-frozen { background: var(--frozen); color: var(--frozen-ink); }
+.day-row-status.is-created { background: var(--surface); color: var(--text-dim); border: 1px dashed var(--border); }
+.day-row-status.is-no_data { background: var(--no-data); color: var(--no-data-ink); }
+.day-row-reason { flex-basis: 100%; font-size: 11.5px; color: var(--text-dim); padding-left: 28px; }
+
+/* ---------- Card focus (foreground + blurred backdrop) ---------- */
+
+.card-focus-backdrop {
+  position: fixed; inset: 0; z-index: 940;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  opacity: 0; transition: opacity .25s ease;
+}
+.card-focus-backdrop.show { opacity: 1; }
+.card-focus-stage {
+  width: 100%; max-width: 320px;
+  transform: scale(.88); transition: transform .28s cubic-bezier(.16,1,.3,1);
+}
+.card-focus-backdrop.show .card-focus-stage { transform: scale(1); }
+.card-focus-stage .pcard { box-shadow: 0 24px 70px #000000a0, inset 0 1px 0 #ffffff14; }
+.card-focus-detail { margin-top: 14px; }
