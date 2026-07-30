@@ -222,25 +222,27 @@ function fxBindTilt(root) {
   });
 }
 
-// ---------- Card focus: pick up and pivot ----------
+// ---------- Card focus: pivot in place ----------
 
-// Binds `handle` (the visible card) so it can be picked up like a physical
-// object: one finger drags `mover` freely and completely across the screen
-// (no dampening — it goes exactly where the pointer goes), two fingers pivot
-// it, rotating by the same angle the fingers turn through. Both spring back
-// to neutral the moment every pointer lifts. Returns `consumeDrag()`, which
-// a caller can use right after a click to tell a real drag/pivot apart from
-// a plain tap (so releasing a drag doesn't also fire whatever the tap does).
-function fxBindCardMove(handle, mover) {
+// Binds `card` so it turns in place — its position never changes, only its
+// orientation. One finger tilts it around the X/Y axes in the direction of
+// the drag, continuously and without a small-angle cap, so a full-length
+// drag carries it past 90° and all the way through a genuine flip. Two
+// fingers spin it around Z, by the same angle the fingers turn through. Both
+// spring back to a flat, neutral orientation the moment every pointer lifts.
+// Returns `consumeDrag()`, which a caller can use right after a click to
+// tell a real turn apart from a plain tap (so releasing one doesn't also
+// fire whatever the tap does).
+function fxBindCardTurn(card) {
   if (REDUCED.matches) return { consumeDrag: () => false };
 
+  const TILT_SENS = 0.6; // deg per px dragged
   const pointers = new Map(); // pointerId -> {x, y}
-  let translate = { x: 0, y: 0 };
-  let rotation = 0;
-  let dragOrigin = null;   // pointer position that maps to the current translate
-  let pivotStartAngle = 0;
-  let pivotBaseRotation = 0;
-  let gestureStartRotation = 0; // rotation when this gesture began — the moved() baseline
+  let rotX = 0, rotY = 0, rotZ = 0;
+  let dragOrigin = null;    // pointer position the current tilt offset is relative to
+  let baseRotX = 0, baseRotY = 0;
+  let pivotStartAngle = 0, pivotBaseRotZ = 0;
+  let gestureStart = { x: 0, y: 0, z: 0 };
   let moved = false;
 
   const angleBetween = pts => {
@@ -248,55 +250,56 @@ function fxBindCardMove(handle, mover) {
     return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
   };
   const apply = () => {
-    mover.style.transform = `translate(${translate.x}px, ${translate.y}px) rotate(${rotation}deg)`;
+    card.style.transform = `perspective(900px) rotateX(${rotX}deg) rotateY(${rotY}deg) rotateZ(${rotZ}deg)`;
   };
-  const startDragFromOnePointer = () => {
+  const startTiltFromOnePointer = () => {
     const [p] = pointers.values();
-    dragOrigin = { x: p.x - translate.x, y: p.y - translate.y };
+    dragOrigin = { x: p.x, y: p.y };
+    baseRotX = rotX; baseRotY = rotY;
   };
 
-  handle.addEventListener('pointerdown', e => {
-    handle.setPointerCapture(e.pointerId);
+  card.addEventListener('pointerdown', e => {
+    card.setPointerCapture(e.pointerId);
     if (pointers.size === 0) {
-      gestureStartRotation = rotation;
-      mover.style.transition = 'none';
+      gestureStart = { x: rotX, y: rotY, z: rotZ };
+      card.style.transition = 'none';
     }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 1) {
-      startDragFromOnePointer();
+      startTiltFromOnePointer();
     } else if (pointers.size === 2) {
       pivotStartAngle = angleBetween([...pointers.values()]);
-      pivotBaseRotation = rotation;
+      pivotBaseRotZ = rotZ;
     }
   });
 
-  handle.addEventListener('pointermove', e => {
+  card.addEventListener('pointermove', e => {
     if (!pointers.has(e.pointerId)) return;
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (pointers.size >= 2) {
-      rotation = pivotBaseRotation + (angleBetween([...pointers.values()]) - pivotStartAngle);
+      rotZ = pivotBaseRotZ + (angleBetween([...pointers.values()]) - pivotStartAngle);
     } else if (dragOrigin) {
       const [p] = pointers.values();
-      translate = { x: p.x - dragOrigin.x, y: p.y - dragOrigin.y };
+      rotY = baseRotY + (p.x - dragOrigin.x) * TILT_SENS;
+      rotX = baseRotX - (p.y - dragOrigin.y) * TILT_SENS;
     }
-    if (Math.abs(translate.x) > 6 || Math.abs(translate.y) > 6 || Math.abs(rotation - gestureStartRotation) > 3) moved = true;
+    if (Math.abs(rotX - gestureStart.x) > 3 || Math.abs(rotY - gestureStart.y) > 3 || Math.abs(rotZ - gestureStart.z) > 3) moved = true;
     apply();
   });
 
   const release = e => {
     if (!pointers.has(e.pointerId)) return;
     pointers.delete(e.pointerId);
-    if (pointers.size === 1) startDragFromOnePointer(); // keep tracking the remaining finger
+    if (pointers.size === 1) startTiltFromOnePointer(); // keep tracking the remaining finger
     if (pointers.size > 0) return;
 
-    mover.style.transition = 'transform .45s cubic-bezier(.16,1,.3,1)';
-    translate = { x: 0, y: 0 };
-    rotation = 0;
+    card.style.transition = 'transform .5s cubic-bezier(.16,1,.3,1)';
+    rotX = 0; rotY = 0; rotZ = 0;
     apply();
   };
-  handle.addEventListener('pointerup', release);
-  handle.addEventListener('pointercancel', release);
+  card.addEventListener('pointerup', release);
+  card.addEventListener('pointercancel', release);
 
   return {
     consumeDrag: () => { const m = moved; moved = false; return m; },

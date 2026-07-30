@@ -93,38 +93,51 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   const sync = await page.evaluate(() => ({ state: store.sync, queued: JSON.parse(localStorage.getItem('mirroir_write_queue') || '[]').length }));
   step('sync state:', sync.state, '| queued ops left:', sync.queued);
 
-  // --- Card focus: the card itself can be picked up and moved freely with
-  // one finger (full 1:1, no dampening) and springs back to neutral the
-  // moment it's released; a real drag must not also count as the tap that
-  // closes the overlay, but a plain tap (or tapping the backdrop) still does ---
+  // --- Card focus: the card only pivots in place — it never translates.
+  // One finger tilts it around X/Y far enough to carry it past a full
+  // quarter-turn (into a flip), two fingers would spin it around Z; both
+  // spring back to flat the moment every pointer lifts. A real turn must not
+  // also count as the tap that closes the overlay, but a plain tap (or
+  // tapping the backdrop) still does ---
   await page.click('.deck-grid .pcard');
   await page.waitForSelector('.card-focus-backdrop.show', { timeout: 4000 });
   step('card focus opened:', await page.locator('.card-focus-stage .pcard').count());
 
-  const cardBox = await page.locator('.card-focus-stage .pcard').boundingBox();
-  const cx = cardBox.x + cardBox.width / 2, cy = cardBox.y + cardBox.height / 2;
-  await page.mouse.move(cx, cy);
+  const boxBefore = await page.locator('.card-focus-stage .pcard').boundingBox();
+  const centerBefore = { x: boxBefore.x + boxBefore.width / 2, y: boxBefore.y + boxBefore.height / 2 };
+  await page.mouse.move(centerBefore.x, centerBefore.y);
   await page.mouse.down();
-  await page.mouse.move(cx + 70, cy + 40, { steps: 8 });
-  const mid = await page.evaluate(() => document.querySelector('.card-focus-stage').style.transform);
-  const m = mid.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
-  const [tx, ty] = m ? [Number(m[1]), Number(m[2])] : [NaN, NaN];
-  step('mid-drag translate:', tx, ty, '(expect ~70, ~40 — no dampening)');
-  if (!m || Math.abs(tx - 70) > 6 || Math.abs(ty - 40) > 6) {
-    throw new Error(`card drag is not full/1:1: got transform "${mid}"`);
-  }
+  await page.mouse.move(centerBefore.x + 250, centerBefore.y, { steps: 10 });
+
+  const mid = await page.evaluate(() => document.querySelector('.card-focus-stage .pcard').style.transform);
+  const rotY = Number((mid.match(/rotateY\(([-\d.]+)deg\)/) || [])[1]);
+  step('mid-drag rotateY:', rotY, '(expect > 90 — a 250px drag should carry it past a quarter-turn, into a flip)');
+  if (!(rotY > 90)) throw new Error(`card does not turn far enough: got transform "${mid}"`);
+  // The precise check: the transform the app writes never contains a
+  // translate() at all — no ambiguity from perspective foreshortening.
+  if (/translate\(/.test(mid)) throw new Error(`card should only ever rotate, but transform includes a translate: "${mid}"`);
+
+  // A perspective-rotated rectangle's axis-aligned bounding box legitimately
+  // shifts a little (the near edge projects larger than the far edge) even
+  // with zero translation — this is a loose sanity bound, not the real check.
+  const boxDuring = await page.locator('.card-focus-stage .pcard').boundingBox();
+  const centerDuring = { x: boxDuring.x + boxDuring.width / 2, y: boxDuring.y + boxDuring.height / 2 };
+  const centerShift = Math.hypot(centerDuring.x - centerBefore.x, centerDuring.y - centerBefore.y);
+  step('center shift while turning (px, perspective foreshortening expected):', centerShift.toFixed(1));
+  if (centerShift > 40) throw new Error(`card center moved implausibly far for a pure rotation: ${centerShift.toFixed(1)}px`);
+
   await page.mouse.up();
   await page.waitForFunction(
-    () => document.querySelector('.card-focus-stage').style.transform === 'translate(0px, 0px) rotate(0deg)',
+    () => document.querySelector('.card-focus-stage .pcard').style.transform === 'perspective(900px) rotateX(0deg) rotateY(0deg) rotateZ(0deg)',
     { timeout: 3000 }
   );
-  step('card springs back to neutral position on release');
-  step('overlay still open after a real drag (not treated as a closing tap):',
+  step('card springs back flat on release');
+  step('overlay still open after a real turn (not treated as a closing tap):',
     await page.locator('.card-focus-backdrop').count(), '(expect 1)');
 
   await page.locator('.card-focus-stage .pcard').click();
   await page.waitForSelector('.card-focus-backdrop', { state: 'detached', timeout: 4000 });
-  step('a plain tap on the card (no drag) still closes the overlay');
+  step('a plain tap on the card (no turn) still closes the overlay');
 
   await page.click('.deck-grid .pcard');
   await page.waitForSelector('.card-focus-backdrop.show', { timeout: 4000 });

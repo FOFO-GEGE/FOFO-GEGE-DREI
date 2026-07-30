@@ -989,6 +989,10 @@ button:disabled { opacity: .4; cursor: default; }
 .card-focus-stage .pcard {
   box-shadow: 0 24px 70px #000000a0, inset 0 1px 0 #ffffff14;
   touch-action: none; cursor: grab;
+  /* fxBindCardTurn rotates this element well past 90° in either direction —
+     without this it would show its own content mirrored partway through,
+     instead of reading as a card turning edge-on mid-flip. */
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
 }
 .card-focus-stage .pcard:active { cursor: grabbing; }
 .card-focus-detail { margin-top: 14px; }

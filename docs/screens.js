@@ -874,27 +874,25 @@ function openCardFocus(habit, opts = {}) {
   overlay.innerHTML = `
     <div class="card-focus-stage">
       ${habitCard(habit, stats, cardOpts)}
-      <p class="card-focus-hint">Glisse la carte pour la déplacer • Pivote-la à deux doigts pour la faire tourner</p>
+      <p class="card-focus-hint">Glisse la carte pour la faire pivoter • Pivote-la à deux doigts pour la faire tourner sur elle-même</p>
       <button class="btn-primary card-focus-detail" id="card-focus-open">Voir le détail</button>
     </div>`;
   document.body.appendChild(overlay);
-  const stage = overlay.querySelector('.card-focus-stage');
   const card = overlay.querySelector('.pcard');
-  fxBindTilt(overlay);
   requestAnimationFrame(() => overlay.classList.add('show'));
 
   const close = () => {
     overlay.classList.remove('show');
     setTimeout(() => overlay.remove(), 260);
   };
-  const move = fxBindCardMove(card, stage);
-  // Tapping the backdrop (or the card, without dragging it) closes/repositions
-  // the overlay; a real drag or pivot on the card is consumed here so letting
-  // go of it doesn't also close the view, and the detail button keeps its own
-  // handler so it never triggers either.
+  // The card's position never changes — only its orientation does. A real
+  // turn is consumed here so letting go of it doesn't also close the view;
+  // a plain tap (or tapping the backdrop) still does, and the detail button
+  // keeps its own handler so it never triggers either.
+  const turn = fxBindCardTurn(card);
   overlay.addEventListener('click', e => {
     if (e.target.closest('#card-focus-open')) return;
-    if (move.consumeDrag()) return;
+    if (turn.consumeDrag()) return;
     close();
   });
   overlay.querySelector('#card-focus-open').addEventListener('click', () => {
