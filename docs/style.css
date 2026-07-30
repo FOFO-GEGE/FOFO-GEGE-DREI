@@ -372,6 +372,12 @@ button:disabled { opacity: .4; cursor: default; }
   background: var(--surface-2); color: var(--text);
 }
 .pcard-tier-blurb { font-size: 11.5px; color: var(--text-dim); }
+/* Permanent, and deliberately not hidden in compact/grid view like the tier
+   blurb is — the whole point of a scar is that it stays visible. */
+.pcard-scar {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 9.5px; font-weight: 700; color: var(--danger);
+}
 
 .pcard-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .pcard-stat {

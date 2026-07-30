@@ -79,6 +79,7 @@
             current_streak: 0, best_streak: 0, freeze_used_month: null,
             deleted_at: null, celebrated_tier: 'oeuf',
             death_cause: null, death_announced: false, active: true,
+            resurrected: false, pre_death_days: null,
           },
           habit_checks: { expired: false, reason: null },
           profiles: {},

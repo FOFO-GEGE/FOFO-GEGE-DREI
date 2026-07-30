@@ -93,9 +93,13 @@ const CASES = [
   await page.waitForFunction(() => location.hash === '#/home');
   step('habit created for the starvation run');
 
-  // Nine days of silence, backdated so none of them is today.
+  // Nine days of silence, backdated so none of them is today. start_date is
+  // pushed back too, since vitalityOf() now bounds its fold there (see the
+  // resurrection migration) — the real habit's start_date is today, which
+  // would otherwise make these synthetic 2021 checks invisible to the fold.
   const dead = await page.evaluate(async () => {
     const h = store.habits[0];
+    h.start_date = '2021-01-01';
     for (let i = 0; i < 9; i++) {
       store.checks.push({
         id: crypto.randomUUID(), habit_id: h.id,
@@ -159,6 +163,76 @@ const CASES = [
   const repeated = await page.locator('.death-notice').count();
   step('notice re-opened on a later visit:', repeated, '(expect 0)');
   if (repeated) throw new Error('the same death was announced twice');
+
+  // --- Resurrection: once, ever, at Œuf, with a permanent scar ---
+  const revived = await page.evaluate(async () => {
+    const deadHabit = store.cemetery[0];
+    const preDeathDays = habitStats(deadHabit).daysAlive;
+    await resurrectHabit(deadHabit.id);
+    const h = store.habits.find(x => x.id === deadHabit.id);
+    return {
+      preDeathDays,
+      backInDeck: !!h,
+      stillInCemetery: store.cemetery.some(x => x.id === deadHabit.id),
+      active: h?.active,
+      resurrected: h?.resurrected,
+      preDeathDaysStored: h?.pre_death_days,
+      streak: h?.current_streak,
+      vitalityNow: h ? vitalityOf(h) : null,
+      startedToday: h?.start_date === new Date().toISOString().slice(0, 10),
+    };
+  });
+  step('resurrection ->', JSON.stringify(revived));
+  if (!revived.backInDeck || revived.stillInCemetery || !revived.active || !revived.resurrected
+      || revived.preDeathDaysStored !== revived.preDeathDays || revived.streak !== 0
+      || revived.vitalityNow !== 100 || !revived.startedToday) {
+    throw new Error('resurrection did not reset the card correctly: ' + JSON.stringify(revived));
+  }
+
+  await page.waitForFunction(() => store.sync === 'idle', { timeout: 5000 });
+  const revivedPersisted = await page.evaluate(async id => {
+    const { data } = await sb.from('habits').select('*').eq('id', id);
+    return data[0];
+  }, (await page.evaluate(() => store.habits.find(h => h.resurrected).id)));
+  step('persisted after revival -> active:', revivedPersisted.active, '| resurrected:', revivedPersisted.resurrected,
+    '| pre_death_days:', revivedPersisted.pre_death_days, '| deleted_at:', revivedPersisted.deleted_at);
+  if (revivedPersisted.active !== true || revivedPersisted.resurrected !== true || revivedPersisted.deleted_at !== null) {
+    throw new Error('the revival never reached the database: ' + JSON.stringify(revivedPersisted));
+  }
+
+  // The permanent scar shows on the card even back in the live deck.
+  await page.evaluate(() => { location.hash = '#/home'; renderRoute(); });
+  await page.waitForSelector('.deck-grid .pcard');
+  const scarCount = await page.locator('.deck-grid .pcard-scar').count();
+  step('scar visible on the revived card in the deck:', scarCount, '(expect 1)');
+  if (scarCount !== 1) throw new Error('the resurrection scar is not shown on the card');
+
+  // Starve it again — vitalityOf only ever folds checks between start_date
+  // and today for an active habit, and start_date was just reset to today,
+  // so there is no calendar date left to backdate into; every check has to
+  // land on today itself to count (the fold doesn't care about ordering
+  // within a single day, only about how many of each type there are). Then
+  // confirm the one-resurrection-ever ceiling: a second one must be refused.
+  const second = await page.evaluate(async () => {
+    const h = store.habits.find(x => x.resurrected);
+    const today = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < 9; i++) {
+      store.checks.push({
+        id: crypto.randomUUID(), habit_id: h.id,
+        date: today, status: 'failed', expired: true,
+      });
+    }
+    await reconcileToday();
+    const res = await resurrectHabit(h.id);
+    return {
+      diedAgain: !store.habits.some(x => x.id === h.id) && store.cemetery.some(x => x.id === h.id),
+      secondAttempt: res,
+    };
+  });
+  step('died a second time:', second.diedAgain, '| second resurrection attempt ->', JSON.stringify(second.secondAttempt));
+  if (!second.diedAgain || second.secondAttempt.ok) {
+    throw new Error('a card was resurrected more than once: ' + JSON.stringify(second));
+  }
 
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();

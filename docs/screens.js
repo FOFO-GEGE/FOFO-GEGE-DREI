@@ -1084,6 +1084,9 @@ function screenHabitDetail(habitId) {
       <span>Rappel à <strong>${(habit.reminder_time || '20:00').slice(0, 5)}</strong></span>
       <span class="reminder-row-edit">Modifier l'heure</span>
     </button>`}
+    ${dead && !habit.resurrected
+      ? '<button class="btn-primary" id="resurrect-habit">Ressusciter cette promesse</button>'
+      : ''}
     ${dead ? '' : '<button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>'}`;
 
   return {
@@ -1094,8 +1097,37 @@ function screenHabitDetail(habitId) {
       if (del) del.addEventListener('click', () => openDeleteSheet(habit));
       const editTime = host.querySelector('#edit-reminder-time');
       if (editTime) editTime.addEventListener('click', () => openReminderTimeSheet(habit));
+      const res = host.querySelector('#resurrect-habit');
+      if (res) res.addEventListener('click', () => openResurrectSheet(habit));
     },
   };
+}
+
+// A resurrection is exactly one decision, ever — it needs the same weight as
+// abandoning did, not a casual tap.
+function openResurrectSheet(habit) {
+  const stats = habitStats(habit);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" role="dialog" aria-modal="true">
+      <h3>Ressusciter « ${esc(habit.title)} » ?</h3>
+      <p>Elle repart à <strong>Œuf</strong>, série et palier remis à zéro. Elle portera une cicatrice
+         permanente — <strong>${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''} avant sa mort</strong> —
+         visible sur la carte pour toujours. Une seule résurrection, à vie : si elle meurt à nouveau, c'est définitif.</p>
+      <button class="btn-primary" id="sheet-resurrect">La ressusciter</button>
+      <button class="btn-ghost" id="sheet-cancel">Laisser reposer</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+  backdrop.querySelector('#sheet-cancel').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelector('#sheet-resurrect').addEventListener('click', async () => {
+    close();
+    await resurrectHabit(habit.id);
+    navigate('/habit/' + habit.id);
+  });
 }
 
 // The one field a promise may change after creation — see updateReminderTime.
