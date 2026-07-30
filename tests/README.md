@@ -47,6 +47,14 @@ and has to be verified against the project itself.
 - `expiry.spec.js` — the core rule: silence past the one-hour window becomes a
   failure with the `expired` flag, breaks the streak, and a window that has
   already closed never opens a check at all.
+- `vitality.spec.js` — the value that makes a card change while the app is
+  closed. Its case table is **the contract between two implementations**:
+  `vitalityOf()` in JS and `mirroir_vitality()` in PL/pgSQL compute the same
+  fold, and the identical cases were run against the real database when the
+  migration was applied. A change here that is not mirrored in SQL will make
+  the client show a card the cron has already buried, or the reverse. Also
+  covers autonomous death end to end: a starved card leaves the deck with no
+  tap, reaches the database, and is announced exactly once.
 
 ## Not covered here
 

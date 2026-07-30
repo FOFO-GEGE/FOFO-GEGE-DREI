@@ -187,6 +187,27 @@ async function reconcileToday() {
     }
   }
 
+  // A card whose vitality is spent dies on its own — no confirmation, no tap.
+  // This is the only way something ever leaves the deck without an explicit
+  // decision, and it is what makes the deck a place where things happen
+  // rather than a list entirely under the user's control. Runs before today's
+  // checks are opened so a card that just died is not handed a fresh one.
+  const starved = store.habits.filter(h => vitalityOf(h) <= 0);
+  for (const h of starved) {
+    const diedAt = new Date().toISOString();
+    h.active = false;
+    h.deleted_at = diedAt;
+    h.death_cause = 'neglect';
+    h.death_announced = false;
+    store.habits = store.habits.filter(x => x.id !== h.id);
+    store.cemetery.unshift(h);
+    enqueue({
+      table: 'habits',
+      values: { active: false, deleted_at: diedAt, death_cause: 'neglect' },
+      matchId: h.id,
+    });
+  }
+
   // Only open a check while its window can still be answered. A promise made
   // at 22h with an 08h reminder starts counting tomorrow — opening it now
   // would create an already-expired check and score a failure the user never
@@ -304,6 +325,69 @@ function todayTally() {
   };
 }
 
+// ---------- Vitality ----------
+// A card's living state, and the only thing about it that changes while the
+// app is closed. Three rules decide the whole design:
+//
+//  1. It moves *only* on decided due days, never on the calendar. A
+//     Monday/Wednesday/Friday promise must not be punished for the rhythm its
+//     owner chose — that kind of unfairness is what makes people uninstall.
+//  2. It is recomputed from history, never stored and incremented. Two
+//     independent counters (one here, one in the cron) would drift apart the
+//     first time a write failed; a pure function of the same rows cannot.
+//  3. Silence costs more than an honest "pas fait". Ghosting a promise is the
+//     one thing this app exists to make expensive, so declaring a failure is
+//     always strictly better for the card than ignoring it.
+//
+// Mirrored exactly by mirroir_vitality() in SQL — change one, change both.
+
+const VITALITY_MAX = 100;
+const VITALITY_DELTA = {
+  success: 12,
+  failedDeclared: -8,
+  failedSilent: -12,
+  frozen: 0, // a freeze is meant to cost nothing — that is its whole purpose
+};
+
+function vitalityDelta(check) {
+  if (check.status === 'success') return VITALITY_DELTA.success;
+  if (check.status === 'frozen') return VITALITY_DELTA.frozen;
+  if (check.status === 'failed') {
+    return check.expired ? VITALITY_DELTA.failedSilent : VITALITY_DELTA.failedDeclared;
+  }
+  return 0; // still 'created' — undecided days never move it
+}
+
+// Death is terminal: the fold stops at zero, so nothing recorded afterwards
+// can quietly revive a card. That is what makes the cemetery permanent.
+function vitalityOf(habit) {
+  const upTo = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
+  const own = store.checks
+    .filter(c => c.habit_id === habit.id && c.date <= upTo)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  let v = VITALITY_MAX;
+  for (const c of own) {
+    v = Math.max(0, Math.min(VITALITY_MAX, v + vitalityDelta(c)));
+    if (v === 0) return 0;
+  }
+  return v;
+}
+
+function vitalityState(v) {
+  if (v <= 0) return 'morte';
+  if (v < 30) return 'mourante';
+  if (v < 55) return 'malade';
+  if (v < 80) return 'faiblit';
+  return 'pleine';
+}
+
+// Counted at the cost of silence, so the warning is never optimistic: answer
+// honestly and you get more days than promised, never fewer.
+function rupturesBeforeDeath(v) {
+  return Math.max(1, Math.ceil(v / -VITALITY_DELTA.failedSilent));
+}
+
 function habitStats(habit) {
   const own = store.checks.filter(c => c.habit_id === habit.id);
   const decided = own.filter(c => c.status === 'success' || c.status === 'failed');
@@ -311,6 +395,7 @@ function habitStats(habit) {
   // A dead card's age freezes at the moment it was abandoned — otherwise a
   // card buried a year ago would keep reporting itself as older every day.
   const asOf = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
+  const vitality = vitalityOf(habit);
   return {
     rate: decided.length ? Math.round((kept / decided.length) * 100) : null,
     kept,
@@ -318,6 +403,9 @@ function habitStats(habit) {
     daysAlive: Math.max(0, daysBetween(habit.start_date, asOf)),
     streak: habit.current_streak || 0,
     best: habit.best_streak || 0,
+    vitality,
+    vitalityState: vitalityState(vitality),
+    rupturesLeft: rupturesBeforeDeath(vitality),
   };
 }
 
@@ -418,9 +506,26 @@ async function deleteHabit(habitId) {
   const deletedAt = new Date().toISOString();
   habit.active = false;
   habit.deleted_at = deletedAt;
+  habit.death_cause = 'abandoned';
+  habit.death_announced = true; // you were there — nothing to break to you later
   store.habits = store.habits.filter(h => h.id !== habitId);
   store.cemetery.unshift(habit);
-  await sb.from('habits').update({ active: false, deleted_at: deletedAt }).eq('id', habitId);
+  await sb.from('habits')
+    .update({ active: false, deleted_at: deletedAt, death_cause: 'abandoned', death_announced: true })
+    .eq('id', habitId);
+}
+
+// A card that starved while the app was closed has to be reported the next
+// time it opens, or it would simply vanish from the deck with no explanation.
+function unannouncedDeaths() {
+  return store.cemetery.filter(h => h.death_cause === 'neglect' && !h.death_announced);
+}
+
+function acknowledgeDeaths(habits) {
+  const ids = habits.map(h => h.id);
+  if (!ids.length) return;
+  habits.forEach(h => { h.death_announced = true; });
+  enqueue({ table: 'habits', values: { death_announced: true }, inIds: ids });
 }
 
 // ---------- Insight engine ----------

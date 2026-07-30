@@ -86,7 +86,8 @@ function habitCard(habit, stats, opts = {}) {
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
 
   return `
-    <article class="pcard tier-${tier.id} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}" style="--card-hue:${theme.hue}"
+    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
+      style="--card-hue:${theme.hue}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">
@@ -106,7 +107,9 @@ function habitCard(habit, stats, opts = {}) {
 
       <div class="pcard-tier">
         <span class="pcard-tier-name">${tier.label}</span>
-        <span class="pcard-tier-blurb">${opts.dead ? `Abandonnée après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.` : tier.blurb}</span>
+        <span class="pcard-tier-blurb">${opts.dead
+          ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.`
+          : tier.blurb}</span>
       </div>
 
       <div class="pcard-stats">
@@ -117,7 +120,13 @@ function habitCard(habit, stats, opts = {}) {
 
       <footer class="pcard-foot">
         ${opts.dead
-          ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} Morte le ${opts.deathDate || ''}</span>`
+          ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
+          : stats.vitalityState === 'mourante'
+          // A dying card has more urgent news than its progress toward a tier
+          // it will not reach. Stated as what you stand to lose, not as a
+          // scolding — and counted at the cost of silence, so answering
+          // honestly always buys more days than the warning promised.
+          ? `<span class="pcard-xp-label pcard-xp-dying">Encore ${stats.rupturesLeft} rupture${stats.rupturesLeft > 1 ? 's' : ''} et elle meurt</span>`
           : next
           ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
              <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`

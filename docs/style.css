@@ -258,6 +258,61 @@ button:disabled { opacity: .4; cursor: default; }
 }
 .pcard:hover::after { opacity: 1; }
 
+/* ---------- Vitality ladder ----------
+   The card's health, read at a glance and never as a number — a gauge would
+   turn it into a stat to optimise, whereas an appearance reads the way you
+   notice a plant is wilting. Colour drains, the holographic film slows and
+   dies, and fractures spread as it goes. Dead cards keep .is-dead below. */
+
+.pcard.vit-faiblit { filter: saturate(.82); }
+.pcard.vit-faiblit .pcard-sheen { opacity: calc(var(--holo-a) * .55); }
+
+.pcard.vit-malade { filter: saturate(.48) brightness(.95); }
+.pcard.vit-malade .pcard-sheen { opacity: calc(var(--holo-a) * .22); }
+
+.pcard.vit-mourante {
+  filter: saturate(.2) brightness(.88);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  animation: vit-flicker 3.4s ease-in-out infinite;
+}
+.pcard.vit-mourante .pcard-sheen { opacity: 0; }
+.pcard.vit-mourante .pcard-hp-value { text-shadow: none; }
+
+/* Fractures, confined to the art panel and never drawn across the text — a
+   card this small and this dense cannot survive a crack over its own numbers.
+   The angles are derived from --card-hue so that two cards side by side do
+   not fracture identically and read as one continuous line across the grid. */
+.pcard.vit-malade .pcard-art::after,
+.pcard.vit-mourante .pcard-art::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background:
+    linear-gradient(calc(var(--card-hue) * 1deg + 28deg),
+      transparent 47.7%, #000 48%, transparent 48.3%),
+    linear-gradient(calc(var(--card-hue) * -1deg + 96deg),
+      transparent 63.7%, #000 64%, transparent 64.3%);
+  opacity: .2;
+}
+.pcard.vit-mourante .pcard-art::after {
+  background:
+    linear-gradient(calc(var(--card-hue) * 1deg + 28deg),
+      transparent 47.7%, #000 48%, transparent 48.3%),
+    linear-gradient(calc(var(--card-hue) * -1deg + 96deg),
+      transparent 63.7%, #000 64%, transparent 64.3%),
+    linear-gradient(calc(var(--card-hue) * 1deg + 132deg),
+      transparent 33.7%, #000 34%, transparent 34.3%);
+  opacity: .4;
+}
+
+@keyframes vit-flicker {
+  0%, 100% { opacity: 1; }
+  47% { opacity: .96; }
+  50% { opacity: .78; }
+  53% { opacity: .97; }
+}
+
+/* Wraps to two lines on a compact card rather than spilling past its edge. */
+.pcard-xp-dying { color: var(--danger); font-weight: 800; line-height: 1.3; text-wrap: balance; }
+
 .pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .pcard-name {
   font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 700;
@@ -808,6 +863,12 @@ button:disabled { opacity: .4; cursor: default; }
   padding: 15px 16px; margin-top: 14px; font-size: 14px;
 }
 .reminder-row-edit { color: var(--hot); font-weight: 700; font-size: 12.5px; }
+
+.death-notice h3 { color: var(--danger); }
+.death-notice-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 10px; margin-bottom: 22px; max-width: 260px; margin-inline: auto;
+}
 
 .toast {
   position: fixed; top: calc(14px + env(safe-area-inset-top)); left: 50%;

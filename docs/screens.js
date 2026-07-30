@@ -478,7 +478,8 @@ function screenHome() {
          </button>
          <div class="deck-grid cemetery-grid" id="cemetery-grid" hidden>
            ${store.cemetery.map(h => habitCard(h, habitStats(h), {
-             compact: true, habitId: h.id, dead: true, deathDate: formatDay(h.deleted_at?.slice(0, 10)),
+             compact: true, habitId: h.id, dead: true,
+             deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: h.death_cause,
            })).join('')}
          </div>
        </section>`
@@ -867,7 +868,9 @@ function wireCardFocus(host, selector, list, opts = {}) {
 
 function openCardFocus(habit, opts = {}) {
   const stats = habitStats(habit);
-  const cardOpts = opts.dead ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)) } : {};
+  const cardOpts = opts.dead
+    ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
+    : {};
 
   const overlay = document.createElement('div');
   overlay.className = 'card-focus-backdrop';
@@ -904,6 +907,48 @@ function openCardFocus(habit, opts = {}) {
 const STATUS_LABEL = {
   success: 'Tenu', failed: 'Non tenu', frozen: 'Gelé', created: 'Pas encore fait', no_data: 'Sans réponse',
 };
+
+// Stated as a fact about the card, not as a verdict on the person.
+const VITALITY_LINE = {
+  faiblit: 'Elle commence à faiblir.',
+  malade: 'Elle est en train de se fissurer.',
+  mourante: 'Elle est mourante. Une rupture de plus peut suffire.',
+};
+
+// The payoff of autonomous death. A card that starved while the app was shut
+// has to be reported the next time it opens — otherwise it is simply missing
+// from the deck with no explanation, which reads as a bug rather than as a
+// consequence. This is the one moment the app takes something without asking.
+function openDeathNotice(habits) {
+  if (!habits.length) return;
+  const many = habits.length > 1;
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet death-notice" role="dialog" aria-modal="true">
+      <h3>${many ? `${habits.length} promesses sont mortes` : 'Une promesse est morte'}</h3>
+      <p>Pendant que tu n'étais pas là. Tu ne l'${many ? 'es' : 'as'} pas abandonnée${many ? 's' : ''} —
+         tu l'${many ? 'es' : 'as'} laissée${many ? 's' : ''} s'éteindre.</p>
+      <div class="death-notice-cards">
+        ${habits.map(h => habitCard(h, habitStats(h), {
+          compact: true, dead: true,
+          deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: 'neglect',
+        })).join('')}
+      </div>
+      <button class="btn-primary" id="death-ack">J'ai vu</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+  fxShake(backdrop.querySelector('.death-notice'), 'hard');
+  const card = backdrop.querySelector('.pcard');
+  if (card) setTimeout(() => fxBurstFrom(card, { colors: ['#ff3b5c', '#7a1229', '#c9314c'], count: 34, speed: 5 }), 220);
+
+  // Acknowledged on close whichever way it is closed — this must never be
+  // shown twice for the same death.
+  const close = () => { acknowledgeDeaths(habits); backdrop.remove(); renderRoute(); };
+  backdrop.querySelector('#death-ack').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+}
 
 // A day used to collapse into one colour even when it held a mix of kept and
 // broken promises. Tapping it now shows every card that was live that day,
@@ -982,15 +1027,19 @@ function screenHabitDetail(habitId) {
     : '';
 
   const html = `
-    <div class="detail-card">${habitCard(habit, stats, dead ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)) } : {})}</div>
+    <div class="detail-card">${habitCard(habit, stats, dead
+      ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
+      : {})}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
       ${lines}
       ${reasonLine}
       ${expiredLine}
       <div class="stat-line">${dead
-        ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, jusqu'à son abandon.`
+        ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, ${
+            habit.death_cause === 'neglect' ? "jusqu'à ce que tu la laisses mourir." : "jusqu'à son abandon."}`
         : `Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.`}</div>
+      ${!dead && stats.vitalityState !== 'pleine' ? `<div class="stat-line">${VITALITY_LINE[stats.vitalityState]}</div>` : ''}
     </div>
     ${dead ? '' : `
     <button class="reminder-row" id="edit-reminder-time">
