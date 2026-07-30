@@ -42,8 +42,10 @@ and has to be verified against the project itself.
   doesn't also count as the tap that closes it, while a plain tap or a
   backdrop tap does), reminder-time editing (blocked while today's check is
   live, allowed once it isn't), the cemetery (abandon, toggle open **and**
-  closed — checked via computed style, not just the `hidden` attribute), and
-  the clickable calendar day sheet.
+  closed — checked via computed style, not just the `hidden` attribute), the
+  clickable calendar day sheet, and the daily rhythm (a card is `.is-awake`
+  while its window is open, and no longer once it has been answered — even
+  though the window itself is still technically open).
 - `expiry.spec.js` — the core rule: silence past the one-hour window becomes a
   failure with the `expired` flag, breaks the streak, and a window that has
   already closed never opens a check at all.

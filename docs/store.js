@@ -146,6 +146,17 @@ function isExpired(check) {
   return Date.now() > deadlineFor(habit, check.date).getTime();
 }
 
+// Whether a card should read as "awake" right now — its answer window is
+// open and still undecided. This is the one bit of state that changes a
+// card's appearance purely with the clock: no tap, no reply, nothing the
+// user did. The rest of the day it is dormant, whether or not it has
+// already been answered.
+function isAwake(habit) {
+  const today = todayStr();
+  const check = store.checks.find(c => c.habit_id === habit.id && c.date === today && c.status === 'created');
+  return !!check && windowIsOpen(check);
+}
+
 // ---------- Loading ----------
 
 async function loadAll() {

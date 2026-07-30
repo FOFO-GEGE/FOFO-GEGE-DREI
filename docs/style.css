@@ -313,6 +313,23 @@ button:disabled { opacity: .4; cursor: default; }
 /* Wraps to two lines on a compact card rather than spilling past its edge. */
 .pcard-xp-dying { color: var(--danger); font-weight: 800; line-height: 1.3; text-wrap: balance; }
 
+/* ---------- Daily rhythm ----------
+   The one thing that changes a card purely with the clock, with no tap from
+   the user: while its own one-hour answer window is open, it visibly stirs;
+   the rest of the day it is still, whether or not it has already been
+   answered. Driven through `outline` rather than box-shadow/filter/transform
+   — those are already owned by the focus view's depth shadow, the vitality
+   ladder's desaturation, and the pointer-tilt effect, and animating any of
+   them here would silently override those while the card is awake. */
+.pcard.is-awake { outline: 2px solid transparent; animation: pcard-wake 2.6s ease-in-out infinite; }
+@keyframes pcard-wake {
+  0%, 100% { outline-color: hsl(var(--card-hue) 85% 62% / 0); outline-offset: 0px; }
+  50% { outline-color: hsl(var(--card-hue) 85% 62% / .6); outline-offset: 4px; }
+}
+/* Comes after the vitality ladder's own sheen rules so a card that is both
+   struggling and awake reads the tension of its open window first. */
+.pcard.is-awake .pcard-sheen { opacity: calc(var(--holo-a) * 1.7); }
+
 .pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .pcard-name {
   font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 700;
