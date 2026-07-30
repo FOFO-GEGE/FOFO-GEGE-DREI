@@ -393,6 +393,22 @@ async function createHabit(fields) {
   return { habit: created };
 }
 
+// The only field a promise's card may ever change after creation. Title,
+// theme and schedule stay locked — this is purely a clock correction (you
+// meant 22h30, you typed 22h). Blocked while today's check is still 'created'
+// so it can never be used to extend a countdown that is already running, or
+// to collapse today's window into the past and score an unfair "non fait".
+async function updateReminderTime(habitId, hhmm) {
+  const habit = store.habits.find(h => h.id === habitId);
+  if (!habit) return { error: 'not-found' };
+  const today = todayStr();
+  const liveToday = store.checks.some(c => c.habit_id === habitId && c.date === today && c.status === 'created');
+  if (liveToday) return { error: 'live' };
+  habit.reminder_time = hhmm;
+  enqueue({ table: 'habits', values: { reminder_time: hhmm }, matchId: habitId });
+  return { ok: true };
+}
+
 // Abandoning a promise moves its card to the cemetery — it is never erased,
 // checks and all, because the whole point of the mirror is that the past
 // cannot be edited away.

@@ -35,8 +35,11 @@ and has to be verified against the project itself.
 ## Specs
 
 - `flow.spec.js` — signup, guided creation, the answer-window countdown, the
-  ritual, the failure-reason step, the write queue draining, and editing a
-  promise without losing its card.
+  ritual, the failure-reason step, the write queue draining, the card-focus
+  overlay (tap to flip, drag to dismiss, backdrop tap to close), reminder-time
+  editing (blocked while today's check is live, allowed once it isn't), the
+  cemetery (abandon, toggle open **and** closed — checked via computed style,
+  not just the `hidden` attribute), and the clickable calendar day sheet.
 - `expiry.spec.js` — the core rule: silence past the one-hour window becomes a
   failure with the `expired` flag, breaks the streak, and a window that has
   already closed never opens a check at all.

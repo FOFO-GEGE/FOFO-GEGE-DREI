@@ -127,6 +127,30 @@ function habitCard(habit, stats, opts = {}) {
   `;
 }
 
+// The back of the card — shown when the focused card is flipped. Same stats
+// as the front, read in the mirror: a plate of raw numbers instead of a
+// progress story, because the back of a promise is just the facts.
+function habitCardBack(habit, stats, opts = {}) {
+  const theme = themeById(habit.theme);
+  const tier = tierFor(stats.daysAlive);
+  const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
+
+  return `
+    <article class="pcard pcard-back" style="--card-hue:${theme.hue}">
+      <div class="pcard-back-glow" aria-hidden="true"></div>
+      ${icon('mirror', 44, 'pcard-back-icon')}
+      <span class="pcard-back-brand">MIRROIR</span>
+      <span class="pcard-back-tier">${esc(tier.label)}</span>
+      <div class="pcard-back-grid">
+        <div class="pcard-back-stat"><span class="v">${rateText}</span><span class="k">Taux</span></div>
+        <div class="pcard-back-stat"><span class="v">${stats.daysAlive}</span><span class="k">Jours</span></div>
+        <div class="pcard-back-stat"><span class="v">${stats.best}</span><span class="k">Record</span></div>
+      </div>
+      <span class="pcard-back-foot">${esc(habit.title || '')}</span>
+    </article>
+  `;
+}
+
 // ---------- Skeletons ----------
 
 function skeletonList(rows = 3) {
