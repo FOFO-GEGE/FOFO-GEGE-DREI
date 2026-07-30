@@ -314,6 +314,31 @@ function pendingToday() {
     .filter(x => x.habit);
 }
 
+// The single ordering shared by Aujourd'hui's preview list and the ritual
+// queue: windows open right now come first, soonest deadline first; windows
+// still waiting for their hour follow, soonest to open first. Never sorted
+// by creation date — a promise whose hour hasn't started cannot be missed by
+// definition, so putting it ahead of one about to expire was a real bug that
+// could cost the user a promise they never had a chance to protect in time.
+function pendingSorted() {
+  return [...pendingToday()].sort((a, b) => {
+    const aOpen = windowIsOpen(a.check), bOpen = windowIsOpen(b.check);
+    if (aOpen !== bOpen) return aOpen ? -1 : 1;
+    if (aOpen) return minutesLeft(a.check) - minutesLeft(b.check);
+    const ta = (a.habit.reminder_time || '20:00');
+    const tb = (b.habit.reminder_time || '20:00');
+    return ta < tb ? -1 : ta > tb ? 1 : 0;
+  });
+}
+
+// What the ritual is actually allowed to put in front of you: only promises
+// whose window is open. One that hasn't opened yet cannot be answered, so it
+// stays visible on Aujourd'hui but out of the forced sequence until its hour
+// comes — at which point the next reconcile picks it up.
+function pendingOpenSorted() {
+  return pendingSorted().filter(p => windowIsOpen(p.check));
+}
+
 function todayTally() {
   const today = todayStr();
   const rows = store.checks.filter(c => c.date === today);

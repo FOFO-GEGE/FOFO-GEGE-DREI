@@ -184,7 +184,7 @@ function pushBanner() {
 // ---------- Aujourd'hui : entrée du rituel ----------
 
 function screenToday() {
-  const pending = pendingToday();
+  const pending = pendingSorted();
   const tally = todayTally();
 
   const notifBanner = pushBanner();
@@ -219,16 +219,22 @@ function screenToday() {
              </p>`
           : `<p>Une par une. Pas de liste à cocher à la va-vite.</p>`}
         <ul class="ritual-preview">
-          ${pending.map(p => `
-            <li>
+          ${pending.map(p => {
+            const openNow = windowIsOpen(p.check);
+            // Only an open promise can actually start the ritual there — one
+            // still waiting for its hour isn't answerable yet, so it isn't a
+            // valid entry point.
+            return `
+            <li class="${openNow ? 'rp-clickable' : ''}" ${openNow ? `data-habit="${p.habit.id}"` : ''}>
               ${icon(themeById(p.habit.theme).id, 18)}
               <span class="rp-title">${esc(p.habit.title)}</span>
-              ${windowIsOpen(p.check)
+              ${openNow
                 ? `<span class="rp-left ${minutesLeft(p.check) <= 15 ? 'is-urgent' : ''}">${minutesLeft(p.check)} min</span>`
                 : `<span class="rp-left is-waiting">${(p.habit.reminder_time || '20:00').slice(0, 5)}</span>`}
-            </li>`).join('')}
+            </li>`;
+          }).join('')}
         </ul>
-        <button class="btn-primary" id="start-ritual">Commencer le check-in</button>
+        ${open.length ? '<button class="btn-primary" id="start-ritual">Commencer le check-in</button>' : ''}
       </div>`;
   }
 
@@ -256,30 +262,48 @@ function screenToday() {
       }
       const start = host.querySelector('#start-ritual');
       if (start) start.addEventListener('click', () => navigate('/ritual'));
+      host.querySelectorAll('.rp-clickable[data-habit]').forEach(li =>
+        li.addEventListener('click', () => navigate('/ritual/' + li.dataset.habit)));
     },
   };
 }
 
 // ---------- Le rituel ----------
 
-function screenRitual() {
-  const queue = pendingToday();
-  let idx = 0;
+// startHabitId: the ritual can be entered at a specific promise from
+// Aujourd'hui's preview list — it becomes the first card, the rest of the
+// queue is unaffected.
+function screenRitual(startHabitId) {
+  const queue = pendingOpenSorted();
+  if (startHabitId) {
+    const at = queue.findIndex(p => p.habit.id === startHabitId);
+    if (at > 0) queue.unshift(queue.splice(at, 1)[0]);
+  }
+  // Fixed once, for the progress dots — "plus tard" reorders the queue but
+  // never changes how many promises there were to begin with.
+  const totalCount = queue.length;
   const result = { kept: 0, broken: 0, frozen: 0 };
 
   function mount(host) {
-    if (idx >= queue.length) return mountSummary(host);
+    if (!queue.length) return mountSummary(host);
 
-    const { check, habit } = queue[idx];
+    const { check, habit } = queue[0];
+    // Guard against the 30s background reconcile resolving this exact check
+    // (expiry) while the user was deliberating on an earlier "Plus tard" —
+    // rare, but a stale entry must never be answered twice.
+    if (check.status !== 'created') { queue.shift(); return mount(host); }
+
     const theme = themeById(habit.theme);
     const streak = habit.current_streak || 0;
+    const answered = result.kept + result.broken + result.frozen;
 
     host.innerHTML = `
       <div class="ritual" style="--card-hue:${theme.hue}">
         <div class="ritual-top">
           <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           <div class="ritual-progress">
-            ${queue.map((_, i) => `<span class="${i < idx ? 'done' : i === idx ? 'now' : ''}"></span>`).join('')}
+            ${Array.from({ length: totalCount }, (_, i) =>
+              `<span class="${i < answered ? 'done' : i === answered ? 'now' : ''}"></span>`).join('')}
           </div>
         </div>
 
@@ -300,9 +324,23 @@ function screenRitual() {
         ${canFreeze(habit)
           ? `<button class="ritual-freeze" data-verdict="frozen">${icon('snow', 16)} Geler ce jour (1× ce mois)</button>`
           : ''}
+        ${queue.length > 1
+          ? '<button class="ritual-later" id="ritual-later">Plus tard</button>'
+          : ''}
       </div>`;
 
     host.querySelector('#ritual-quit').addEventListener('click', () => navigate('/today'));
+
+    // No penalty, no verdict recorded — it just goes to the back of today's
+    // queue. The 1h window already punishes ignoring a promise entirely, so
+    // adding friction here would only be redundant.
+    const later = host.querySelector('#ritual-later');
+    if (later) {
+      later.addEventListener('click', () => {
+        queue.push(queue.shift());
+        mount(host);
+      });
+    }
 
     host.querySelectorAll('[data-verdict]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -338,7 +376,7 @@ function screenRitual() {
 
         setTimeout(() => {
           if (verdict === 'failed') return mountReason(host, check);
-          idx++;
+          queue.shift();
           mount(host);
         }, 640);
       });
@@ -364,7 +402,7 @@ function screenRitual() {
 
     const commit = reason => {
       markCheck(check.id, 'failed', reason);
-      idx++;
+      queue.shift();
       mount(host);
     };
     host.querySelectorAll('[data-reason]').forEach(b =>

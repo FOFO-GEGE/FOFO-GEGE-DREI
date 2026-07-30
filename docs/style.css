@@ -532,6 +532,8 @@ button:disabled { opacity: .4; cursor: default; }
   border-radius: 14px; padding: 13px 15px; font-size: 14.5px; font-weight: 500;
 }
 .ritual-preview li .icn { color: var(--success); }
+.ritual-preview li.rp-clickable { cursor: pointer; transition: border-color .15s ease, transform .15s ease; }
+.ritual-preview li.rp-clickable:active { transform: scale(.98); border-color: color-mix(in srgb, var(--hot) 45%, var(--border)); }
 
 .empty-rich { text-align: center; padding: 46px 20px; color: var(--text-dim); }
 .empty-rich .icn { margin: 0 auto 16px; color: var(--success); filter: drop-shadow(0 0 16px #ffc53d66); }
@@ -608,6 +610,13 @@ button:disabled { opacity: .4; cursor: default; }
   padding: 13px; border-radius: 14px; font-size: 13px; font-weight: 700;
   color: var(--frozen); border: 1px solid color-mix(in srgb, var(--frozen) 40%, var(--border));
   background: color-mix(in srgb, var(--frozen) 8%, transparent);
+}
+/* Deliberately unassuming — this is an escape hatch, not an equal option to
+   Fait/Pas fait, and it must never look tempting enough to become the tap
+   people default to instead of answering. */
+.ritual-later {
+  margin-top: 14px; width: 100%; text-align: center;
+  padding: 8px; font-size: 12.5px; font-weight: 600; color: var(--text-dim);
 }
 
 .ritual-veil {

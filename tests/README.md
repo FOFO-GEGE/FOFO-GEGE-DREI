@@ -55,6 +55,13 @@ and has to be verified against the project itself.
   the client show a card the cron has already buried, or the reverse. Also
   covers autonomous death end to end: a starved card leaves the deck with no
   tap, reaches the database, and is announced exactly once.
+- `ritual-queue.spec.js` — the ritual queue: sorted by urgency rather than
+  creation order (regression coverage for a real bug — it used to take
+  `pendingToday()` as-is, so it could block on a promise not due yet while
+  another expired behind it), promises whose window hasn't opened excluded
+  from the forced sequence entirely, "Plus tard" requeues without recording a
+  verdict, and a click on Aujourd'hui's preview list enters the ritual at that
+  specific promise rather than the most urgent one.
 
 ## Not covered here
 
