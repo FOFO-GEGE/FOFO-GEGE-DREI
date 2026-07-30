@@ -56,7 +56,11 @@ and has to be verified against the project itself.
   migration was applied. A change here that is not mirrored in SQL will make
   the client show a card the cron has already buried, or the reverse. Also
   covers autonomous death end to end: a starved card leaves the deck with no
-  tap, reaches the database, and is announced exactly once.
+  tap, reaches the database, and is announced exactly once. Also covers
+  resurrection: a dead card revived resets to Œuf with vitality back at 100,
+  carries a permanent scar visible even in the compact deck grid, persists to
+  the database, and — the one-resurrection-ever ceiling — a card that dies a
+  second time cannot be revived again.
 - `ritual-queue.spec.js` — the ritual queue: sorted by urgency rather than
   creation order (regression coverage for a real bug — it used to take
   `pendingToday()` as-is, so it could block on a promise not due yet while

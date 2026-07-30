@@ -395,11 +395,17 @@ function vitalityDelta(check) {
 }
 
 // Death is terminal: the fold stops at zero, so nothing recorded afterwards
-// can quietly revive a card. That is what makes the cemetery permanent.
+// can quietly revive a card. That is what makes the cemetery permanent —
+// *unless* start_date itself moves forward, which is exactly what a
+// resurrection does. Bounding the fold at start_date is what lets a revived
+// card's vitality actually start over instead of hitting the same historical
+// zero and returning immediately, before ever looking at a check recorded
+// after the resurrection. A no-op for every card that was never resurrected:
+// isDue() already guarantees no check exists before its habit's start_date.
 function vitalityOf(habit) {
   const upTo = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
   const own = store.checks
-    .filter(c => c.habit_id === habit.id && c.date <= upTo)
+    .filter(c => c.habit_id === habit.id && c.date >= habit.start_date && c.date <= upTo)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
   let v = VITALITY_MAX;
@@ -549,6 +555,40 @@ async function deleteHabit(habitId) {
   await sb.from('habits')
     .update({ active: false, deleted_at: deletedAt, death_cause: 'abandoned', death_announced: true })
     .eq('id', habitId);
+}
+
+// A card gets exactly one resurrection, ever — free of that, abandoning
+// would cost nothing and the cemetery would stop meaning anything. It comes
+// back at Œuf (start_date resets to today, which is also what lets its
+// vitality actually start over — see the note on vitalityOf) and carries a
+// permanent, visible scar: there is no way for a revived card to end up
+// looking like one that was never buried.
+async function resurrectHabit(habitId) {
+  const habit = store.cemetery.find(h => h.id === habitId);
+  if (!habit || habit.resurrected) return { error: 'not-eligible' };
+
+  const preDeathDays = habitStats(habit).daysAlive;
+  const today = todayStr();
+
+  habit.active = true;
+  habit.deleted_at = null;
+  habit.death_cause = null;
+  habit.death_announced = false;
+  habit.resurrected = true;
+  habit.pre_death_days = preDeathDays;
+  habit.start_date = today;
+  habit.current_streak = 0;
+
+  store.cemetery = store.cemetery.filter(h => h.id !== habitId);
+  store.habits.push(habit);
+
+  await sb.from('habits').update({
+    active: true, deleted_at: null, death_cause: null, death_announced: false,
+    resurrected: true, pre_death_days: preDeathDays, start_date: today, current_streak: 0,
+  }).eq('id', habitId);
+
+  await reconcileToday();
+  return { ok: true };
 }
 
 // A card that starved while the app was closed has to be reported the next

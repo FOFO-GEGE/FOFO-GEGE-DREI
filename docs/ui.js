@@ -111,6 +111,11 @@ function habitCard(habit, stats, opts = {}) {
           ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.`
           : tier.blurb}</span>
       </div>
+      ${!opts.dead && habit.resurrected
+        // Permanent and never removed — a revived card must never be able to
+        // look like one that was never buried.
+        ? `<span class="pcard-scar">${icon('cross', 10)} Revenue après ${habit.pre_death_days} jour${habit.pre_death_days > 1 ? 's' : ''} d'abandon</span>`
+        : ''}
 
       <div class="pcard-stats">
         <div class="pcard-stat"><span class="k">Taux</span><span class="v">${rateText}</span></div>
