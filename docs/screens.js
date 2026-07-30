@@ -6,6 +6,23 @@ const MONTH_LABELS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 
 const SURPRISE_MESSAGES = ['Jour parfait.', 'Tu tiens le rythme.', 'Plus régulier que la moyenne cette semaine.'];
 
+// Shared chip describing where a pending check sits in its hour.
+function countdownChip(check) {
+  const habit = store.habits.find(h => h.id === check.habit_id);
+  if (!habit) return '';
+  if (isExpired(check)) {
+    return `<p class="countdown is-urgent">${icon('spark', 14)} Le temps est écoulé</p>`;
+  }
+  if (!windowIsOpen(check)) {
+    const at = (habit.reminder_time || '20:00').slice(0, 5);
+    return `<p class="countdown is-waiting">Ouvre à ${at}</p>`;
+  }
+  const left = minutesLeft(check);
+  return `<p class="countdown ${left <= 15 ? 'is-urgent' : ''}">
+    ${icon('spark', 14)} ${left} min avant « non tenu »
+  </p>`;
+}
+
 // ---------- Onboarding ----------
 
 const ONBOARD_SLIDES = [
@@ -162,13 +179,28 @@ function screenToday() {
         <button class="btn-secondary" data-nav="/home">Voir mon miroir</button>
       </div>`;
   } else {
+    // The tightest deadline across everything still open drives the urgency.
+    const open = pending.filter(p => windowIsOpen(p.check));
+    const soonest = open.length ? Math.min(...open.map(p => minutesLeft(p.check))) : null;
+
     body = `
       <div class="ritual-intro">
         <div class="ritual-count">${pending.length}</div>
-        <h3>promesse${pending.length > 1 ? 's' : ''} en attente</h3>
-        <p>Une par une. Pas de liste à cocher à la va-vite.</p>
+        <h3>promesse${pending.length > 1 ? 's' : ''} pas encore faite${pending.length > 1 ? 's' : ''}</h3>
+        ${soonest !== null
+          ? `<p class="deadline-banner ${soonest <= 15 ? 'is-urgent' : ''}">
+               Sans réponse dans <strong>${soonest} min</strong>, c'est compté comme non tenu.
+             </p>`
+          : `<p>Une par une. Pas de liste à cocher à la va-vite.</p>`}
         <ul class="ritual-preview">
-          ${pending.map(p => `<li>${icon(themeById(p.habit.theme).id, 18)}<span>${esc(p.habit.title)}</span></li>`).join('')}
+          ${pending.map(p => `
+            <li>
+              ${icon(themeById(p.habit.theme).id, 18)}
+              <span class="rp-title">${esc(p.habit.title)}</span>
+              ${windowIsOpen(p.check)
+                ? `<span class="rp-left ${minutesLeft(p.check) <= 15 ? 'is-urgent' : ''}">${minutesLeft(p.check)} min</span>`
+                : `<span class="rp-left is-waiting">${(p.habit.reminder_time || '20:00').slice(0, 5)}</span>`}
+            </li>`).join('')}
         </ul>
         <button class="btn-primary" id="start-ritual">Commencer le check-in</button>
       </div>`;
@@ -216,6 +248,7 @@ function screenRitual() {
           ${streak > 0
             ? `<p class="ritual-streak">${icon('flame', 16)} Série de ${streak} jour${streak > 1 ? 's' : ''} en jeu</p>`
             : '<p class="ritual-streak muted">Aucune série en cours.</p>'}
+          ${countdownChip(check)}
         </div>
 
         <div class="ritual-actions">
@@ -246,7 +279,8 @@ function screenRitual() {
           vibrate(25);
           fxBurstFrom(btn, { count: 54, speed: 8 });
         } else {
-          markCheck(check.id, verdict);
+          // Commit happens on the reason step so the answer and its reason
+          // land as one write instead of two.
           result.broken++;
           vibrate([10, 40, 60]);
           fxShake(stage, 'hard');
@@ -260,9 +294,40 @@ function screenRitual() {
         stage.appendChild(veil);
         requestAnimationFrame(() => veil.classList.add('show'));
 
-        setTimeout(() => { idx++; mount(host); }, 640);
+        setTimeout(() => {
+          if (verdict === 'failed') return mountReason(host, check);
+          idx++;
+          mount(host);
+        }, 640);
       });
     });
+  }
+
+  // Optional, one tap, always skippable — the point is to learn what the
+  // failures are made of, not to interrogate anyone.
+  function mountReason(host, check) {
+    host.innerHTML = `
+      <div class="ritual reason-step">
+        <div class="ritual-body">
+          <p class="ritual-prompt">Pourquoi ?</p>
+          <h2 class="ritual-title">Une raison, en un tap.</h2>
+          <div class="reason-grid">
+            ${REASONS.map(r => `<button class="reason-chip" data-reason="${r.id}">${esc(r.label)}</button>`).join('')}
+          </div>
+        </div>
+        <div class="ritual-actions single">
+          <button class="btn-secondary" id="reason-skip">Ne pas préciser</button>
+        </div>
+      </div>`;
+
+    const commit = reason => {
+      markCheck(check.id, 'failed', reason);
+      idx++;
+      mount(host);
+    };
+    host.querySelectorAll('[data-reason]').forEach(b =>
+      b.addEventListener('click', () => commit(b.dataset.reason)));
+    host.querySelector('#reason-skip').addEventListener('click', () => commit(null));
   }
 
   function mountSummary(host) {
@@ -605,8 +670,8 @@ function screenNewHabit() {
 const CAL_LEGEND = [
   { cls: 'success', label: 'Tenu' },
   { cls: 'failed', label: 'Non tenu' },
+  { cls: 'created', label: 'Pas encore fait' },
   { cls: 'frozen', label: 'Gelé' },
-  { cls: 'no_data', label: 'Sans réponse' },
 ];
 
 function buildMonthGrid(year, month) {
@@ -622,8 +687,11 @@ function screenHistory() {
   const now = new Date();
   let year = now.getFullYear(), month = now.getMonth();
 
+  // Worst outcome wins, so a day never looks better than it was. 'created'
+  // ranks above 'failed' because it is still answerable, not yet a verdict.
   function dayClass(statuses) {
     if (!statuses || !statuses.length) return 'empty';
+    if (statuses.includes('created')) return 'created';
     if (statuses.includes('failed')) return 'failed';
     if (statuses.includes('no_data')) return 'no_data';
     if (statuses.includes('frozen')) return 'frozen';
@@ -667,6 +735,132 @@ function screenHistory() {
   return { title: 'Historique', tab: '/history', chrome: true, mount };
 }
 
+// ---------- Modifier une promesse ----------
+// Editing keeps the card and its history — only the terms change. Deleting and
+// recreating used to be the only route, which cost the user their tier.
+
+function screenEditHabit(habitId) {
+  const habit = store.habits.find(h => h.id === habitId);
+  if (!habit) return { redirect: '/home' };
+
+  const draft = {
+    title: habit.title,
+    theme: habit.theme || 'autre',
+    type: habit.type,
+    frequency: habit.frequency || 3,
+    target_days: new Set(habit.target_days),
+    reminder_time: (habit.reminder_time || '20:00').slice(0, 5),
+    end_date: habit.end_date || '',
+  };
+
+  function mount(host) {
+    host.innerHTML = `
+      <div class="creator">
+        <div class="creator-preview">
+          ${habitCard({ ...habit, title: draft.title, theme: draft.theme }, habitStats(habit))}
+        </div>
+        <h3 class="step-title">Domaine</h3>
+        <div class="theme-grid">
+          ${THEMES.map(th => `
+            <button class="theme-chip ${draft.theme === th.id ? 'selected' : ''}" data-theme="${th.id}" style="--card-hue:${th.hue}">
+              ${icon(th.id, 22)}<span>${th.label}</span>
+            </button>`).join('')}
+        </div>
+        <div class="form-group">
+          <label for="ed-title">Ta promesse</label>
+          <input type="text" id="ed-title" value="${esc(draft.title)}" />
+        </div>
+        <h3 class="step-title">Rythme</h3>
+        <div class="type-toggle">
+          <button data-type="daily" class="${draft.type === 'daily' ? 'selected' : ''}">Chaque jour choisi</button>
+          <button data-type="frequency" class="${draft.type === 'frequency' ? 'selected' : ''}">X fois / semaine</button>
+        </div>
+        ${draft.type === 'frequency' ? `
+          <div class="form-group">
+            <label for="ed-frequency">Combien de fois par semaine ?</label>
+            <input type="number" id="ed-frequency" min="1" max="7" value="${draft.frequency}" />
+          </div>` : ''}
+        <div class="form-group">
+          <label>Jours concernés</label>
+          <div class="day-picker">
+            ${[1, 2, 3, 4, 5, 6, 0].map(d => `
+              <button type="button" class="day-chip ${draft.target_days.has(d) ? 'selected' : ''}" data-day="${d}">${DOW_LABELS[d]}</button>`).join('')}
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ed-time">Heure de vérification</label>
+          <input type="time" id="ed-time" value="${draft.reminder_time}" />
+        </div>
+        <div class="form-group">
+          <label for="ed-end">Date de fin (optionnel)</label>
+          <input type="date" id="ed-end" value="${draft.end_date}" />
+        </div>
+        <p class="hint-msg">Tu gardes ta carte, ton palier et tout ton historique.</p>
+        <p class="error-msg" id="ed-error" style="display:none"></p>
+        <div class="creator-actions">
+          <button class="btn-secondary" data-nav="/habit/${habit.id}">Annuler</button>
+          <button class="btn-primary" id="ed-save">Enregistrer</button>
+        </div>
+      </div>`;
+
+    const rerender = () => mount(host);
+    fxBindTilt(host);
+
+    host.querySelectorAll('[data-theme]').forEach(b => b.addEventListener('click', () => {
+      draft.theme = b.dataset.theme; rerender();
+    }));
+    host.querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', () => {
+      draft.type = b.dataset.type; rerender();
+    }));
+    host.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => {
+      const d = Number(b.dataset.day);
+      if (draft.target_days.has(d)) draft.target_days.delete(d); else draft.target_days.add(d);
+      rerender();
+    }));
+
+    const title = host.querySelector('#ed-title');
+    title.addEventListener('input', () => {
+      draft.title = title.value;
+      host.querySelector('.creator-preview').innerHTML =
+        habitCard({ ...habit, title: draft.title, theme: draft.theme }, habitStats(habit));
+    });
+    const freq = host.querySelector('#ed-frequency');
+    if (freq) freq.addEventListener('input', () => { draft.frequency = Number(freq.value); });
+    host.querySelector('#ed-time').addEventListener('input', e => { draft.reminder_time = e.target.value; });
+    host.querySelector('#ed-end').addEventListener('input', e => { draft.end_date = e.target.value; });
+
+    host.querySelector('#ed-save').addEventListener('click', async () => {
+      const errorEl = host.querySelector('#ed-error');
+      errorEl.style.display = 'none';
+      const fail = m => { errorEl.textContent = m; errorEl.style.display = 'block'; };
+
+      const t = draft.title.trim();
+      if (!t) return fail('Donne un nom à ta promesse.');
+      if (draft.target_days.size === 0) return fail('Sélectionne au moins un jour.');
+      if (draft.type === 'frequency' && (draft.frequency < 1 || draft.frequency > draft.target_days.size)) {
+        return fail('La fréquence doit être inférieure ou égale au nombre de jours sélectionnés.');
+      }
+
+      const btn = host.querySelector('#ed-save');
+      btn.disabled = true;
+      const { error } = await updateHabit(habit.id, {
+        title: t,
+        theme: draft.theme,
+        type: draft.type,
+        frequency: draft.type === 'frequency' ? draft.frequency : null,
+        target_days: Array.from(draft.target_days),
+        reminder_time: draft.reminder_time,
+        end_date: draft.end_date || null,
+      });
+      if (error) { btn.disabled = false; return fail(error.message); }
+      toast('Promesse modifiée.');
+      navigate('/habit/' + habit.id);
+    });
+  }
+
+  return { title: 'Modifier', tab: '/home', chrome: true, back: '/habit/' + habitId, mount };
+}
+
 // ---------- Détail d'une carte ----------
 
 function screenHabitDetail(habitId) {
@@ -689,13 +883,30 @@ function screenHabitDetail(habitId) {
     if (worst.rate < 1 && worst.d !== best.d) lines += `<div class="stat-line">Tes échecs arrivent surtout le <strong>${DOW_FULL[worst.d]}</strong>.</div>`;
   }
 
+  // Where the failures came from, when there's enough to be honest about.
+  const reasoned = own.filter(c => c.status === 'failed' && c.reason);
+  let reasonLine = '';
+  if (reasoned.length >= 3) {
+    const counts = {};
+    reasoned.forEach(c => { counts[c.reason] = (counts[c.reason] || 0) + 1; });
+    const [topId, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    reasonLine = `<div class="stat-line">Quand tu la romps, c'est surtout « <strong>${esc(reasonLabel(topId))}</strong> » (${n} fois sur ${reasoned.length}).</div>`;
+  }
+  const expiredN = own.filter(c => c.status === 'failed' && c.expired).length;
+  const expiredLine = expiredN
+    ? `<div class="stat-line"><strong>${expiredN}</strong> fois, tu n'as simplement pas répondu dans l'heure.</div>`
+    : '';
+
   const html = `
     <div class="detail-card">${habitCard(habit, stats)}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
       ${lines}
+      ${reasonLine}
+      ${expiredLine}
       <div class="stat-line">Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.</div>
     </div>
+    <button class="btn-secondary" data-nav="/edit/${habit.id}">Modifier cette promesse</button>
     <button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>`;
 
   return {
