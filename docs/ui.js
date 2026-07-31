@@ -103,44 +103,56 @@ function hashSeed(id) {
 }
 
 // stats: { rate, daysAlive, streak, best, kept, total }
-// opts.dead: the habit was abandoned — greyed out, frozen at its tier of
-// death instead of showing progress toward a next one that will never come.
+// opts.dead: the habit was abandoned or starved — greyed out, fissured,
+// frozen at its tier of death instead of showing progress toward a next one
+// that will never come.
+// opts.finished: the habit reached its own end date on schedule — a natural
+// completion, not a death. No fissures, no greyscale, no "morte"/"abandonnée"
+// framing: the one honest signal left is whether it was, on the whole, kept.
 function habitCard(habit, stats, opts = {}) {
   const theme = themeById(habit.theme);
   const tier = tierFor(stats.daysAlive, stats.vitality);
+  const retired = opts.dead || opts.finished;
   // What age alone would allow — when it's ahead of the earned tier, the
   // card has missed an evolution it should already have had, and the
   // footer says so instead of showing progress toward a tier further still.
-  const ageTier = opts.dead ? tier : ageTierFor(stats.daysAlive);
-  const missedEvolution = !opts.dead && ageTier.id !== tier.id;
-  const next = opts.dead || missedEvolution ? null : nextTier(stats.daysAlive);
+  const ageTier = retired ? tier : ageTierFor(stats.daysAlive);
+  const missedEvolution = !retired && ageTier.id !== tier.id;
+  const next = retired || missedEvolution ? null : nextTier(stats.daysAlive);
   const progress = next
     ? Math.round(100 * (stats.daysAlive - tier.minDays) / (next.minDays - tier.minDays))
     : 100;
 
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
+  const keptOverall = stats.rate !== null && stats.rate >= 50;
 
-  // The body's one colour that moves purely with the clock: three flat,
-  // vivid bands — green / amber / red — as today's range goes by, never a
-  // fade between them, so a glance tells you exactly where a card stands.
-  // Gold once answered "fait" (until midnight resets it). Independent of
-  // vitality — a dying card that was just answered still reads green/gold,
-  // and this never feeds back into vitalityOf. Bands are read off the
-  // original schedule only (see rangeElapsed) — a snooze buys real time to
-  // act but never turns a card back a band, it only postpones the deadline.
-  const todayCheck = opts.dead ? null : todaysCheck(habit);
-  const timeState = todayCheck?.status === 'created' ? 'pending'
-    : todayCheck?.status === 'success' ? 'done'
-    : 'none';
+  // The body's one colour. For a live card it moves purely with the clock:
+  // three flat, vivid bands — green / amber / red — as today's range goes
+  // by, never a fade between them, gold once answered "fait" (until
+  // midnight resets it). Bands are read off the original schedule only (see
+  // rangeElapsed) — a snooze buys real time to act but never turns a card
+  // back a band, it only postpones the deadline. Never fed by vitality — a
+  // dying card that was just answered still reads green/gold. A finished
+  // card instead just settles on whichever of those two colours it earned
+  // overall (gold if mostly kept, red if not) and stays there for good.
+  let timeState = 'none';
   let timeBand = '';
-  if (timeState === 'pending') {
-    const elapsed = rangeElapsed(habit, todayCheck.date);
-    timeBand = elapsed < 1 / 3 ? 'green' : elapsed < 2 / 3 ? 'amber' : 'red';
+  if (opts.finished) {
+    timeState = keptOverall ? 'done' : 'broken';
+  } else if (!opts.dead) {
+    const todayCheck = todaysCheck(habit);
+    timeState = todayCheck?.status === 'created' ? 'pending'
+      : todayCheck?.status === 'success' ? 'done'
+      : 'none';
+    if (timeState === 'pending') {
+      const elapsed = rangeElapsed(habit, todayCheck.date);
+      timeBand = elapsed < 1 / 3 ? 'green' : elapsed < 2 / 3 ? 'amber' : 'red';
+    }
   }
   const fracSeed = habit.id ? hashSeed(habit.id) : 40;
 
   return `
-    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
+    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : opts.finished ? 'pleine' : (stats.vitalityState || 'pleine')} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
       style="--frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
@@ -163,9 +175,11 @@ function habitCard(habit, stats, opts = {}) {
         <span class="pcard-tier-name">${tier.label}</span>
         <span class="pcard-tier-blurb">${opts.dead
           ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.`
+          : opts.finished
+          ? `Terminée après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.`
           : tier.blurb}</span>
       </div>
-      ${!opts.dead && habit.resurrected
+      ${!retired && habit.resurrected
         // Permanent and never removed — a revived card must never be able to
         // look like one that was never buried.
         ? `<span class="pcard-scar">${icon('cross', 10)} Revenue après ${habit.pre_death_days} jour${habit.pre_death_days > 1 ? 's' : ''} d'abandon</span>`
@@ -180,6 +194,10 @@ function habitCard(habit, stats, opts = {}) {
       <footer class="pcard-foot">
         ${opts.dead
           ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
+          : opts.finished
+          // A finished promise isn't a failure of the system — the colour
+          // already said whether it was kept, this just spells it out.
+          ? `<span class="pcard-xp-label ${keptOverall ? 'pcard-xp-kept' : 'pcard-xp-broken'}">${icon(keptOverall ? 'check' : 'cross', 12)} Terminée le ${opts.finishedDate || ''} — ${keptOverall ? 'tenue' : 'non tenue'}</span>`
           : stats.vitalityState === 'mourante'
           // A dying card has more urgent news than its progress toward a tier
           // it will not reach. Stated as what you stand to lose, not as a
