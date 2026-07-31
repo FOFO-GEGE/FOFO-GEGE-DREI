@@ -218,6 +218,22 @@ function screenToday() {
                Sans réponse dans <strong>${soonest} min</strong>, c'est compté comme non tenu.
              </p>`
           : `<p>Une par une. Pas de liste à cocher à la va-vite.</p>`}
+        <div class="story-tray">
+          ${pending.map(p => {
+            const theme = themeById(p.habit.theme);
+            const openNow = windowIsOpen(p.check);
+            const urgent = openNow && minutesLeft(p.check) <= 15;
+            // Only an open promise is a valid entry point — same rule as the
+            // list below, just as a tappable ring instead of a row.
+            return `
+            <button type="button" class="story-bubble" ${openNow ? `data-habit="${p.habit.id}"` : 'disabled'}>
+              <span class="story-ring ${openNow ? (urgent ? 'is-urgent' : 'is-open') : 'is-waiting'}">
+                <span class="story-avatar" style="--card-hue:${theme.hue}">${icon(theme.id, 22)}</span>
+              </span>
+              <span class="story-label">${esc(p.habit.title)}</span>
+            </button>`;
+          }).join('')}
+        </div>
         <ul class="ritual-preview">
           ${pending.map(p => {
             const openNow = windowIsOpen(p.check);
@@ -264,6 +280,8 @@ function screenToday() {
       if (start) start.addEventListener('click', () => navigate('/ritual'));
       host.querySelectorAll('.rp-clickable[data-habit]').forEach(li =>
         li.addEventListener('click', () => navigate('/ritual/' + li.dataset.habit)));
+      host.querySelectorAll('.story-bubble[data-habit]').forEach(b =>
+        b.addEventListener('click', () => navigate('/ritual/' + b.dataset.habit)));
     },
   };
 }
