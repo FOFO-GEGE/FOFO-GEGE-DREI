@@ -104,6 +104,33 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('waiting (not-yet-open) entries shown:', waitingCount, '(expect 1)');
   if (waitingCount !== 1) throw new Error(`expected exactly 1 waiting entry, got ${waitingCount}`);
 
+  // --- The story tray mirrors the same rule: one ring per pending promise
+  // (open or waiting, but never the 4th habit which isn't due at all), only
+  // the open ones tappable, most urgent ring first ---
+  const bubbles = await page.locator('.story-bubble').count();
+  step('story bubbles total:', bubbles, '(expect 4 — 3 open + 1 waiting)');
+  if (bubbles !== 4) throw new Error(`expected 4 story bubbles, got ${bubbles}`);
+  const tappableBubbles = await page.locator('.story-bubble[data-habit]').count();
+  step('tappable (open) bubbles:', tappableBubbles, '(expect 3)');
+  if (tappableBubbles !== 3) throw new Error(`expected 3 tappable bubbles, got ${tappableBubbles}`);
+  const waitingBubbles = await page.locator('.story-ring.is-waiting').count();
+  step('waiting-ring bubbles:', waitingBubbles, '(expect 1)');
+  if (waitingBubbles !== 1) throw new Error(`expected 1 waiting-ring bubble, got ${waitingBubbles}`);
+
+  // Tapping the first (most urgent) bubble enters the ritual there.
+  const firstBubbleHabit = await page.locator('.story-bubble[data-habit]').first().getAttribute('data-habit');
+  await page.locator('.story-bubble[data-habit]').first().click();
+  await page.waitForSelector('.ritual-title');
+  const enteredViaBubble = await page.evaluate(
+    id => store.habits.find(h => h.id === id)?.title,
+    firstBubbleHabit
+  );
+  const shownTitle = (await page.locator('.ritual-title').textContent()).trim();
+  step('tapping the first story bubble entered the ritual at:', shownTitle, '(expect:', enteredViaBubble, ')');
+  if (shownTitle !== enteredViaBubble) throw new Error('tapping a story bubble did not start the ritual at that promise');
+  await page.click('#ritual-quit');
+  await page.waitForFunction(() => location.hash === '#/today');
+
   // --- Clicking a specific open entry starts the ritual there, not at the
   // most urgent one — an entry point, distinct from the generic start button ---
   const targetTitle = order[1]; // the middle one, deliberately not the most urgent

@@ -66,8 +66,10 @@ and has to be verified against the project itself.
   `pendingToday()` as-is, so it could block on a promise not due yet while
   another expired behind it), promises whose window hasn't opened excluded
   from the forced sequence entirely, "Plus tard" requeues without recording a
-  verdict, and a click on Aujourd'hui's preview list enters the ritual at that
-  specific promise rather than the most urgent one.
+  verdict, a click on Aujourd'hui's preview list enters the ritual at that
+  specific promise rather than the most urgent one, and the story tray above
+  it (one ring per pending promise, only the open ones tappable) mirrors the
+  same rule and enters the ritual at whichever ring was tapped.
 - `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
   only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
   (including that `ageTierFor()` ignores vitality entirely, by design), a
