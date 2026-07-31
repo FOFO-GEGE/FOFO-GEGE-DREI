@@ -688,6 +688,22 @@ async function updateReminderTime(habitId, hhmm) {
   if (liveToday) return { error: 'live' };
   habit.reminder_time = hhmm;
   enqueue({ table: 'habits', values: { reminder_time: hhmm }, matchId: habitId });
+
+  // Today's check may already carry a verdict against the *old* clock — a
+  // declared "pas fait" or a silent expiry. If the corrected time means the
+  // window genuinely hasn't closed yet, that verdict was against a mistake
+  // you're actively fixing, not a real answer, so it's reopened rather than
+  // left standing. vitalityOf() folds live check statuses on every call, so
+  // reopening it here is enough on its own to hand back whatever it cost —
+  // nothing separate to reverse.
+  const todayCheck = store.checks.find(c => c.habit_id === habitId && c.date === today);
+  if (todayCheck && todayCheck.status === 'failed' && Date.now() <= deadlineFor(habit, today).getTime()) {
+    todayCheck.status = 'created';
+    todayCheck.expired = false;
+    todayCheck.reason = null;
+    enqueue({ table: 'habit_checks', values: { status: 'created', expired: false, reason: null }, matchId: todayCheck.id });
+  }
+
   // A habit due today can reach this point with no check yet for today — its
   // old deadline had already passed before the app was ever opened today, so
   // reconcileToday()'s usual pass never opened one. Pushing the reminder time

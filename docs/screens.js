@@ -1206,7 +1206,16 @@ function screenHabitDetail(habitId) {
       ${lines}
       ${reasonLine}
       ${expiredLine}
-      <div class="stat-line">${dead
+      <div class="stat-line">${
+        // A one-day promise's day count is always exactly 1 -- every branch
+        // below has a shorter, equally true sentence that doesn't state it.
+        isOneDayHabit(habit)
+        ? (dead
+          ? (habit.death_cause === 'neglect' ? 'Laissée mourir.' : 'Abandonnée.')
+          : finished
+          ? 'Elle est allée jusqu\'à sa fin prévue.'
+          : 'C\'est son unique jour.')
+        : dead
         ? `Elle a tenu <strong>${daysCount(stats.daysAlive)}</strong> jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}, ${
             habit.death_cause === 'neglect' ? "jusqu'à ce que tu la laisses mourir." : "jusqu'à son abandon."}`
         : finished
@@ -1309,7 +1318,7 @@ function openDeleteSheet(habit) {
   backdrop.innerHTML = `
     <div class="modal-sheet" role="dialog" aria-modal="true">
       <h3>Abandonner « ${esc(habit.title)} » ?</h3>
-      <p>Ta carte <strong>${tier.label}</strong> de ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''} disparaîtra. Cette action est définitive.</p>
+      <p>Ta carte <strong>${tier.label}</strong>${isOneDayHabit(habit) ? '' : ` de ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}`} disparaîtra. Cette action est définitive.</p>
       <button class="btn-primary" id="sheet-keep">Garder ma carte</button>
       <button class="btn-ghost-danger" id="sheet-delete">Abandonner quand même</button>
     </div>`;

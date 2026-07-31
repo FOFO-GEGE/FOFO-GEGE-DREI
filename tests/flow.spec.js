@@ -284,6 +284,69 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('after pushing the reminder later, a check now exists for today:', JSON.stringify(after), '(expect status "created")');
   if (after.status !== 'created') throw new Error(`editing the reminder time to later should immediately open today's check, got: ${JSON.stringify(after)}`);
 
+  // --- Reopening applies just as well to a check that already carries a
+  // verdict against the old clock -- a declared "pas fait" or a silent
+  // expiry -- as long as the corrected time genuinely still lies ahead ---
+  const reopenCases = await page.evaluate(async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const mk = async () => {
+      const { habit } = await createHabit({
+        title: 'Reopen test', theme: 'sport', frequency: 'daily',
+        target_days: [0, 1, 2, 3, 4, 5, 6], reminder_time: '00:01', window_minutes: 1,
+      });
+      return habit;
+    };
+    const declared = await mk();
+    const silent = await mk();
+
+    // A declared "pas fait": explicit, honest, and against the old window.
+    store.checks = store.checks.filter(c => c.habit_id !== declared.id);
+    store.checks.push({ id: crypto.randomUUID(), habit_id: declared.id, date: day, status: 'failed', expired: false, reason: 'oubli' });
+    // A silent expiry: never answered before the old deadline passed.
+    store.checks = store.checks.filter(c => c.habit_id !== silent.id);
+    store.checks.push({ id: crypto.randomUUID(), habit_id: silent.id, date: day, status: 'failed', expired: true });
+
+    const future = new Date(Date.now() + 5 * 60000);
+    const hhmm = `${String(future.getHours()).padStart(2, '0')}:${String(future.getMinutes()).padStart(2, '0')}`;
+    const resDeclared = await updateReminderTime(declared.id, hhmm);
+    const resSilent = await updateReminderTime(silent.id, hhmm);
+
+    const checkOf = id => store.checks.find(c => c.habit_id === id && c.date === day);
+    return {
+      resDeclared, resSilent,
+      declaredAfter: checkOf(declared.id),
+      silentAfter: checkOf(silent.id),
+    };
+  });
+  step('reopen a declared failure:', JSON.stringify(reopenCases.declaredAfter));
+  step('reopen a silent expiry:', JSON.stringify(reopenCases.silentAfter));
+  if (reopenCases.resDeclared.error || reopenCases.resSilent.error) {
+    throw new Error(`reminder edit should not be blocked by an already-decided check: ${JSON.stringify(reopenCases)}`);
+  }
+  if (reopenCases.declaredAfter.status !== 'created' || reopenCases.declaredAfter.expired !== false || reopenCases.declaredAfter.reason) {
+    throw new Error(`a declared failure should reopen clean (status/expired/reason reset), got: ${JSON.stringify(reopenCases.declaredAfter)}`);
+  }
+  if (reopenCases.silentAfter.status !== 'created' || reopenCases.silentAfter.expired !== false) {
+    throw new Error(`a silent expiry should reopen just the same, got: ${JSON.stringify(reopenCases.silentAfter)}`);
+  }
+
+  // --- But not if the corrected time is still behind the clock -- reopening
+  // only makes sense when the new window genuinely still lies ahead ---
+  const stillPast = await page.evaluate(async () => {
+    const { habit } = await createHabit({
+      title: 'Still past', theme: 'sport', frequency: 'daily',
+      target_days: [0, 1, 2, 3, 4, 5, 6], reminder_time: '00:01', window_minutes: 1,
+    });
+    const day = new Date().toISOString().slice(0, 10);
+    store.checks = store.checks.filter(c => c.habit_id !== habit.id);
+    store.checks.push({ id: crypto.randomUUID(), habit_id: habit.id, date: day, status: 'failed', expired: true });
+    // Still 00:0x-ish -- comfortably behind "now" for any normal test run.
+    await updateReminderTime(habit.id, '00:05');
+    return store.checks.find(c => c.habit_id === habit.id && c.date === day);
+  });
+  step('reminder moved but still behind the clock:', JSON.stringify(stillPast), '(expect status still "failed")');
+  if (stillPast.status !== 'failed') throw new Error('a reminder edit that does not actually move the deadline into the future should not reopen anything');
+
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();
 })().catch(e => { console.error('TEST_FAILED', e.message); process.exit(1); });

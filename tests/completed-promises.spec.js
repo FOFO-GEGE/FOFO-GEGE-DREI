@@ -76,6 +76,27 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (dayCountCases.rawDaysCount !== 1 || dayCountCases.rawDaysCountNext !== 2) throw new Error('daysCount() should just add 1');
   if (dayCountCases.tierIgnoresConversion !== 'eclose') throw new Error('tier gating must keep comparing the raw elapsed-day value, unaffected by the display conversion');
 
+  // --- A one-day promise's day count is always exactly 1 -- stating it adds
+  // nothing "Terminée"/"Abandonnée" alone doesn't already say. A multi-day
+  // promise (or one with no end date) is unaffected and keeps the count. ---
+  const oneDayTextCases = await page.evaluate(() => {
+    const oneDay = { id: 'o', title: 'One-day', theme: 'sport', start_date: '2024-01-01', end_date: '2024-01-01' };
+    const multiDay = { id: 'm', title: 'Multi-day', theme: 'sport', start_date: '2024-01-01', end_date: '2024-02-01' };
+    const stats = { rate: 0, daysAlive: 0, streak: 0, best: 0, kept: 0, total: 1, vitalityState: 'pleine' };
+    const oneDayFinished = habitCard(oneDay, stats, { compact: true, finished: true, finishedDate: '01/01' });
+    const oneDayDead = habitCard(oneDay, stats, { compact: true, dead: true, deathCause: 'abandoned', deathDate: '01/01' });
+    const multiDayFinished = habitCard(multiDay, stats, { compact: true, finished: true, finishedDate: '01/01' });
+    return {
+      oneDayFinishedText: (oneDayFinished.match(/pcard-tier-blurb">([^<]*)</) || [])[1],
+      oneDayDeadText: (oneDayDead.match(/pcard-tier-blurb">([^<]*)</) || [])[1],
+      multiDayFinishedText: (multiDayFinished.match(/pcard-tier-blurb">([^<]*)</) || [])[1],
+    };
+  });
+  step('one-day vs multi-day blurb text:', JSON.stringify(oneDayTextCases));
+  if (oneDayTextCases.oneDayFinishedText !== 'Terminée.') throw new Error(`a one-day promise's finished blurb should just say "Terminée.", got "${oneDayTextCases.oneDayFinishedText}"`);
+  if (oneDayTextCases.oneDayDeadText !== 'Abandonnée.') throw new Error(`a one-day promise's dead blurb should just say "Abandonnée.", got "${oneDayTextCases.oneDayDeadText}"`);
+  if (!oneDayTextCases.multiDayFinishedText.includes('après 1 jour')) throw new Error(`a multi-day promise should keep its day count, got "${oneDayTextCases.multiDayFinishedText}"`);
+
   // --- No card, of any size or lifespan, announces the next tier any more.
   // The countdown used to turn the badge into a due date, and on a promise
   // whose own end date ruled that tier out it announced one the schedule
@@ -200,6 +221,11 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   const outcome = await page.evaluate(async () => {
     const h = store.habits[0];
     const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    // A genuine one-day promise -- start_date and end_date the same single
+    // day -- rather than just an end_date in the past (which would make it
+    // a multi-day promise cut short, a different case with its own day
+    // count worth stating).
+    h.start_date = yesterday;
     h.end_date = yesterday;
     // A kept day in its past, so the finished card reads gold, not red.
     store.checks.push({ id: crypto.randomUUID(), habit_id: h.id, date: yesterday, status: 'success', expired: false });
@@ -243,7 +269,14 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (await page.locator('#edit-reminder-time, #delete-habit, #resurrect-habit').count() !== 0) {
     throw new Error('a finished promise should offer none of the live/dead-specific actions');
   }
-  step('detail stat line mentions the natural end:', (await page.locator('.card .stat-line').last().textContent()).trim());
+  const detailLine = (await page.locator('.card .stat-line').last().textContent()).trim();
+  step('detail stat line mentions the natural end:', detailLine);
+  // This habit's own end_date === start_date (see the "one-day scenario"
+  // setup above) -- its day count is always exactly 1, so the sentence
+  // should read the plain outcome rather than a redundant "1 jour".
+  if (detailLine !== "Elle est allée jusqu'à sa fin prévue.") {
+    throw new Error(`a one-day promise's detail sentence should skip the redundant day count, got: "${detailLine}"`);
+  }
 
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();
