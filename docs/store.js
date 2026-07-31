@@ -14,7 +14,6 @@ const store = {
   habits: [],
   cemetery: [], // abandoned habits — kept, never hard-deleted, shown greyed out
   checks: [],
-  socialRate: null,
   loaded: false,
   sync: 'idle', // 'idle' | 'pending' | 'offline'
   pushActive: false,
@@ -357,18 +356,6 @@ async function detectPushState() {
     store.pushActive = !!(await reg.pushManager.getSubscription());
   } catch (e) {
     store.pushActive = false;
-  }
-}
-
-async function loadSocialRate() {
-  try {
-    const { data } = await sb.rpc('global_today_success_rate');
-    const row = Array.isArray(data) ? data[0] : data;
-    store.socialRate = row && row.success_rate !== null && row.sample_size >= 5
-      ? { rate: Math.round(row.success_rate), sample: row.sample_size }
-      : null;
-  } catch (e) {
-    store.socialRate = null;
   }
 }
 

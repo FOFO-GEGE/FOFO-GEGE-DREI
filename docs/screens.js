@@ -470,10 +470,6 @@ function screenHome() {
     ? 'Pas encore assez de données.'
     : `Tu tiens ${score}% de tes engagements.`;
 
-  const social = store.socialRate
-    ? `<p class="score-social"><b>${store.socialRate.rate}%</b> des gens comme toi ont tenu aujourd'hui.</p>`
-    : '';
-
   const insights = buildInsights();
   const insightBlock = insights.length
     ? `<section class="insights">
@@ -560,7 +556,6 @@ function screenHome() {
         </div>
       </div>
       <p class="score-phrase">${esc(phrase)}</p>
-      ${social}
       <button class="btn-week" data-nav="/week">Voir ma semaine ${icon('right', 15)}</button>
     </div>
     ${insightBlock}
