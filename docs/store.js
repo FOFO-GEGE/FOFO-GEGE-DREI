@@ -512,23 +512,31 @@ function rupturesBeforeDeath(v) {
 // with no mark whatsoever, never as a grey failure. Conflating the two used
 // to make a habit created mid-week, or one that only runs twice a week, read
 // as having failed every day it was never asked to run.
+// One day's verdict for one promise, shared by the card's seven-day strip and
+// Historique's per-card timeline so the two never disagree about what a
+// square means. 'unknown' is the honest answer for a past due day that has no
+// check row at all — the app was never open to open one — and must not be
+// drawn as 'pending', which claims the day is still answerable.
+function dayState(habit, date, check, today = todayStr()) {
+  if (date < habit.start_date) return 'before';
+  if (!habit.target_days.includes(dowOf(date))) return 'rest';
+  if (check) {
+    if (check.status === 'success') return 'kept';
+    if (check.status === 'failed') return 'broken';
+    if (check.status === 'frozen') return 'frozen';
+    return date < today ? 'unknown' : 'pending';
+  }
+  return date < today ? 'unknown' : 'pending';
+}
+
 function lastWeekOf(habit, n = 7) {
-  const asOf = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
+  const today = todayStr();
+  const asOf = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : today;
   const byDate = new Map(store.checks.filter(c => c.habit_id === habit.id).map(c => [c.date, c]));
   const out = [];
   for (let i = n - 1; i >= 0; i--) {
     const date = shiftDays(asOf, -i);
-    const c = byDate.get(date);
-    const dow = dowOf(date);
-    let state;
-    if (date < habit.start_date) state = 'before';
-    else if (!habit.target_days.includes(dow)) state = 'rest';
-    else if (!c) state = 'pending';
-    else if (c.status === 'success') state = 'kept';
-    else if (c.status === 'failed') state = 'broken';
-    else if (c.status === 'frozen') state = 'frozen';
-    else state = 'pending';
-    out.push({ date, dow, state });
+    out.push({ date, dow: dowOf(date), state: dayState(habit, date, byDate.get(date), today) });
   }
   return out;
 }
@@ -755,9 +763,15 @@ function reasonLabel(id) {
   return r ? r.label.toLowerCase() : null;
 }
 
-function buildInsights() {
+// Scoped like everything else on Historique. Called with no arguments (from
+// Mon miroir) it still reads the whole record for every habit, exactly as
+// before; called with a period it recomputes inside that window, which is
+// what makes "ton point faible est le mardi" mean something you can act on
+// rather than a verdict on all of recorded time.
+function buildInsights(days = null, habitId = null) {
   const out = [];
-  const decided = store.checks.filter(c => c.status === 'success' || c.status === 'failed');
+  const scoped = periodChecks(days, habitId);
+  const decided = scoped.filter(c => c.status === 'success' || c.status === 'failed');
   if (decided.length < 6) return out;
 
   const rateOf = rows => rows.length
@@ -788,8 +802,8 @@ function buildInsights() {
     }
   }
 
-  // Per-habit outliers
-  const scored = store.habits
+  // Per-habit outliers — meaningless once a single habit is the whole scope.
+  const scored = habitId !== null ? [] : store.habits
     .map(h => ({ h, s: habitStats(h) }))
     .filter(x => x.s.total >= 5);
   if (scored.length >= 2) {
@@ -816,7 +830,7 @@ function buildInsights() {
 
   // What the failures are actually made of. This is the one insight family
   // that can be acted on directly, so it goes near the top.
-  const failed = store.checks.filter(c => c.status === 'failed');
+  const failed = scoped.filter(c => c.status === 'failed');
   const withReason = failed.filter(c => c.reason);
   if (withReason.length >= 4) {
     const counts = {};
@@ -846,18 +860,94 @@ function buildInsights() {
   return out;
 }
 
-// The direct confrontation: what has actually been broken this week, plainly
-// listed rather than folded into a single percentage. Lives on Ma semaine
-// rather than Mon miroir — the deck is the collection, this is the ledger.
-// Scoped to the same rolling 7-day window as weekSummary(). Includes cemetery
-// habits — abandoning a promise doesn't erase what it recorded on the way out.
-function weekFailures() {
+// ---------- Period scoping ----------
+// Everything the history screen shows is derived through these: a period
+// (in days back from today, or null for the whole record) and a scope (one
+// habit id, or null for all of them). What used to be a fixed rolling week
+// on its own screen is now one preset among several on Historique.
+//
+// Cemetery habits are always included: abandoning or completing a promise
+// doesn't erase what it recorded on the way out, and a history that quietly
+// dropped them would flatter the past.
+const PERIODS = [
+  { days: 7, label: '7 j' },
+  { days: 30, label: '30 j' },
+  { days: 90, label: '3 mois' },
+  { days: null, label: 'Tout' },
+];
+
+function habitsById() {
+  return new Map([...store.habits, ...store.cemetery].map(h => [h.id, h]));
+}
+
+function periodChecks(days = 7, habitId = null) {
   const today = todayStr();
-  const byId = new Map([...store.habits, ...store.cemetery].map(h => [h.id, h]));
-  return store.checks
-    .filter(c => c.status === 'failed' && byId.has(c.habit_id) && daysBetween(c.date, today) < 7)
+  const byId = habitsById();
+  return store.checks.filter(c =>
+    byId.has(c.habit_id)
+    && (habitId === null || c.habit_id === habitId)
+    && (days === null || daysBetween(c.date, today) < days));
+}
+
+// The direct confrontation: what has actually been broken, plainly listed
+// rather than folded into a single percentage. The deck is the collection,
+// this is the ledger.
+function periodFailures(days = 7, habitId = null) {
+  const byId = habitsById();
+  return periodChecks(days, habitId)
+    .filter(c => c.status === 'failed')
     .sort((a, b) => (a.date < b.date ? 1 : -1))
     .map(c => ({ check: c, habit: byId.get(c.habit_id) }));
+}
+
+// The tally for a period, plus the same-length period immediately before it
+// so the screen can say which way things are going. A null period has no
+// "before" to compare against, by definition.
+function periodSummary(days = 7, habitId = null) {
+  const today = todayStr();
+  const byId = habitsById();
+  const inScope = c => byId.has(c.habit_id) && (habitId === null || c.habit_id === habitId);
+  const rateOf = rows => {
+    const d = rows.filter(c => c.status === 'success' || c.status === 'failed');
+    return d.length ? Math.round(100 * d.filter(c => c.status === 'success').length / d.length) : null;
+  };
+  const cur = periodChecks(days, habitId);
+  const prev = days === null ? [] : store.checks.filter(c => {
+    if (!inScope(c)) return false;
+    const age = daysBetween(c.date, today);
+    return age >= days && age < days * 2;
+  });
+  return {
+    kept: cur.filter(c => c.status === 'success').length,
+    // A declared "pas fait" and a silence are both failures for the rate,
+    // but they are not the same act — the tally splits them so the two
+    // never hide inside one number.
+    broken: cur.filter(c => c.status === 'failed' && !c.expired).length,
+    frozen: cur.filter(c => c.status === 'frozen').length,
+    missed: cur.filter(c => c.status === 'failed' && c.expired).length,
+    rate: rateOf(cur),
+    prevRate: days === null ? null : rateOf(prev),
+  };
+}
+
+// The per-card timeline Historique shows when a single promise is selected:
+// one entry per day over the period, in the same vocabulary the card's own
+// seven-day strip uses, so the two read as the same object at two zooms.
+function periodTimeline(days = 30, habitId) {
+  const habit = habitsById().get(habitId);
+  if (!habit) return [];
+  const today = todayStr();
+  const upTo = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : today;
+  const byDate = new Map(store.checks.filter(c => c.habit_id === habitId).map(c => [c.date, c]));
+  const span = days === null ? Math.max(1, daysBetween(habit.start_date, today) + 1) : days;
+  const out = [];
+  for (let i = span - 1; i >= 0; i--) {
+    const date = shiftDays(today, -i);
+    if (date > upTo) continue;
+    const c = byDate.get(date);
+    out.push({ date, state: dayState(habit, date, c, today) });
+  }
+  return out;
 }
 
 // Every promise touched on a given date, active or buried, each stamped with
@@ -868,27 +958,6 @@ function checksOnDate(iso) {
   return store.checks
     .filter(c => c.date === iso && byId.has(c.habit_id))
     .map(c => ({ check: c, habit: byId.get(c.habit_id) }));
-}
-
-function weekSummary() {
-  const today = todayStr();
-  const win = (from, to) => store.checks.filter(c => {
-    const age = daysBetween(c.date, today);
-    return age >= from && age < to;
-  });
-  const rateOf = rows => {
-    const d = rows.filter(c => c.status === 'success' || c.status === 'failed');
-    return d.length ? Math.round(100 * d.filter(c => c.status === 'success').length / d.length) : null;
-  };
-  const cur = win(0, 7), prev = win(7, 14);
-  return {
-    kept: cur.filter(c => c.status === 'success').length,
-    broken: cur.filter(c => c.status === 'failed').length,
-    frozen: cur.filter(c => c.status === 'frozen').length,
-    missed: cur.filter(c => c.status === 'no_data').length,
-    rate: rateOf(cur),
-    prevRate: rateOf(prev),
-  };
 }
 
 const DOW_FULL = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
