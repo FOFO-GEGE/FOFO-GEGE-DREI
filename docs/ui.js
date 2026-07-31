@@ -162,14 +162,25 @@ function habitCard(habit, stats, opts = {}) {
     : (stats.vitalityState === 'malade' || stats.vitalityState === 'faiblit') ? 'low'
     : 'ok';
 
-  // Seven marks, one per day, oldest first — the card's memory, and what
-  // stops today from being a blank square that says nothing about yesterday.
-  // It carries the good history too, not only the damage: a row of kept days
-  // is the reward the vitality gauge alone never showed. Absent when the
-  // caller didn't compute it (a preview, a synthetic card).
-  const week = Array.isArray(stats.week) ? stats.week : [];
-  const WEEK_WORDS = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', none: 'rien à faire' };
-  const weekLabel = `Sept derniers jours : ${week.map(d => WEEK_WORDS[d.state] || d.state).join(', ')}.`;
+  // A sliding seven-day window, oldest first, today last — the card's
+  // memory, and what stops today from being a blank square that says
+  // nothing about yesterday. It carries the good history too, not only the
+  // damage: a row of kept days is the reward the vitality gauge alone never
+  // showed. Absent when the caller didn't compute it (a preview, a
+  // synthetic card), and also withheld below two actually-scheduled days in
+  // the window — a one-day promise, or one just created, has nothing here
+  // for the strip to say that the rest of the card doesn't already.
+  const rawWeek = Array.isArray(stats.week) ? stats.week : [];
+  const dueInWeek = rawWeek.filter(d => d.state !== 'before' && d.state !== 'rest').length;
+  const week = dueInWeek >= 2 ? rawWeek : [];
+  const WEEK_WORDS = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', rest: 'repos', before: '' };
+  const weekLabel = `Sept derniers jours : ${week.filter(d => d.state !== 'before').map(d => WEEK_WORDS[d.state] || d.state).join(', ')}.`;
+  // D L M M J V S — single-letter initials indexed the same way getDay()
+  // does (0 = dimanche). Without these the strip was unreadable: nothing
+  // told you which mark was which day, so a gap could not be located on the
+  // calendar at all, only counted.
+  const DOW_LETTER = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  const todayIso = todayStr();
 
   const footerContent = opts.dead
     ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
@@ -212,8 +223,8 @@ function habitCard(habit, stats, opts = {}) {
 
       ${!retired && week.length ? `
       <div class="pcard-week" role="img" aria-label="${esc(weekLabel)}">
-        <span class="pcard-week-label">7 J</span>
         <div class="pcard-week-days">${week.map(d => `<span class="pcard-day is-${d.state}"></span>`).join('')}</div>
+        <div class="pcard-week-dow">${week.map(d => `<span class="${d.date === todayIso ? 'is-today' : ''}">${DOW_LETTER[d.dow]}</span>`).join('')}</div>
       </div>` : ''}
 
       <div class="pcard-art">

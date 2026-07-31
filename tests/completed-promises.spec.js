@@ -68,31 +68,51 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
 
   // --- The seven-day strip: the card's own memory, and the reason today is
   // no longer a blank square. Present on any live card that was given one,
-  // gone on a retired one, along with the vitality gauge. ---
+  // gone on a retired one, along with the vitality gauge. 'rest' (not
+  // scheduled that day) and 'before' (the promise didn't exist yet) are
+  // deliberately distinct from a miss -- conflating them used to make a
+  // 2x/week habit, or one created mid-week, read as failing every day it
+  // was never asked to run. ---
   const weekStrip = await page.evaluate(() => {
+    // The last entry's date must be the real "today" for the is-today
+    // marker on the day-initial row to have anything to match against --
+    // habitCard() reads today off the clock, not off the synthetic stats.
+    const today = todayStr();
     const week = [
-      { date: '2024-01-01', state: 'kept' }, { date: '2024-01-02', state: 'kept' },
-      { date: '2024-01-03', state: 'broken' }, { date: '2024-01-04', state: 'none' },
-      { date: '2024-01-05', state: 'frozen' }, { date: '2024-01-06', state: 'kept' },
-      { date: '2024-01-07', state: 'pending' },
+      { date: '2024-01-01', dow: 1, state: 'before' }, { date: '2024-01-02', dow: 2, state: 'kept' },
+      { date: '2024-01-03', dow: 3, state: 'broken' }, { date: '2024-01-04', dow: 4, state: 'rest' },
+      { date: '2024-01-05', dow: 5, state: 'frozen' }, { date: '2024-01-06', dow: 6, state: 'kept' },
+      { date: today, dow: 0, state: 'pending' },
     ];
     const stats = { rate: 80, daysAlive: 5, streak: 0, best: 0, kept: 4, total: 5, vitality: 88, vitalityState: 'pleine', week };
     const habit = { id: 'c', title: 'Compact', theme: 'sport', start_date: '2024-01-01' };
     const compact = habitCard(habit, stats, { compact: true });
     const finished = habitCard(habit, stats, { compact: true, finished: true, finishedDate: '01/01' });
     const noWeek = habitCard(habit, { ...stats, week: undefined }, { compact: true });
-    const count = (html, cls) => (html.match(new RegExp(`pcard-day is-${cls}`, 'g')) || []).length;
+    // Below the two-scheduled-days floor: a promise with only one due day in
+    // the window has nothing here the rest of the card doesn't already say.
+    const oneDueDay = habitCard(habit, { ...stats, week: [
+      { date: '2024-01-01', dow: 1, state: 'before' }, { date: '2024-01-02', dow: 2, state: 'before' },
+      { date: '2024-01-03', dow: 3, state: 'rest' }, { date: '2024-01-04', dow: 4, state: 'rest' },
+      { date: '2024-01-05', dow: 5, state: 'rest' }, { date: '2024-01-06', dow: 6, state: 'rest' },
+      { date: '2024-01-07', dow: 0, state: 'kept' },
+    ] }, { compact: true });
+    const count = (html, cls) => (html.match(new RegExp(`pcard-day is-${cls}( |")`, 'g')) || []).length;
     return {
       marks: (compact.match(/pcard-day/g) || []).length,
       kept: count(compact, 'kept'),
       broken: count(compact, 'broken'),
       frozen: count(compact, 'frozen'),
-      none: count(compact, 'none'),
+      rest: count(compact, 'rest'),
+      before: count(compact, 'before'),
       pending: count(compact, 'pending'),
+      dowLetters: (compact.match(/pcard-week-dow/g) || []).length > 0,
+      todayMarked: compact.includes('is-today'),
       compactHasVitalityGauge: compact.includes('pcard-vitality'),
       finishedHasStrip: finished.includes('pcard-day'),
       finishedHasVitalityGauge: finished.includes('pcard-vitality'),
       noWeekHasStrip: noWeek.includes('pcard-day'),
+      oneDueDayHasStrip: oneDueDay.includes('pcard-day'),
       hasStreak: compact.includes('SÉRIE'),
       hasRecord: compact.includes('Record'),
       hasThemeWord: compact.includes('>Sport<'),
@@ -100,15 +120,38 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   });
   step('seven-day strip:', JSON.stringify(weekStrip));
   if (weekStrip.marks !== 7) throw new Error(`the strip should carry exactly 7 marks, got ${weekStrip.marks}`);
-  if (weekStrip.kept !== 3 || weekStrip.broken !== 1 || weekStrip.frozen !== 1 || weekStrip.none !== 1 || weekStrip.pending !== 1) {
+  if (weekStrip.kept !== 2 || weekStrip.broken !== 1 || weekStrip.frozen !== 1 || weekStrip.rest !== 1 || weekStrip.before !== 1 || weekStrip.pending !== 1) {
     throw new Error('each day should render the mark matching its own state');
   }
+  if (!weekStrip.dowLetters) throw new Error('the strip should carry a day-initial row -- without it no mark can be located on the calendar');
+  if (!weekStrip.todayMarked) throw new Error("today's initial should be marked distinct from the rest of the week");
   if (!weekStrip.compactHasVitalityGauge) throw new Error('a live compact card should still show the vitality gauge');
   if (weekStrip.finishedHasStrip || weekStrip.finishedHasVitalityGauge) throw new Error('a retired card shows neither the strip nor the gauge — its story is over');
   if (weekStrip.noWeekHasStrip) throw new Error('a card rendered without a week (a preview) should simply omit the strip');
+  if (weekStrip.oneDueDayHasStrip) throw new Error('a promise scheduled on only one day within the window should omit the strip entirely');
   if (weekStrip.hasStreak) throw new Error('SÉRIE is gone from the card — the strip already shows the current run, and a streak punished one miss twice');
   if (weekStrip.hasRecord) throw new Error('the Record stat is gone from the card');
   if (weekStrip.hasThemeWord) throw new Error('the theme word under the icon is gone — the icon already says it');
+
+  // --- lastWeekOf() itself: a habit created mid-window shows 'before' for
+  // the days preceding its start_date, and a habit scheduled only some days
+  // of the week shows 'rest' (not a miss) for the others. ---
+  const storeWeek = await page.evaluate(() => {
+    const day = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const midWeekHabit = { id: 'mw', start_date: day(3), target_days: [0, 1, 2, 3, 4, 5, 6], active: true };
+    const midWeek = lastWeekOf(midWeekHabit);
+    const twiceHabit = { id: 'tw', start_date: day(30), target_days: [dowOf(day(1)), dowOf(day(4))], active: true };
+    const twice = lastWeekOf(twiceHabit);
+    return {
+      beforeCount: midWeek.filter(d => d.state === 'before').length,
+      dueCount: midWeek.filter(d => d.state !== 'before').length,
+      restCount: twice.filter(d => d.state === 'rest').length,
+      scheduledCount: twice.filter(d => d.state !== 'rest').length,
+    };
+  });
+  step('lastWeekOf() before/rest classification:', JSON.stringify(storeWeek));
+  if (storeWeek.beforeCount !== 3 || storeWeek.dueCount !== 4) throw new Error('a habit created 3 days ago should show exactly 3 "before" days and 4 due days in a 7-day window');
+  if (storeWeek.restCount !== 5 || storeWeek.scheduledCount !== 2) throw new Error('a promise due on 2 of 7 days should mark the other 5 as rest, not as missed');
 
   // --- End to end: a habit whose end_date has already passed retires on the
   // next reconcile, kept out of the vitality fold and the death notice ---
