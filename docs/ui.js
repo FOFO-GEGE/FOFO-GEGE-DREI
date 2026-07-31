@@ -118,7 +118,14 @@ function habitCard(habit, stats, opts = {}) {
   // footer says so instead of showing progress toward a tier further still.
   const ageTier = retired ? tier : ageTierFor(stats.daysAlive);
   const missedEvolution = !retired && ageTier.id !== tier.id;
-  const next = retired || missedEvolution ? null : nextTier(stats.daysAlive);
+  // A promise with a fixed end date has a ceiling on how many days it can
+  // ever rack up — pointing it toward a tier that its own schedule already
+  // rules out ("7 j avant « Éclose »" on a one-day promise) would be a small
+  // dishonesty the rest of the card doesn't allow itself.
+  const lifespanCap = habit.end_date ? daysBetween(habit.start_date, habit.end_date) : null;
+  const rawNext = retired || missedEvolution ? null : nextTier(stats.daysAlive);
+  const nextOutOfReach = !!rawNext && lifespanCap !== null && rawNext.minDays > lifespanCap;
+  const next = nextOutOfReach ? null : rawNext;
   const progress = next
     ? Math.round(100 * (stats.daysAlive - tier.minDays) / (next.minDays - tier.minDays))
     : 100;
@@ -209,6 +216,10 @@ function habitCard(habit, stats, opts = {}) {
           // as a fact already true, not a countdown: the day has passed, it
           // just didn't happen.
           ? `<span class="pcard-xp-label pcard-xp-missed">${icon('cross', 12)} Aurait dû devenir « ${ageTier.label} ». Ce n'est pas encore fait.</span>`
+          : nextOutOfReach
+          // Its own end date rules the next tier out entirely — a countdown
+          // toward it would be a promise the card itself can't keep.
+          ? `<span class="pcard-xp-label">Se termine avant « ${rawNext.label} ».</span>`
           : next
           ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
              <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`

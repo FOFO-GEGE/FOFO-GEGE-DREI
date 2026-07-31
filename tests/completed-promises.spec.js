@@ -47,6 +47,39 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (pureCases.keptHasDeadClass || pureCases.brokenHasDeadClass) throw new Error('a finished card must never carry the dead card\'s is-dead class');
   if (!pureCases.brokenHasTimeBroken || !pureCases.brokenHasBrokenLabel) throw new Error('a mostly-broken finished card should read time-broken / pcard-xp-broken');
 
+  // --- Still active (not yet retired), but its own end date already rules
+  // out the next tier: must not dangle a countdown it can never keep ---
+  const capCases = await page.evaluate(() => {
+    const stats = { rate: null, daysAlive: 0, streak: 0, best: 0, kept: 0, total: 0, vitality: 100, vitalityState: 'pleine' };
+    const oneDay = habitCard(
+      { id: 'y', title: 'One-day', theme: 'sport', start_date: '2024-01-01', end_date: '2024-01-01' },
+      stats, { compact: true }
+    );
+    const longRun = habitCard(
+      { id: 'z', title: 'Long', theme: 'sport', start_date: '2024-01-01', end_date: '2025-01-01' },
+      stats, { compact: true }
+    );
+    const noEndDate = habitCard(
+      { id: 'w', title: 'Ongoing', theme: 'sport', start_date: '2024-01-01' },
+      stats, { compact: true }
+    );
+    return {
+      oneDayShowsCappedMessage: oneDay.includes('Se termine avant'),
+      // The progress bar only ever renders for a genuinely reachable next
+      // tier -- its presence here would be the false promise this guards
+      // against (a countdown a one-day promise can never actually keep).
+      oneDayShowsProgressBar: oneDay.includes('pcard-xp-fill'),
+      longRunShowsNormalProgress: longRun.includes('pcard-xp-fill'),
+      noEndDateShowsNormalProgress: noEndDate.includes('pcard-xp-fill'),
+    };
+  });
+  step('lifespan-capped tier progress:', JSON.stringify(capCases));
+  if (!capCases.oneDayShowsCappedMessage) throw new Error('a one-day promise should say its own schedule rules out the next tier, not dangle a countdown toward it');
+  if (capCases.oneDayShowsProgressBar) throw new Error('a one-day promise must never show a progress bar toward a tier it can never reach');
+  if (!capCases.longRunShowsNormalProgress) throw new Error('a long-enough end date should still show ordinary tier progress');
+  if (!capCases.noEndDateShowsNormalProgress) throw new Error('a promise with no end date at all should still show ordinary tier progress');
+  if (!capCases.noEndDateShowsNormalProgress) throw new Error('a promise with no end date at all should still show ordinary tier progress');
+
   // --- End to end: a habit whose end_date has already passed retires on the
   // next reconcile, kept out of the vitality fold and the death notice ---
   await page.click('[data-nav="/new"]');
