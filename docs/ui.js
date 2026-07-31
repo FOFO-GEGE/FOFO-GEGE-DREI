@@ -54,7 +54,9 @@ function themeById(id) {
 // at risk. Thresholds increase with the tier so satisfying a higher one
 // always satisfies every lower one too.
 const TIERS = [
-  { id: 'oeuf',       label: 'Œuf',        minDays: 0,   minVitality: 0,  blurb: 'Vient d’éclore.' },
+  // Never "vient d'éclore" — the tier *after* this one is called Éclose, so
+  // an egg claiming to have hatched contradicted the ladder it sits on.
+  { id: 'oeuf',       label: 'Œuf',        minDays: 0,   minVitality: 0,  blurb: 'Moins d’une semaine.' },
   { id: 'eclose',     label: 'Éclose',     minDays: 7,   minVitality: 30, blurb: 'A tenu une semaine.' },
   { id: 'enracinee',  label: 'Enracinée',  minDays: 30,  minVitality: 55, blurb: 'Un mois de survie.' },
   { id: 'gravee',     label: 'Gravée',     minDays: 90,  minVitality: 70, blurb: 'Trois mois. Ça compte.' },
@@ -118,17 +120,11 @@ function habitCard(habit, stats, opts = {}) {
   // footer says so instead of showing progress toward a tier further still.
   const ageTier = retired ? tier : ageTierFor(stats.daysAlive);
   const missedEvolution = !retired && ageTier.id !== tier.id;
-  // A promise with a fixed end date has a ceiling on how many days it can
-  // ever rack up — pointing it toward a tier that its own schedule already
-  // rules out ("7 j avant « Éclose »" on a one-day promise) would be a small
-  // dishonesty the rest of the card doesn't allow itself.
-  const lifespanCap = habit.end_date ? daysBetween(habit.start_date, habit.end_date) : null;
-  const rawNext = retired || missedEvolution ? null : nextTier(stats.daysAlive);
-  const nextOutOfReach = !!rawNext && lifespanCap !== null && rawNext.minDays > lifespanCap;
-  const next = nextOutOfReach ? null : rawNext;
-  const progress = next
-    ? Math.round(100 * (stats.daysAlive - tier.minDays) / (next.minDays - tier.minDays))
-    : 100;
+  // No countdown toward the next tier, and no progress bar either. A tier is
+  // found when it arrives; announcing it in advance turned the badge into a
+  // due date, and on a promise with a near end date it announced one the
+  // schedule could never honour. The badge changing is the whole event.
+  const atMaxTier = !retired && !nextTier(stats.daysAlive);
 
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
   const keptOverall = stats.rate !== null && stats.rate >= 50;
@@ -166,6 +162,15 @@ function habitCard(habit, stats, opts = {}) {
     : (stats.vitalityState === 'malade' || stats.vitalityState === 'faiblit') ? 'low'
     : 'ok';
 
+  // Seven marks, one per day, oldest first — the card's memory, and what
+  // stops today from being a blank square that says nothing about yesterday.
+  // It carries the good history too, not only the damage: a row of kept days
+  // is the reward the vitality gauge alone never showed. Absent when the
+  // caller didn't compute it (a preview, a synthetic card).
+  const week = Array.isArray(stats.week) ? stats.week : [];
+  const WEEK_WORDS = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', none: 'rien à faire' };
+  const weekLabel = `Sept derniers jours : ${week.map(d => WEEK_WORDS[d.state] || d.state).join(', ')}.`;
+
   const footerContent = opts.dead
     ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
     : opts.finished
@@ -183,19 +188,12 @@ function habitCard(habit, stats, opts = {}) {
     // fact already true, not a countdown: the day has passed, it just
     // didn't happen.
     ? `<span class="pcard-xp-label pcard-xp-missed">${icon('cross', 12)} Aurait dû devenir « ${ageTier.label} ». Ce n'est pas encore fait.</span>`
-    : nextOutOfReach
-    // Its own end date rules the next tier out entirely — a countdown
-    // toward it would be a promise the card itself can't keep.
-    ? `<span class="pcard-xp-label">Se termine avant « ${rawNext.label} ».</span>`
-    // A grid tile has room for the gauge above and nothing else — the
-    // day-count toward the next tier only earns its place where there's
-    // space to spare (the full card: ritual, detail screen).
-    : opts.compact
-    ? ''
-    : next
-    ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
-       <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`
-    : `<span class="pcard-xp-label pcard-xp-max">Palier maximum atteint</span>`;
+    : atMaxTier
+    ? `<span class="pcard-xp-label pcard-xp-max">Palier maximum atteint</span>`
+    // The ordinary case, and the common one: nothing to report. The footer
+    // element isn't rendered at all rather than left empty, so it doesn't
+    // keep claiming a gap in the card's flex column.
+    : '';
 
   return `
     <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : opts.finished ? 'pleine' : (stats.vitalityState || 'pleine')} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
@@ -204,11 +202,6 @@ function habitCard(habit, stats, opts = {}) {
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">
         <h3 class="pcard-name">${esc(habit.title || 'Ta promesse')}</h3>
-        <div class="pcard-hp">
-          <span class="pcard-hp-label">SÉRIE</span>
-          <span class="pcard-hp-value">${stats.streak}</span>
-          ${icon('flame', 16, 'pcard-hp-icon')}
-        </div>
       </header>
 
       ${!retired ? `
@@ -217,10 +210,15 @@ function habitCard(habit, stats, opts = {}) {
         <div class="pcard-vitality-bar"><div class="pcard-vitality-fill is-${vitalityBand}" style="width:${Math.max(2, Math.min(100, stats.vitality ?? 100))}%"></div></div>
       </div>` : ''}
 
+      ${!retired && week.length ? `
+      <div class="pcard-week" role="img" aria-label="${esc(weekLabel)}">
+        <span class="pcard-week-label">7 J</span>
+        <div class="pcard-week-days">${week.map(d => `<span class="pcard-day is-${d.state}"></span>`).join('')}</div>
+      </div>` : ''}
+
       <div class="pcard-art">
         <div class="pcard-art-glow" aria-hidden="true"></div>
         ${icon(theme.id, opts.compact ? 40 : 56, 'pcard-art-icon')}
-        <span class="pcard-theme">${esc(theme.label)}</span>
       </div>
 
       <div class="pcard-tier">
@@ -240,7 +238,6 @@ function habitCard(habit, stats, opts = {}) {
       <div class="pcard-stats">
         <div class="pcard-stat"><span class="k">Taux</span><span class="v">${rateText}</span></div>
         <div class="pcard-stat"><span class="k">Jours</span><span class="v">${stats.daysAlive}</span></div>
-        <div class="pcard-stat"><span class="k">Record</span><span class="v">${stats.best}</span></div>
       </div>
 
       ${footerContent ? `<footer class="pcard-foot">${footerContent}</footer>` : ''}
