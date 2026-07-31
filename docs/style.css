@@ -372,6 +372,20 @@ button:disabled { opacity: .4; cursor: default; }
   text-shadow: 0 0 16px color-mix(in srgb, var(--success) 60%, transparent);
 }
 
+.pcard-vitality { display: flex; align-items: center; gap: 6px; }
+.pcard-vitality-label { font-size: 8px; font-weight: 800; letter-spacing: .1em; color: var(--text-dim); flex: none; }
+.pcard-vitality-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.pcard-vitality-fill {
+  height: 100%; border-radius: 999px; transition: width .8s cubic-bezier(.16,1,.3,1), background-color .4s ease;
+  /* The card's own vit-* filter desaturates everything as it ages — the
+     whole point of that fade. The gauge needs to read clearly regardless,
+     so it counters that fade on itself rather than inheriting it. */
+  filter: saturate(3);
+}
+.pcard-vitality-fill.is-ok { background: var(--band-green); }
+.pcard-vitality-fill.is-low { background: var(--band-amber); }
+.pcard-vitality-fill.is-critical { background: var(--danger); }
+
 .pcard-art {
   position: relative; border-radius: 14px; padding: 18px 10px 10px;
   background: var(--surface-2);

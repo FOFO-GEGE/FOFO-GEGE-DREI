@@ -48,20 +48,23 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (!pureCases.brokenHasTimeBroken || !pureCases.brokenHasBrokenLabel) throw new Error('a mostly-broken finished card should read time-broken / pcard-xp-broken');
 
   // --- Still active (not yet retired), but its own end date already rules
-  // out the next tier: must not dangle a countdown it can never keep ---
+  // out the next tier: must not dangle a countdown it can never keep.
+  // Checked on full-size (non-compact) cards, since the compact deck-grid
+  // tiles never show the tier countdown at all regardless of reachability
+  // (see the compactCases block below). ---
   const capCases = await page.evaluate(() => {
     const stats = { rate: null, daysAlive: 0, streak: 0, best: 0, kept: 0, total: 0, vitality: 100, vitalityState: 'pleine' };
     const oneDay = habitCard(
       { id: 'y', title: 'One-day', theme: 'sport', start_date: '2024-01-01', end_date: '2024-01-01' },
-      stats, { compact: true }
+      stats, {}
     );
     const longRun = habitCard(
       { id: 'z', title: 'Long', theme: 'sport', start_date: '2024-01-01', end_date: '2025-01-01' },
-      stats, { compact: true }
+      stats, {}
     );
     const noEndDate = habitCard(
       { id: 'w', title: 'Ongoing', theme: 'sport', start_date: '2024-01-01' },
-      stats, { compact: true }
+      stats, {}
     );
     return {
       oneDayShowsCappedMessage: oneDay.includes('Se termine avant'),
@@ -78,7 +81,30 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (capCases.oneDayShowsProgressBar) throw new Error('a one-day promise must never show a progress bar toward a tier it can never reach');
   if (!capCases.longRunShowsNormalProgress) throw new Error('a long-enough end date should still show ordinary tier progress');
   if (!capCases.noEndDateShowsNormalProgress) throw new Error('a promise with no end date at all should still show ordinary tier progress');
-  if (!capCases.noEndDateShowsNormalProgress) throw new Error('a promise with no end date at all should still show ordinary tier progress');
+
+  // --- Compact deck-grid tiles never show the tier countdown bar/text at
+  // all, reachable or not -- that's the whole point of shrinking them. The
+  // vitality gauge, by contrast, only ever appears on a live (non-retired)
+  // card, compact or not. ---
+  const compactCases = await page.evaluate(() => {
+    const healthyStats = { rate: 100, daysAlive: 5, streak: 5, best: 5, kept: 5, total: 5, vitality: 100, vitalityState: 'pleine' };
+    const habit = { id: 'c', title: 'Compact', theme: 'sport', start_date: '2024-01-01' };
+    const compactLive = habitCard(habit, healthyStats, { compact: true });
+    const fullLive = habitCard(habit, healthyStats, {});
+    const compactFinished = habitCard(habit, { ...healthyStats, rate: 100 }, { compact: true, finished: true, finishedDate: '01/01' });
+    return {
+      compactHasProgressBar: compactLive.includes('pcard-xp-fill'),
+      compactHasCountdownText: compactLive.includes('j avant'),
+      fullHasProgressBar: fullLive.includes('pcard-xp-fill'),
+      compactHasVitalityGauge: compactLive.includes('pcard-vitality'),
+      compactFinishedHasVitalityGauge: compactFinished.includes('pcard-vitality'),
+    };
+  });
+  step('compact card countdown/gauge:', JSON.stringify(compactCases));
+  if (compactCases.compactHasProgressBar || compactCases.compactHasCountdownText) throw new Error('a compact (deck-grid) card must never show the tier countdown bar or text');
+  if (!compactCases.fullHasProgressBar) throw new Error('a full-size card with a reachable next tier should still show the progress bar');
+  if (!compactCases.compactHasVitalityGauge) throw new Error('a live compact card should still show the vitality gauge');
+  if (compactCases.compactFinishedHasVitalityGauge) throw new Error('a finished (retired) card must never show a vitality gauge');
 
   // --- End to end: a habit whose end_date has already passed retires on the
   // next reconcile, kept out of the vitality fold and the death notice ---

@@ -158,6 +158,45 @@ function habitCard(habit, stats, opts = {}) {
   }
   const fracSeed = habit.id ? hashSeed(habit.id) : 40;
 
+  // A real gauge, not just a filter — the vitality ladder used to only show
+  // through desaturation, which reads as nothing at all once theme colour is
+  // gone (a greyscale card stays grey). This is what actually drops the
+  // moment yesterday goes unanswered.
+  const vitalityBand = stats.vitalityState === 'mourante' ? 'critical'
+    : (stats.vitalityState === 'malade' || stats.vitalityState === 'faiblit') ? 'low'
+    : 'ok';
+
+  const footerContent = opts.dead
+    ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
+    : opts.finished
+    // A finished promise isn't a failure of the system — the colour
+    // already said whether it was kept, this just spells it out.
+    ? `<span class="pcard-xp-label ${keptOverall ? 'pcard-xp-kept' : 'pcard-xp-broken'}">${icon(keptOverall ? 'check' : 'cross', 12)} Terminée le ${opts.finishedDate || ''} — ${keptOverall ? 'tenue' : 'non tenue'}</span>`
+    : stats.vitalityState === 'mourante'
+    // A dying card has more urgent news than its progress toward a tier it
+    // will not reach. Stated as what you stand to lose, not as a scolding —
+    // and counted at the cost of silence, so answering honestly always buys
+    // more days than the warning promised.
+    ? `<span class="pcard-xp-label pcard-xp-dying">Encore ${stats.rupturesLeft} rupture${stats.rupturesLeft > 1 ? 's' : ''} et elle meurt</span>`
+    : missedEvolution
+    // Age alone no longer promotes a card — it has to be earned. Stated as a
+    // fact already true, not a countdown: the day has passed, it just
+    // didn't happen.
+    ? `<span class="pcard-xp-label pcard-xp-missed">${icon('cross', 12)} Aurait dû devenir « ${ageTier.label} ». Ce n'est pas encore fait.</span>`
+    : nextOutOfReach
+    // Its own end date rules the next tier out entirely — a countdown
+    // toward it would be a promise the card itself can't keep.
+    ? `<span class="pcard-xp-label">Se termine avant « ${rawNext.label} ».</span>`
+    // A grid tile has room for the gauge above and nothing else — the
+    // day-count toward the next tier only earns its place where there's
+    // space to spare (the full card: ritual, detail screen).
+    : opts.compact
+    ? ''
+    : next
+    ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
+       <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`
+    : `<span class="pcard-xp-label pcard-xp-max">Palier maximum atteint</span>`;
+
   return `
     <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : opts.finished ? 'pleine' : (stats.vitalityState || 'pleine')} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
       style="--frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
@@ -172,9 +211,15 @@ function habitCard(habit, stats, opts = {}) {
         </div>
       </header>
 
+      ${!retired ? `
+      <div class="pcard-vitality">
+        <span class="pcard-vitality-label">VIE</span>
+        <div class="pcard-vitality-bar"><div class="pcard-vitality-fill is-${vitalityBand}" style="width:${Math.max(2, Math.min(100, stats.vitality ?? 100))}%"></div></div>
+      </div>` : ''}
+
       <div class="pcard-art">
         <div class="pcard-art-glow" aria-hidden="true"></div>
-        ${icon(theme.id, 56, 'pcard-art-icon')}
+        ${icon(theme.id, opts.compact ? 40 : 56, 'pcard-art-icon')}
         <span class="pcard-theme">${esc(theme.label)}</span>
       </div>
 
@@ -198,33 +243,7 @@ function habitCard(habit, stats, opts = {}) {
         <div class="pcard-stat"><span class="k">Record</span><span class="v">${stats.best}</span></div>
       </div>
 
-      <footer class="pcard-foot">
-        ${opts.dead
-          ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
-          : opts.finished
-          // A finished promise isn't a failure of the system — the colour
-          // already said whether it was kept, this just spells it out.
-          ? `<span class="pcard-xp-label ${keptOverall ? 'pcard-xp-kept' : 'pcard-xp-broken'}">${icon(keptOverall ? 'check' : 'cross', 12)} Terminée le ${opts.finishedDate || ''} — ${keptOverall ? 'tenue' : 'non tenue'}</span>`
-          : stats.vitalityState === 'mourante'
-          // A dying card has more urgent news than its progress toward a tier
-          // it will not reach. Stated as what you stand to lose, not as a
-          // scolding — and counted at the cost of silence, so answering
-          // honestly always buys more days than the warning promised.
-          ? `<span class="pcard-xp-label pcard-xp-dying">Encore ${stats.rupturesLeft} rupture${stats.rupturesLeft > 1 ? 's' : ''} et elle meurt</span>`
-          : missedEvolution
-          // Age alone no longer promotes a card — it has to be earned. Stated
-          // as a fact already true, not a countdown: the day has passed, it
-          // just didn't happen.
-          ? `<span class="pcard-xp-label pcard-xp-missed">${icon('cross', 12)} Aurait dû devenir « ${ageTier.label} ». Ce n'est pas encore fait.</span>`
-          : nextOutOfReach
-          // Its own end date rules the next tier out entirely — a countdown
-          // toward it would be a promise the card itself can't keep.
-          ? `<span class="pcard-xp-label">Se termine avant « ${rawNext.label} ».</span>`
-          : next
-          ? `<div class="pcard-xp"><div class="pcard-xp-fill" style="width:${Math.max(2, Math.min(100, progress))}%"></div></div>
-             <span class="pcard-xp-label">${next.minDays - stats.daysAlive} j avant « ${next.label} »</span>`
-          : `<span class="pcard-xp-label pcard-xp-max">Palier maximum atteint</span>`}
-      </footer>
+      ${footerContent ? `<footer class="pcard-foot">${footerContent}</footer>` : ''}
     </article>
   `;
 }
