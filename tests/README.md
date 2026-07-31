@@ -106,10 +106,15 @@ and has to be verified against the project itself.
   keeps only abandoned/neglected cards, a separate Terminées section holds
   completions — and the detail screen offering none of the live/dead-specific
   actions (no reminder edit, no abandon, no resurrect) for a finished promise.
-  Also covers the lifespan-capped tier-progress lookup on full-size (non-
-  compact) cards, and the compact deck-grid tiles never showing the tier
-  countdown bar/text at all (reachable or not) while still carrying the
-  vitality gauge on any live card, dropped on a retired one.
+  Also covers the card's own composition after the redesign: no card of any
+  size or lifespan announces the next tier any more (no countdown, no
+  progress bar, no "se termine avant" — the badge changing is the whole
+  event), and the seven-day strip that replaced it renders one mark per day
+  in the calendar's own vocabulary (kept / broken / frozen / pending /
+  none), is omitted on a retired card along with the vitality gauge, and is
+  omitted entirely when the caller passed no week at all (a preview). Also
+  asserts what left the card for good: SÉRIE, the Record stat, and the
+  theme word under the icon.
 
 ## Not covered here
 

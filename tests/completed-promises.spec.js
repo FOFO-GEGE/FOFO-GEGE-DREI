@@ -47,64 +47,68 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (pureCases.keptHasDeadClass || pureCases.brokenHasDeadClass) throw new Error('a finished card must never carry the dead card\'s is-dead class');
   if (!pureCases.brokenHasTimeBroken || !pureCases.brokenHasBrokenLabel) throw new Error('a mostly-broken finished card should read time-broken / pcard-xp-broken');
 
-  // --- Still active (not yet retired), but its own end date already rules
-  // out the next tier: must not dangle a countdown it can never keep.
-  // Checked on full-size (non-compact) cards, since the compact deck-grid
-  // tiles never show the tier countdown at all regardless of reachability
-  // (see the compactCases block below). ---
-  const capCases = await page.evaluate(() => {
+  // --- No card, of any size or lifespan, announces the next tier any more.
+  // The countdown used to turn the badge into a due date, and on a promise
+  // whose own end date ruled that tier out it announced one the schedule
+  // could never honour. The badge changing is the entire event. ---
+  const noCountdown = await page.evaluate(() => {
     const stats = { rate: null, daysAlive: 0, streak: 0, best: 0, kept: 0, total: 0, vitality: 100, vitalityState: 'pleine' };
-    const oneDay = habitCard(
-      { id: 'y', title: 'One-day', theme: 'sport', start_date: '2024-01-01', end_date: '2024-01-01' },
-      stats, {}
-    );
-    const longRun = habitCard(
-      { id: 'z', title: 'Long', theme: 'sport', start_date: '2024-01-01', end_date: '2025-01-01' },
-      stats, {}
-    );
-    const noEndDate = habitCard(
-      { id: 'w', title: 'Ongoing', theme: 'sport', start_date: '2024-01-01' },
-      stats, {}
-    );
-    return {
-      oneDayShowsCappedMessage: oneDay.includes('Se termine avant'),
-      // The progress bar only ever renders for a genuinely reachable next
-      // tier -- its presence here would be the false promise this guards
-      // against (a countdown a one-day promise can never actually keep).
-      oneDayShowsProgressBar: oneDay.includes('pcard-xp-fill'),
-      longRunShowsNormalProgress: longRun.includes('pcard-xp-fill'),
-      noEndDateShowsNormalProgress: noEndDate.includes('pcard-xp-fill'),
+    const cards = {
+      oneDay: habitCard({ id: 'y', title: 'One-day', theme: 'sport', start_date: '2024-01-01', end_date: '2024-01-01' }, stats, {}),
+      longRun: habitCard({ id: 'z', title: 'Long', theme: 'sport', start_date: '2024-01-01', end_date: '2025-01-01' }, stats, {}),
+      noEndDate: habitCard({ id: 'w', title: 'Ongoing', theme: 'sport', start_date: '2024-01-01' }, stats, {}),
+      compact: habitCard({ id: 'c', title: 'Compact', theme: 'sport', start_date: '2024-01-01' }, stats, { compact: true }),
     };
+    const offenders = Object.entries(cards).filter(([, html]) =>
+      html.includes('pcard-xp-fill') || html.includes('j avant') || html.includes('Se termine avant'));
+    return { offenders: offenders.map(([k]) => k) };
   });
-  step('lifespan-capped tier progress:', JSON.stringify(capCases));
-  if (!capCases.oneDayShowsCappedMessage) throw new Error('a one-day promise should say its own schedule rules out the next tier, not dangle a countdown toward it');
-  if (capCases.oneDayShowsProgressBar) throw new Error('a one-day promise must never show a progress bar toward a tier it can never reach');
-  if (!capCases.longRunShowsNormalProgress) throw new Error('a long-enough end date should still show ordinary tier progress');
-  if (!capCases.noEndDateShowsNormalProgress) throw new Error('a promise with no end date at all should still show ordinary tier progress');
+  step('cards announcing a next tier:', JSON.stringify(noCountdown.offenders), '(expect none)');
+  if (noCountdown.offenders.length) throw new Error(`no card should announce the next tier any more, but these do: ${noCountdown.offenders.join(', ')}`);
 
-  // --- Compact deck-grid tiles never show the tier countdown bar/text at
-  // all, reachable or not -- that's the whole point of shrinking them. The
-  // vitality gauge, by contrast, only ever appears on a live (non-retired)
-  // card, compact or not. ---
-  const compactCases = await page.evaluate(() => {
-    const healthyStats = { rate: 100, daysAlive: 5, streak: 5, best: 5, kept: 5, total: 5, vitality: 100, vitalityState: 'pleine' };
+  // --- The seven-day strip: the card's own memory, and the reason today is
+  // no longer a blank square. Present on any live card that was given one,
+  // gone on a retired one, along with the vitality gauge. ---
+  const weekStrip = await page.evaluate(() => {
+    const week = [
+      { date: '2024-01-01', state: 'kept' }, { date: '2024-01-02', state: 'kept' },
+      { date: '2024-01-03', state: 'broken' }, { date: '2024-01-04', state: 'none' },
+      { date: '2024-01-05', state: 'frozen' }, { date: '2024-01-06', state: 'kept' },
+      { date: '2024-01-07', state: 'pending' },
+    ];
+    const stats = { rate: 80, daysAlive: 5, streak: 0, best: 0, kept: 4, total: 5, vitality: 88, vitalityState: 'pleine', week };
     const habit = { id: 'c', title: 'Compact', theme: 'sport', start_date: '2024-01-01' };
-    const compactLive = habitCard(habit, healthyStats, { compact: true });
-    const fullLive = habitCard(habit, healthyStats, {});
-    const compactFinished = habitCard(habit, { ...healthyStats, rate: 100 }, { compact: true, finished: true, finishedDate: '01/01' });
+    const compact = habitCard(habit, stats, { compact: true });
+    const finished = habitCard(habit, stats, { compact: true, finished: true, finishedDate: '01/01' });
+    const noWeek = habitCard(habit, { ...stats, week: undefined }, { compact: true });
+    const count = (html, cls) => (html.match(new RegExp(`pcard-day is-${cls}`, 'g')) || []).length;
     return {
-      compactHasProgressBar: compactLive.includes('pcard-xp-fill'),
-      compactHasCountdownText: compactLive.includes('j avant'),
-      fullHasProgressBar: fullLive.includes('pcard-xp-fill'),
-      compactHasVitalityGauge: compactLive.includes('pcard-vitality'),
-      compactFinishedHasVitalityGauge: compactFinished.includes('pcard-vitality'),
+      marks: (compact.match(/pcard-day/g) || []).length,
+      kept: count(compact, 'kept'),
+      broken: count(compact, 'broken'),
+      frozen: count(compact, 'frozen'),
+      none: count(compact, 'none'),
+      pending: count(compact, 'pending'),
+      compactHasVitalityGauge: compact.includes('pcard-vitality'),
+      finishedHasStrip: finished.includes('pcard-day'),
+      finishedHasVitalityGauge: finished.includes('pcard-vitality'),
+      noWeekHasStrip: noWeek.includes('pcard-day'),
+      hasStreak: compact.includes('SÉRIE'),
+      hasRecord: compact.includes('Record'),
+      hasThemeWord: compact.includes('>Sport<'),
     };
   });
-  step('compact card countdown/gauge:', JSON.stringify(compactCases));
-  if (compactCases.compactHasProgressBar || compactCases.compactHasCountdownText) throw new Error('a compact (deck-grid) card must never show the tier countdown bar or text');
-  if (!compactCases.fullHasProgressBar) throw new Error('a full-size card with a reachable next tier should still show the progress bar');
-  if (!compactCases.compactHasVitalityGauge) throw new Error('a live compact card should still show the vitality gauge');
-  if (compactCases.compactFinishedHasVitalityGauge) throw new Error('a finished (retired) card must never show a vitality gauge');
+  step('seven-day strip:', JSON.stringify(weekStrip));
+  if (weekStrip.marks !== 7) throw new Error(`the strip should carry exactly 7 marks, got ${weekStrip.marks}`);
+  if (weekStrip.kept !== 3 || weekStrip.broken !== 1 || weekStrip.frozen !== 1 || weekStrip.none !== 1 || weekStrip.pending !== 1) {
+    throw new Error('each day should render the mark matching its own state');
+  }
+  if (!weekStrip.compactHasVitalityGauge) throw new Error('a live compact card should still show the vitality gauge');
+  if (weekStrip.finishedHasStrip || weekStrip.finishedHasVitalityGauge) throw new Error('a retired card shows neither the strip nor the gauge — its story is over');
+  if (weekStrip.noWeekHasStrip) throw new Error('a card rendered without a week (a preview) should simply omit the strip');
+  if (weekStrip.hasStreak) throw new Error('SÉRIE is gone from the card — the strip already shows the current run, and a streak punished one miss twice');
+  if (weekStrip.hasRecord) throw new Error('the Record stat is gone from the card');
+  if (weekStrip.hasThemeWord) throw new Error('the theme word under the icon is gone — the icon already says it');
 
   // --- End to end: a habit whose end_date has already passed retires on the
   // next reconcile, kept out of the vitality fold and the death notice ---

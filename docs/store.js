@@ -90,6 +90,9 @@ function todayStr() { return dateStr(new Date()); }
 function currentMonthKey() { return todayStr().slice(0, 7); }
 function dowOf(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getDay(); }
 function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+// Local-date arithmetic, deliberately not UTC: a day here is the user's day,
+// the same one isDue() and todayStr() reason about.
+function shiftDays(iso, n) { const [y, m, d] = iso.split('-').map(Number); return dateStr(new Date(y, m - 1, d + n)); }
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -483,6 +486,30 @@ function rupturesBeforeDeath(v) {
   return Math.max(1, Math.ceil(v / -VITALITY_DELTA.failedSilent));
 }
 
+// The card's own short memory: the last seven days, oldest first. Its states
+// are deliberately the calendar's, so one day reads the same wherever you
+// meet it — and it is what stops today from being a blank square with no
+// account of how it got there. 'none' covers both a rest day and a day
+// before the promise existed; neither is a failure and neither is a win.
+function lastWeekOf(habit, n = 7) {
+  const asOf = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
+  const byDate = new Map(store.checks.filter(c => c.habit_id === habit.id).map(c => [c.date, c]));
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const date = shiftDays(asOf, -i);
+    const c = byDate.get(date);
+    out.push({
+      date,
+      state: !c ? 'none'
+        : c.status === 'success' ? 'kept'
+        : c.status === 'failed' ? 'broken'
+        : c.status === 'frozen' ? 'frozen'
+        : 'pending',
+    });
+  }
+  return out;
+}
+
 function habitStats(habit) {
   const own = store.checks.filter(c => c.habit_id === habit.id);
   const decided = own.filter(c => c.status === 'success' || c.status === 'failed');
@@ -496,8 +523,12 @@ function habitStats(habit) {
     kept,
     total: decided.length,
     daysAlive: Math.max(0, daysBetween(habit.start_date, asOf)),
+    // Still computed and still persisted — the card just no longer shows
+    // them. A streak punished a single miss a second time (the gauge already
+    // did), on top of rewarding whoever lied to keep it intact.
     streak: habit.current_streak || 0,
     best: habit.best_streak || 0,
+    week: lastWeekOf(habit),
     vitality,
     vitalityState: vitalityState(vitality),
     rupturesLeft: rupturesBeforeDeath(vitality),
@@ -511,8 +542,12 @@ function globalScore() {
   return Math.round((kept / decided.length) * 100);
 }
 
+// One per month, and no longer conditional on holding a streak — the streak
+// left the card, so gating the freeze on an invisible counter would have made
+// the option appear and vanish for no reason the screen ever explains. What a
+// freeze actually buys is unchanged: a day that costs no vitality.
 function canFreeze(habit) {
-  return (habit.current_streak || 0) > 0 && habit.freeze_used_month !== currentMonthKey();
+  return habit.freeze_used_month !== currentMonthKey();
 }
 
 // ---------- Mutations (optimistic: local first, network after) ----------
