@@ -111,6 +111,11 @@ and has to be verified against the project itself.
   (that permanent correction stays on the detail screen's "Modifier
   l'heure", covered in `flow.spec.js`). A kept (or frozen) day is a real
   decision, not a mistake to walk back, so it offers no "Décaler" at all.
+  One do-over only: a reopened check is marked `reopened`, and if it fails
+  a second time "Décaler" is gone for good on that day's own row — checked
+  both through the UI and by calling `snoozeCheck()` directly, since
+  without that marker a repeat failure would just offer another reopen,
+  forever, quietly dodging the vitality cost of a real failure.
 - `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
   only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
   (including that `ageTierFor()` ignores vitality entirely, by design), a

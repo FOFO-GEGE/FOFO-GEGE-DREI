@@ -81,7 +81,7 @@
             death_cause: null, death_announced: false, active: true,
             resurrected: false, pre_death_days: null,
           },
-          habit_checks: { expired: false, reason: null },
+          habit_checks: { expired: false, reason: null, reopened: false },
           profiles: {},
         }[table] || {};
         const rows = incoming.map(o => ({
