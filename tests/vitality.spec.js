@@ -60,6 +60,53 @@ const CASES = [
   }
   if (failed) throw new Error(`${failed} vitality case(s) disagree with the SQL contract`);
 
+  // A promise whose whole lifespan is a single calendar day never gets the
+  // ordinary fold's second chance -- it gets a compressed ceiling (20 instead
+  // of 100) and a declared failure graded by how avoidable the reason was,
+  // rather than the flat -8. Normalized back to a 0-100 percentage, same as
+  // every other habit, so the state ladder and gauge width need no special
+  // case. Mirrored by hand in mirroir_vitality() (20260731_one_day_vitality.sql)
+  // -- the mock does not run real SQL, so this is the JS half of that contract.
+  const ONE_DAY_CASES = [
+    ['imprevu (most excusable)',        [['failed', false, 'imprevu']], 60],
+    ['fatigue',                         [['failed', false, 'fatigue']], 50],
+    ['oubli',                           [['failed', false, 'oubli']],   45],
+    ['envie (least excusable)',         [['failed', false, 'envie']],   40],
+    ['silence costs as much as envie',  [['failed', true,  null]],      40],
+    ['two imprevu failures',            [['failed', false, 'imprevu'], ['failed', false, 'imprevu']], 20],
+    ['three imprevu failures -> death', [['failed', false, 'imprevu'], ['failed', false, 'imprevu'], ['failed', false, 'imprevu']], 0],
+    ['a kept one-day promise saturates at 100', [['success', false, null]], 100],
+  ];
+  const oneDayResults = await page.evaluate(cases => {
+    const habit = { id: 'synthetic-1d', active: true, start_date: '2020-01-01', end_date: '2020-01-01' };
+    return cases.map(([label, seq, expected]) => {
+      store.checks = seq.map(([status, expired, reason], i) => ({
+        habit_id: 'synthetic-1d',
+        date: new Date(Date.UTC(2021, 0, 1 + i)).toISOString().slice(0, 10),
+        status, expired, reason,
+      }));
+      return { label, expected, got: vitalityOf(habit) };
+    });
+  }, ONE_DAY_CASES);
+  let oneDayFailed = 0;
+  for (const r of oneDayResults) {
+    const ok = r.got === r.expected;
+    if (!ok) oneDayFailed++;
+    step(`${ok ? 'ok  ' : 'FAIL'} one-day ${r.label}: got ${r.got}, expected ${r.expected}`);
+  }
+  if (oneDayFailed) throw new Error(`${oneDayFailed} one-day vitality case(s) failed`);
+
+  // The reason-weighting is scoped to one-day promises only -- an ordinary
+  // (multi-day, or no end date) habit's declared failure must still cost the
+  // flat -8 regardless of which reason was given.
+  const ordinaryIgnoresReason = await page.evaluate(() => {
+    const habit = { id: 'synthetic-ordinary', active: true, start_date: '2020-01-01' };
+    store.checks = [{ habit_id: 'synthetic-ordinary', date: '2021-01-01', status: 'failed', expired: false, reason: 'envie' }];
+    return vitalityOf(habit);
+  });
+  step('ordinary habit ignores reason weighting:', ordinaryIgnoresReason, '(expect 92)');
+  if (ordinaryIgnoresReason !== 92) throw new Error(`a non-one-day habit's declared failure must stay flat -8 regardless of reason, got ${ordinaryIgnoresReason}`);
+
   // The state ladder the visuals hang off.
   const ladder = await page.evaluate(() =>
     [100, 80, 79, 55, 54, 30, 29, 1, 0].map(v => [v, vitalityState(v)]));

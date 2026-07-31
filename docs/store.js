@@ -428,11 +428,34 @@ const VITALITY_DELTA = {
   frozen: 0, // a freeze is meant to cost nothing — that is its whole purpose
 };
 
-function vitalityDelta(check) {
+// A promise whose entire lifespan is a single calendar day never gets the
+// ordinary fold's second chance — one day is the whole story. -8/-12 on a
+// 0-100 gauge barely moves it (a declared failure still reads 92%, solidly
+// green), so a genuinely one-day promise gets its own compressed ceiling
+// instead, and its declared failure is graded by how avoidable the given
+// reason was. Silence still costs exactly as much as the worst declared
+// reason, never less — honesty must never come out behind staying quiet.
+const VITALITY_MAX_ONE_DAY = 20;
+const VITALITY_DELTA_ONE_DAY_REASON = {
+  imprevu: -8,
+  fatigue: -10,
+  oubli: -11,
+  envie: -12,
+};
+
+function isOneDayHabit(habit) {
+  return !!habit.end_date && habit.start_date === habit.end_date;
+}
+
+function vitalityDelta(check, habit) {
   if (check.status === 'success') return VITALITY_DELTA.success;
   if (check.status === 'frozen') return VITALITY_DELTA.frozen;
   if (check.status === 'failed') {
-    return check.expired ? VITALITY_DELTA.failedSilent : VITALITY_DELTA.failedDeclared;
+    if (check.expired) return VITALITY_DELTA.failedSilent;
+    if (habit && isOneDayHabit(habit) && VITALITY_DELTA_ONE_DAY_REASON[check.reason] !== undefined) {
+      return VITALITY_DELTA_ONE_DAY_REASON[check.reason];
+    }
+    return VITALITY_DELTA.failedDeclared;
   }
   return 0; // still 'created' — undecided days never move it
 }
@@ -451,12 +474,16 @@ function vitalityOf(habit) {
     .filter(c => c.habit_id === habit.id && c.date >= habit.start_date && c.date <= upTo)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-  let v = VITALITY_MAX;
+  const max = isOneDayHabit(habit) ? VITALITY_MAX_ONE_DAY : VITALITY_MAX;
+  let v = max;
   for (const c of own) {
-    v = Math.max(0, Math.min(VITALITY_MAX, v + vitalityDelta(c)));
+    v = Math.max(0, Math.min(max, v + vitalityDelta(c, habit)));
     if (v === 0) return 0;
   }
-  return v;
+  // Normalized to a 0-100 percentage regardless of which ceiling produced
+  // it, so every other consumer (the gauge width, vitalityState's bands,
+  // rupturesBeforeDeath) keeps reading a single common scale.
+  return Math.round((v / max) * 100);
 }
 
 function vitalityState(v) {

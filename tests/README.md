@@ -70,7 +70,18 @@ and has to be verified against the project itself.
   resurrection: a dead card revived resets to Œuf with vitality back at 100,
   carries a permanent scar visible even in the compact deck grid, persists to
   the database, and — the one-resurrection-ever ceiling — a card that dies a
-  second time cannot be revived again.
+  second time cannot be revived again. Also covers the one-day promise's own
+  fold: a habit whose entire lifespan is a single calendar day (start_date =
+  end_date) uses a compressed ceiling (20 instead of 100) rather than the
+  ordinary one, since the flat -8/-12 delta barely moves a 100-point gauge in
+  a single event. Its declared failure is graded by how avoidable the chosen
+  reason was (imprevu the mildest, envie the harshest), normalized back to
+  the same 0-100 percentage every other consumer reads, with silence costing
+  exactly as much as the harshest declared reason, never less. An ordinary
+  (multi-day, or no end date) habit is asserted to ignore the reason
+  entirely and keep the flat -8. Mirrored by hand in `mirroir_vitality()`
+  (`20260731_one_day_vitality.sql`) — the mock does not run real SQL, so this
+  case table is the JS half of that contract.
 - `ritual-queue.spec.js` — Aujourd'hui as a one-card-at-a-time story rather
   than a list behind a button: pending promises sorted by urgency (regression
   coverage for a real bug — it used to take `pendingToday()` as-is, so it
