@@ -79,7 +79,7 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
 
   await page.evaluate(() => { location.hash = '#/today'; });
   await page.waitForTimeout(600);
-  step('today screen:', (await page.locator('.empty-rich h3, .ritual-intro h3').first().textContent()).trim());
+  step('today screen:', (await page.locator('.empty-rich h3').first().textContent()).trim());
 
   await page.evaluate(() => { location.hash = '#/history'; });
   await page.waitForSelector('.cal-legend');

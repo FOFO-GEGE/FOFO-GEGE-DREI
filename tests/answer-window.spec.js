@@ -73,12 +73,11 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('window_minutes stored:', stored, '(expect 30)');
   if (stored !== 30) throw new Error(`expected window_minutes 30, got ${stored}`);
 
-  // Answerable right now even though the reminder is 2h out.
+  // Answerable right now even though the reminder is 2h out — tapping the
+  // tab drops straight into the story on this card, no button needed.
   await page.click('[data-nav="/today"]');
-  await page.waitForSelector('#start-ritual');
-  await page.click('#start-ritual');
-  await page.waitForSelector('.ritual-title', { timeout: 4000 });
-  step('ritual opened the promise even though its reminder time is 2h out: OK');
+  await page.waitForSelector('.ritual-card .pcard', { timeout: 4000 });
+  step('story opened the promise even though its reminder time is 2h out: OK');
   await page.click('.ritual-btn.is-yes');
   await page.waitForTimeout(700);
   step('answered "Fait" ahead of the reminder time with no error');

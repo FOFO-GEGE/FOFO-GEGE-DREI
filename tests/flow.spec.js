@@ -42,15 +42,17 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('.deck-grid .pcard');
   step('card shows the pending time colour while unanswered:', await page.locator('.deck-grid .pcard.time-pending').count(), '(expect 1)');
 
-  // --- Countdown on Today ---
+  // --- Aujourd'hui is the story directly now: no intro screen, no button —
+  // tapping the tab drops straight onto the pending card, full screen ---
   await page.click('[data-nav="/today"]');
-  await page.waitForSelector('.ritual-intro');
-  step('heading:', (await page.locator('.ritual-intro h3').textContent()).trim());
-  step('deadline banner:', (await page.locator('.deadline-banner').textContent()).trim().replace(/\s+/g, ' '));
-  step('per-item countdown:', await page.locator('.rp-left').first().textContent());
+  await page.waitForSelector('.ritual-card .pcard');
+  step('story opens directly on the real card:', (await page.locator('.ritual-card .pcard-name').textContent()).trim());
+  step('countdown chip:', (await page.locator('.countdown').textContent()).trim().replace(/\s+/g, ' '));
+  step('no chrome (tabbar) while in the story:', await page.locator('.tabbar').count(), '(expect 0)');
 
-  // --- Calendar shows "pas encore fait" ---
-  await page.click('[data-nav="/history"]');
+  // --- Calendar shows "pas encore fait" --- (no tabbar while in the story —
+  // jump the hash directly, same as leaving via the X would)
+  await page.evaluate(() => { location.hash = '#/history'; });
   await page.waitForSelector('.cal-legend');
   step('legend entries:', (await page.locator('.cal-legend-item').allTextContents()).join(' | '));
   step('created cells:', await page.locator('.cal-day.created').count());
@@ -69,11 +71,10 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('.modal-backdrop', { state: 'detached' });
   step('reminder_time unchanged:', await page.evaluate(() => store.habits[0].reminder_time));
 
-  // --- Ritual: countdown chip, then failure -> reason picker ---
+  // --- Ritual: countdown chip, then failure -> reason picker --- (tapping
+  // the tab drops straight into the story — no button to start it)
   await page.click('[data-nav="/today"]');
-  await page.waitForSelector('.ritual-intro');
-  await page.click('#start-ritual');
-  await page.waitForSelector('.ritual-title');
+  await page.waitForSelector('.ritual-card .pcard');
   step('ritual countdown chip:', (await page.locator('.countdown').textContent()).trim().replace(/\s+/g, ' '));
 
   await page.click('.ritual-btn.is-no');

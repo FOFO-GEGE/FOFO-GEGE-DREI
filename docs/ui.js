@@ -120,22 +120,28 @@ function habitCard(habit, stats, opts = {}) {
 
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
 
-  // The body's one colour that moves purely with the clock: green while
-  // today's range has barely started, sliding to red as its deadline nears,
-  // gold once answered "fait" (until midnight resets it). Independent of
+  // The body's one colour that moves purely with the clock: three flat,
+  // vivid bands — green / amber / red — as today's range goes by, never a
+  // fade between them, so a glance tells you exactly where a card stands.
+  // Gold once answered "fait" (until midnight resets it). Independent of
   // vitality — a dying card that was just answered still reads green/gold,
-  // and this never feeds back into vitalityOf.
+  // and this never feeds back into vitalityOf. Bands are read off the
+  // original schedule only (see rangeElapsed) — a snooze buys real time to
+  // act but never turns a card back a band, it only postpones the deadline.
   const todayCheck = opts.dead ? null : todaysCheck(habit);
   const timeState = todayCheck?.status === 'created' ? 'pending'
     : todayCheck?.status === 'success' ? 'done'
     : 'none';
-  const elapsed = timeState === 'pending' ? rangeElapsed(habit, todayCheck.date) : 0;
-  const timeHue = Math.round(140 * (1 - elapsed));
+  let timeBand = '';
+  if (timeState === 'pending') {
+    const elapsed = rangeElapsed(habit, todayCheck.date);
+    timeBand = elapsed < 1 / 3 ? 'green' : elapsed < 2 / 3 ? 'amber' : 'red';
+  }
   const fracSeed = habit.id ? hashSeed(habit.id) : 40;
 
   return `
-    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} time-${timeState} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
-      style="--time-hue:${timeHue}; --frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
+    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
+      style="--frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">
