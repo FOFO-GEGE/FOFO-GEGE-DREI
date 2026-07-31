@@ -45,7 +45,12 @@ and has to be verified against the project itself.
   (blocked while today's check is still live, allowed once it isn't, and —
   for a promise whose old deadline had already passed with no check ever
   opened for today — pushing the reminder time later immediately opens one
-  rather than waiting for the next unrelated reconcile), the
+  rather than waiting for the next unrelated reconcile; the same edit also
+  reopens a check that already carries a verdict against the old clock, a
+  declared "pas fait" or a silent expiry alike, as long as the corrected
+  time genuinely still lies ahead — a mistake you're actively fixing
+  doesn't get to leave a frozen verdict standing — but does nothing if the
+  new time still lies behind the clock), the
   cemetery (abandon, toggle open **and** closed — checked via computed style,
   not just the `hidden` attribute), the clickable calendar day sheet, and the
   card's time-remaining colour (`.pcard` carries `.time-pending` while
@@ -147,7 +152,12 @@ and has to be verified against the project itself.
   the day after creation reads "Jours 2", never "Jours 1" — while asserting
   `tierFor()`/`ageTierFor()`/`nextTier()` keep comparing the untouched raw
   value, so the display conversion never retunes when a tier is actually
-  reached.
+  reached. A one-day promise's day count is always exactly 1, so its
+  finished/dead blurb (card and detail screen alike) drops the count
+  entirely rather than stating it — "Terminée."/"Abandonnée." instead of
+  "Terminée après 1 jour." — while a multi-day promise keeps its count as
+  before; covered both as a pure `habitCard()` case and end to end on the
+  detail screen's own sentence.
 
 - `history.spec.js` — Historique as the app's single account of the past.
   Ma semaine used to hold the real analysis behind a button on Mon miroir

@@ -235,9 +235,13 @@ function habitCard(habit, stats, opts = {}) {
       <div class="pcard-tier">
         <span class="pcard-tier-name">${tier.label}</span>
         <span class="pcard-tier-blurb">${opts.dead
-          ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`
+          // A one-day promise's day count is always exactly 1 -- stating it
+          // says nothing "Abandonnée"/"Terminée" alone doesn't already say.
+          ? (isOneDayHabit(habit)
+            ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'}.`
+            : `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`)
           : opts.finished
-          ? `Terminée après ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`
+          ? (isOneDayHabit(habit) ? 'Terminée.' : `Terminée après ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`)
           : tier.blurb}</span>
       </div>
       ${!retired && habit.resurrected
