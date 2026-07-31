@@ -236,6 +236,11 @@ function screenToday() {
 
     const { check, habit } = items[index];
     const pending = check.status === 'created';
+    // A day already failed — declared "pas fait" or silently ignored — can
+    // still be decaled: it reopens in the same stroke, today only, without
+    // touching the habit's real reminder_time. A kept or frozen day is a
+    // real decision, not a mistake to walk back, so it gets nothing here.
+    const decalable = pending || check.status === 'failed';
     todayCursorHabitId = habit.id;
     const stats = habitStats(habit);
 
@@ -270,8 +275,8 @@ function screenToday() {
         ${canFreeze(habit)
           ? `<button class="ritual-freeze" data-verdict="frozen">${icon('snow', 16)} Geler ce jour (1× ce mois)</button>`
           : ''}
-        <button class="ritual-snooze-btn" id="ritual-snooze">Décaler à plus tard aujourd'hui</button>
         ` : ''}
+        ${decalable ? `<button class="ritual-snooze-btn" id="ritual-snooze">Décaler à plus tard aujourd'hui</button>` : ''}
         <div class="ritual-nav">
           <button class="btn-secondary" id="ritual-prev" ${index === 0 ? 'disabled' : ''}>${icon('left', 18)} Précédent</button>
           <button class="btn-secondary" id="ritual-next">Suivant ${icon('right', 18)}</button>
@@ -286,7 +291,7 @@ function screenToday() {
     host.querySelector('#ritual-prev').addEventListener('click', () => { index--; mount(host); });
     host.querySelector('#ritual-next').addEventListener('click', () => { index++; mount(host); });
 
-    if (!pending) return;
+    if (!decalable) return;
 
     const snoozeBtn = host.querySelector('#ritual-snooze');
     if (snoozeBtn) {

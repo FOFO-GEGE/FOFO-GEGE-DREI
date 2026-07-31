@@ -637,19 +637,30 @@ function freezeCheck(checkId) {
 // untouched, so tomorrow opens at the normal hour regardless of how much
 // today's copy was pushed back. Doesn't touch the card's colour either (see
 // rangeElapsed) — buying time is not the same as looking on track.
+//
+// Also works on a check that already carries today's verdict as a failure —
+// a declared "pas fait" or a silent expiry — reopening it in the same
+// stroke. Only for today's own failure, and only today: the corrected time
+// never becomes tomorrow's schedule, unlike updateReminderTime(), which is
+// the permanent fix living on the detail screen. A kept or frozen day is a
+// real decision, not a mistake to undo, so those are left alone.
 function snoozeCheck(checkId, minutesOrEod) {
   const check = store.checks.find(c => c.id === checkId);
-  if (!check || check.status !== 'created') return { error: 'not-found' };
+  if (!check || (check.status !== 'created' && check.status !== 'failed')) return { error: 'not-found' };
+  const wasFailed = check.status === 'failed';
+  if (wasFailed) {
+    check.status = 'created';
+    check.expired = false;
+    check.reason = null;
+  }
   const [y, mo, d] = check.date.split('-').map(Number);
   const endOfDay = new Date(y, mo - 1, d, 23, 59, 59, 999).getTime();
   const target = minutesOrEod === 'eod' ? endOfDay : Math.min(Date.now() + minutesOrEod * 60000, endOfDay);
   check.snoozed_until = new Date(target).toISOString();
   check.snooze_count = (check.snooze_count || 0) + 1;
-  enqueue({
-    table: 'habit_checks',
-    values: { snoozed_until: check.snoozed_until, snooze_count: check.snooze_count },
-    matchId: checkId,
-  });
+  const values = { snoozed_until: check.snoozed_until, snooze_count: check.snooze_count };
+  if (wasFailed) Object.assign(values, { status: 'created', expired: false, reason: null });
+  enqueue({ table: 'habit_checks', values, matchId: checkId });
   return { ok: true };
 }
 
