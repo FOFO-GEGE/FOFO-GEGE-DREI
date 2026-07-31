@@ -47,6 +47,35 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (pureCases.keptHasDeadClass || pureCases.brokenHasDeadClass) throw new Error('a finished card must never carry the dead card\'s is-dead class');
   if (!pureCases.brokenHasTimeBroken || !pureCases.brokenHasBrokenLabel) throw new Error('a mostly-broken finished card should read time-broken / pcard-xp-broken');
 
+  // --- The "Jours" stat (and every "jour(s)" sentence built from the same
+  // number) is a calendar day count, not the raw elapsed-time value tier
+  // gating runs on -- a promise still alive the day after it was created has
+  // existed on 2 calendar days, and must never read "Jours 1". daysCount()
+  // is the single conversion point; tierFor()/ageTierFor()/nextTier() must
+  // keep taking the raw, un-shifted value untouched. ---
+  const dayCountCases = await page.evaluate(() => {
+    const habit = { id: 'd', title: 'Day', theme: 'sport', start_date: '2024-01-01' };
+    const created = habitCard(habit, { rate: null, daysAlive: 0, streak: 0, best: 0, kept: 0, total: 0, vitality: 100, vitalityState: 'pleine' }, { compact: true });
+    const nextDay = habitCard(habit, { rate: 100, daysAlive: 1, streak: 1, best: 1, kept: 1, total: 1, vitality: 100, vitalityState: 'pleine' }, { compact: true });
+    const dead = habitCard(habit, { rate: 0, daysAlive: 1, streak: 0, best: 0, kept: 0, total: 1, vitalityState: 'pleine' },
+      { compact: true, dead: true, deathCause: 'neglect', deathDate: '02/01' });
+    const jours = html => Number((html.match(/<span class="k">Jours<\/span><span class="v">(\d+)<\/span>/) || [])[1]);
+    return {
+      createdDayNumber: jours(created),
+      nextDayNumber: jours(nextDay),
+      deadBlurbHasTwo: dead.includes('après 2 jours'),
+      rawDaysCount: daysCount(0),
+      rawDaysCountNext: daysCount(1),
+      tierIgnoresConversion: tierFor(7, 100).id, // must still flip at the raw threshold, not at 8
+    };
+  });
+  step('day count display:', JSON.stringify(dayCountCases));
+  if (dayCountCases.createdDayNumber !== 1) throw new Error(`a promise created today should read "Jours 1", got ${dayCountCases.createdDayNumber}`);
+  if (dayCountCases.nextDayNumber !== 2) throw new Error(`a promise still alive the next day should read "Jours 2", got ${dayCountCases.nextDayNumber}`);
+  if (!dayCountCases.deadBlurbHasTwo) throw new Error('a dead card\'s "après N jours" blurb should use the same +1 calendar count');
+  if (dayCountCases.rawDaysCount !== 1 || dayCountCases.rawDaysCountNext !== 2) throw new Error('daysCount() should just add 1');
+  if (dayCountCases.tierIgnoresConversion !== 'eclose') throw new Error('tier gating must keep comparing the raw elapsed-day value, unaffected by the display conversion');
+
   // --- No card, of any size or lifespan, announces the next tier any more.
   // The countdown used to turn the badge into a due date, and on a promise
   // whose own end date ruled that tier out it announced one the schedule

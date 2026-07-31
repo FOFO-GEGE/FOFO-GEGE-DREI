@@ -89,6 +89,15 @@ function todayStr() { return dateStr(new Date()); }
 function currentMonthKey() { return todayStr().slice(0, 7); }
 function dowOf(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getDay(); }
 function daysBetween(a, b) { return Math.round((new Date(b) - new Date(a)) / 86400000); }
+// stats.daysAlive itself stays a 0-indexed elapsed-time count (0 on the day
+// of creation) -- every tier threshold (TIERS' minDays) is calibrated against
+// that raw value, and changing its meaning would silently retune every tier
+// in the game. What was wrong is only ever the *display*: a promise created
+// today and still alive tomorrow has now existed on 2 calendar days, and
+// showing "Jours 1" read as a bug, not as "1 full day has elapsed" -- which
+// is true but not what a day *count* means to someone reading it. This is
+// the single point every user-facing "Jours"/"jour(s)" render passes through.
+function daysCount(daysAlive) { return daysAlive + 1; }
 // Local-date arithmetic, deliberately not UTC: a day here is the user's day,
 // the same one isDue() and todayStr() reason about.
 function shiftDays(iso, n) { const [y, m, d] = iso.split('-').map(Number); return dateStr(new Date(y, m - 1, d + n)); }
@@ -679,6 +688,14 @@ async function updateReminderTime(habitId, hhmm) {
   if (liveToday) return { error: 'live' };
   habit.reminder_time = hhmm;
   enqueue({ table: 'habits', values: { reminder_time: hhmm }, matchId: habitId });
+  // A habit due today can reach this point with no check yet for today — its
+  // old deadline had already passed before the app was ever opened today, so
+  // reconcileToday()'s usual pass never opened one. Pushing the reminder time
+  // later can put that deadline back in the future, and without calling
+  // reconcileToday() again here, nothing would ever notice: it only runs on
+  // its own schedule, not in reaction to an edit. Without this, "Aujourd'hui"
+  // would keep showing nothing to answer until the next natural reconcile.
+  await reconcileToday();
   return { ok: true };
 }
 

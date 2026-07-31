@@ -1207,11 +1207,11 @@ function screenHabitDetail(habitId) {
       ${reasonLine}
       ${expiredLine}
       <div class="stat-line">${dead
-        ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, ${
+        ? `Elle a tenu <strong>${daysCount(stats.daysAlive)}</strong> jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}, ${
             habit.death_cause === 'neglect' ? "jusqu'à ce que tu la laisses mourir." : "jusqu'à son abandon."}`
         : finished
-        ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, jusqu'à sa fin prévue.`
-        : `Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.`}</div>
+        ? `Elle a tenu <strong>${daysCount(stats.daysAlive)}</strong> jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}, jusqu'à sa fin prévue.`
+        : `Elle survit depuis <strong>${daysCount(stats.daysAlive)}</strong> jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`}</div>
       ${!retired && stats.vitalityState !== 'pleine' ? `<div class="stat-line">${VITALITY_LINE[stats.vitalityState]}</div>` : ''}
     </div>
     ${retired ? '' : `
@@ -1248,7 +1248,7 @@ function openResurrectSheet(habit) {
     <div class="modal-sheet" role="dialog" aria-modal="true">
       <h3>Ressusciter « ${esc(habit.title)} » ?</h3>
       <p>Elle repart à <strong>Œuf</strong>, série et palier remis à zéro. Elle portera une cicatrice
-         permanente — <strong>${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''} avant sa mort</strong> —
+         permanente — <strong>${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''} avant sa mort</strong> —
          visible sur la carte pour toujours. Une seule résurrection, à vie : si elle meurt à nouveau, c'est définitif.</p>
       <button class="btn-primary" id="sheet-resurrect">La ressusciter</button>
       <button class="btn-ghost" id="sheet-cancel">Laisser reposer</button>
@@ -1309,7 +1309,7 @@ function openDeleteSheet(habit) {
   backdrop.innerHTML = `
     <div class="modal-sheet" role="dialog" aria-modal="true">
       <h3>Abandonner « ${esc(habit.title)} » ?</h3>
-      <p>Ta carte <strong>${tier.label}</strong> de ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''} disparaîtra. Cette action est définitive.</p>
+      <p>Ta carte <strong>${tier.label}</strong> de ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''} disparaîtra. Cette action est définitive.</p>
       <button class="btn-primary" id="sheet-keep">Garder ma carte</button>
       <button class="btn-ghost-danger" id="sheet-delete">Abandonner quand même</button>
     </div>`;
