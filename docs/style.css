@@ -634,7 +634,7 @@ button:disabled { opacity: .4; cursor: default; }
 
 /* Free browsing, but only across cards already decided — nothing pending
    ever gets a "skip without deciding" shortcut beyond the snooze above. */
-.ritual-nav { display: flex; gap: 10px; width: 100%; }
+.ritual-nav { display: flex; gap: 10px; width: 100%; margin-top: 14px; }
 .ritual-nav button { flex: 1; }
 
 .ritual-veil {

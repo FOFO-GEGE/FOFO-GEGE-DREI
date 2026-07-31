@@ -765,15 +765,17 @@ function buildInsights() {
   return out;
 }
 
-// The direct confrontation: what has actually been broken lately, plainly
-// listed rather than folded into a single percentage. Includes cemetery
+// The direct confrontation: what has actually been broken this week, plainly
+// listed rather than folded into a single percentage. Lives on Ma semaine
+// rather than Mon miroir — the deck is the collection, this is the ledger.
+// Scoped to the same rolling 7-day window as weekSummary(). Includes cemetery
 // habits — abandoning a promise doesn't erase what it recorded on the way out.
-function recentFailures(limit = 8) {
+function weekFailures() {
+  const today = todayStr();
   const byId = new Map([...store.habits, ...store.cemetery].map(h => [h.id, h]));
   return store.checks
-    .filter(c => c.status === 'failed' && byId.has(c.habit_id))
+    .filter(c => c.status === 'failed' && byId.has(c.habit_id) && daysBetween(c.date, today) < 7)
     .sort((a, b) => (a.date < b.date ? 1 : -1))
-    .slice(0, limit)
     .map(c => ({ check: c, habit: byId.get(c.habit_id) }));
 }
 
