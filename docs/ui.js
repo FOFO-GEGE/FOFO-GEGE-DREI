@@ -235,20 +235,20 @@ function habitCard(habit, stats, opts = {}) {
       <div class="pcard-tier">
         <span class="pcard-tier-name">${tier.label}</span>
         <span class="pcard-tier-blurb">${opts.dead
-          ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.`
+          ? `${opts.deathCause === 'neglect' ? 'Laissée mourir' : 'Abandonnée'} après ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`
           : opts.finished
-          ? `Terminée après ${stats.daysAlive} jour${stats.daysAlive > 1 ? 's' : ''}.`
+          ? `Terminée après ${daysCount(stats.daysAlive)} jour${daysCount(stats.daysAlive) > 1 ? 's' : ''}.`
           : tier.blurb}</span>
       </div>
       ${!retired && habit.resurrected
         // Permanent and never removed — a revived card must never be able to
         // look like one that was never buried.
-        ? `<span class="pcard-scar">${icon('cross', 10)} Revenue après ${habit.pre_death_days} jour${habit.pre_death_days > 1 ? 's' : ''} d'abandon</span>`
+        ? `<span class="pcard-scar">${icon('cross', 10)} Revenue après ${daysCount(habit.pre_death_days)} jour${daysCount(habit.pre_death_days) > 1 ? 's' : ''} d'abandon</span>`
         : ''}
 
       <div class="pcard-stats">
         <div class="pcard-stat"><span class="k">Taux</span><span class="v">${rateText}</span></div>
-        <div class="pcard-stat"><span class="k">Jours</span><span class="v">${stats.daysAlive}</span></div>
+        <div class="pcard-stat"><span class="k">Jours</span><span class="v">${daysCount(stats.daysAlive)}</span></div>
       </div>
 
       ${footerContent ? `<footer class="pcard-foot">${footerContent}</footer>` : ''}

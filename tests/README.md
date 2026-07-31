@@ -42,7 +42,10 @@ and has to be verified against the project itself.
   on-screen center barely moves while its rotation passes 90° — springs back
   flat on release, and a real turn doesn't also count as the tap that closes
   it, while a plain tap or a backdrop tap does), reminder-time editing
-  (blocked while today's check is still live, allowed once it isn't), the
+  (blocked while today's check is still live, allowed once it isn't, and —
+  for a promise whose old deadline had already passed with no check ever
+  opened for today — pushing the reminder time later immediately opens one
+  rather than waiting for the next unrelated reconcile), the
   cemetery (abandon, toggle open **and** closed — checked via computed style,
   not just the `hidden` attribute), the clickable calendar day sheet, and the
   card's time-remaining colour (`.pcard` carries `.time-pending` while
@@ -138,7 +141,13 @@ and has to be verified against the project itself.
   to say). `lastWeekOf()` itself is covered directly for both the
   mid-window "before" boundary and the rest/scheduled split. Also asserts
   what left the card for good: SÉRIE, the Record stat, and the theme word
-  under the icon.
+  under the icon. Also covers the "Jours" stat (and every "jour(s)"
+  sentence built from the same figure) as a calendar day count rather than
+  the raw elapsed-time value tier gating runs on — a promise still alive
+  the day after creation reads "Jours 2", never "Jours 1" — while asserting
+  `tierFor()`/`ageTierFor()`/`nextTier()` keep comparing the untouched raw
+  value, so the display conversion never retunes when a tier is actually
+  reached.
 
 - `history.spec.js` — Historique as the app's single account of the past.
   Ma semaine used to hold the real analysis behind a button on Mon miroir

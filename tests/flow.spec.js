@@ -234,6 +234,56 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('reminder time after edit:', await page.evaluate(id => store.habits.find(h => h.id === id).reminder_time, restHabitId));
   step('reminder row now shows:', (await page.locator('.reminder-row').textContent()).trim().replace(/\s+/g, ' '));
 
+  // --- Pushing the reminder time later, past a deadline that had already
+  // gone by with no check for today, should immediately open one -- "Aujourd'hui"
+  // must not wait for the next unrelated reconcile to notice the new schedule ---
+  await page.click('[data-nav="/new"]');
+  await page.waitForSelector('.creator');
+  await page.click('[data-theme="argent"]');
+  await page.waitForSelector('.suggestions');
+  await page.locator('.suggestion').first().click();
+  await page.click('#nh-next');
+  await page.waitForSelector('.day-picker');
+  await page.click('#nh-next'); // every day selected, including today
+  await page.waitForSelector('#nh-time');
+  await page.click('#nh-next');
+  await page.waitForFunction(() => location.hash === '#/home');
+  const missedTodayId = await page.evaluate(() => store.habits[store.habits.length - 1].id);
+
+  const before = await page.evaluate(async id => {
+    const h = store.habits.find(x => x.id === id);
+    // Simulate a reminder time whose window already closed earlier today,
+    // before the app was ever opened -- reconcileToday()'s own check-opening
+    // pass requires now <= deadline, so no check row exists for today at all.
+    h.reminder_time = '00:01';
+    h.window_minutes = 1;
+    store.checks = store.checks.filter(c => c.habit_id !== id);
+    await reconcileToday();
+    const today = new Date().toISOString().slice(0, 10);
+    return { hasCheckToday: store.checks.some(c => c.habit_id === id && c.date === today) };
+  }, missedTodayId);
+  step('before editing the time, no check exists for today:', before.hasCheckToday, '(expect false)');
+  if (before.hasCheckToday) throw new Error('setup invalid: a check already exists for today');
+
+  await page.evaluate(id => { location.hash = '#/habit/' + id; }, missedTodayId);
+  await page.waitForSelector('#edit-reminder-time');
+  await page.click('#edit-reminder-time');
+  await page.waitForSelector('.modal-sheet');
+  // Any time still ahead of the clock -- window_minutes is generous enough
+  // (default on creation) that this deadline is comfortably in the future.
+  const future = new Date(Date.now() + 5 * 60000);
+  await page.fill('#rt-time', `${String(future.getHours()).padStart(2, '0')}:${String(future.getMinutes()).padStart(2, '0')}`);
+  await page.click('#rt-save');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached', timeout: 3000 });
+
+  const after = await page.evaluate(id => {
+    const today = new Date().toISOString().slice(0, 10);
+    const check = store.checks.find(c => c.habit_id === id && c.date === today);
+    return { status: check?.status };
+  }, missedTodayId);
+  step('after pushing the reminder later, a check now exists for today:', JSON.stringify(after), '(expect status "created")');
+  if (after.status !== 'created') throw new Error(`editing the reminder time to later should immediately open today's check, got: ${JSON.stringify(after)}`);
+
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();
 })().catch(e => { console.error('TEST_FAILED', e.message); process.exit(1); });
