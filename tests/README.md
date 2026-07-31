@@ -128,12 +128,31 @@ and has to be verified against the project itself.
   distinct from an actual miss, each with its own mark (a small dot, and no
   mark at all, respectively) — conflating them used to make a promise
   created mid-week, or one that only runs some days, read as failing every
-  day it was never asked to run. The strip is withheld entirely below two
+  day it was never asked to run. A fifth state, 'unknown', covers a past due
+  day with no check row at all (the app was never open to open one) and is
+  deliberately not drawn as 'pending', which would claim a past day is still
+  answerable. `dayState()` is the one function both the card strip and
+  Historique's timeline derive from, so the two can never disagree about
+  what a square means. The strip is withheld entirely below two
   actually-scheduled days in the window (a one-day promise has nothing here
   to say). `lastWeekOf()` itself is covered directly for both the
   mid-window "before" boundary and the rest/scheduled split. Also asserts
   what left the card for good: SÉRIE, the Record stat, and the theme word
   under the icon.
+
+- `history.spec.js` — Historique as the app's single account of the past.
+  Ma semaine used to hold the real analysis behind a button on Mon miroir
+  while this tab showed only a calendar; the analysis moved here and the
+  fixed rolling week it was locked to became one preset among four. Covers
+  the fold itself (`screenWeek()` gone, the old `/week` route redirecting,
+  the "Voir ma semaine" button removed from Mon miroir) and then the two
+  controls that govern everything below them: the period (7 j / 30 j /
+  3 mois / Tout — a wider window really does pick up older failures and
+  more kept days) and the scope (one promise, or every one). Also asserts
+  that a declared "pas fait" and a silence are tallied apart rather than
+  hidden inside one number, and that the per-card timeline appears only
+  under a single-card scope, in the same vocabulary as the card's own
+  seven-day strip.
 
 ## Not covered here
 

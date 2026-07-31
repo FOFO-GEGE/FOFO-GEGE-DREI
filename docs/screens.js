@@ -556,7 +556,6 @@ function screenHome() {
         </div>
       </div>
       <p class="score-phrase">${esc(phrase)}</p>
-      <button class="btn-week" data-nav="/week">Voir ma semaine ${icon('right', 15)}</button>
     </div>
     ${insightBlock}
     ${cards}
@@ -630,61 +629,6 @@ function celebrateTierUps(host) {
   crossed.forEach(({ habit, tier }, i) => {
     setTimeout(() => toast(`« ${habit.title} » devient ${tier.label}.`), i * 2600);
   });
-}
-
-// ---------- Ma semaine ----------
-
-function screenWeek() {
-  const w = weekSummary();
-  const delta = w.rate !== null && w.prevRate !== null ? w.rate - w.prevRate : null;
-
-  const verdict = w.rate === null
-    ? 'Pas encore de données cette semaine.'
-    : delta === null ? `Tu as tenu ${w.rate}% cette semaine.`
-    : delta > 0 ? `Tu remontes : ${w.rate}%, soit ${delta} points de plus que la semaine dernière.`
-    : delta < 0 ? `Tu descends : ${w.rate}%, soit ${Math.abs(delta)} points de moins que la semaine dernière.`
-    : `Tu stagnes : ${w.rate}%, exactement comme la semaine dernière.`;
-
-  const failures = weekFailures();
-  const failuresBlock = failures.length
-    ? `<section class="failures">
-         <h4 class="section-label">Ce que tu n'as pas tenu</h4>
-         ${failures.map(({ check, habit }) => `
-           <div class="failure-row ${habit.active === false ? 'is-buried' : ''}" data-habit="${habit.id}">
-             ${icon(themeById(habit.theme).id, 18)}
-             <div class="failure-body">
-               <span class="failure-title">${esc(habit.title)}</span>
-               <span class="failure-meta">${formatDay(check.date)}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</span>
-             </div>
-           </div>`).join('')}
-       </section>`
-    : '';
-
-  const html = `
-    <div class="week-hero">
-      <div class="week-rate">${w.rate === null ? '—' : '0%'}</div>
-      <p class="week-verdict">${esc(verdict)}</p>
-    </div>
-    <div class="card week-grid">
-      <div class="week-cell is-kept"><span class="n">0</span><span class="l">tenues</span></div>
-      <div class="week-cell is-broken"><span class="n">0</span><span class="l">rompues</span></div>
-      <div class="week-cell is-frozen"><span class="n">0</span><span class="l">gelées</span></div>
-      <div class="week-cell is-missed"><span class="n">0</span><span class="l">sans réponse</span></div>
-    </div>
-    ${failuresBlock}`;
-
-  return {
-    title: 'Ma semaine', tab: '/home', chrome: true, back: '/home', html,
-    wire(host) {
-      if (w.rate !== null) fxCountUp(host.querySelector('.week-rate'), w.rate, { suffix: '%', duration: 1000 });
-      const cells = host.querySelectorAll('.week-cell .n');
-      [w.kept, w.broken, w.frozen, w.missed].forEach((v, i) => {
-        setTimeout(() => fxCountUp(cells[i], v, { duration: 620 }), 120 + i * 110);
-      });
-      host.querySelectorAll('.failure-row[data-habit]').forEach(el =>
-        el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
-    },
-  };
 }
 
 // ---------- Nouvelle promesse (parcours guidé) ----------
@@ -891,9 +835,17 @@ function buildMonthGrid(year, month) {
   return cells;
 }
 
+// Historique is now the app's single account of the past. Ma semaine used to
+// hold the real analysis behind a button on Mon miroir while this tab showed
+// only a calendar — the analysis is here now, and the fixed rolling week it
+// was locked to became one preset among four. Two controls govern everything
+// below them: which period, and whether we're looking at every promise or
+// one. Mon miroir keeps the present (the deck), Historique keeps the past.
 function screenHistory() {
   const now = new Date();
   let year = now.getFullYear(), month = now.getMonth();
+  let periodDays = 7;
+  let scopeId = null;
 
   // Worst outcome wins, so a day never looks better than it was. 'created'
   // ranks above 'failed' because it is still answerable, not yet a verdict.
@@ -907,12 +859,105 @@ function screenHistory() {
     return 'empty';
   }
 
+  function periodLabel() {
+    return (PERIODS.find(p => p.days === periodDays) || PERIODS[0]).label;
+  }
+
+  function verdictFor(s) {
+    const delta = s.rate !== null && s.prevRate !== null ? s.rate - s.prevRate : null;
+    if (s.rate === null) return 'Rien de décidé sur cette période.';
+    if (delta === null) return `Tu as tenu ${s.rate}% sur cette période.`;
+    if (delta > 0) return `Tu remontes : ${s.rate}%, soit ${delta} points de plus que la période précédente.`;
+    if (delta < 0) return `Tu descends : ${s.rate}%, soit ${Math.abs(delta)} points de moins que la période précédente.`;
+    return `Tu stagnes : ${s.rate}%, exactement comme la période précédente.`;
+  }
+
   function mount(host) {
+    const all = [...store.habits, ...store.cemetery];
+    // A scope pointing at a promise that no longer exists would silently
+    // filter everything out — fall back to "toutes" rather than show a
+    // blank screen with no explanation.
+    if (scopeId !== null && !all.some(h => h.id === scopeId)) scopeId = null;
+
+    const summary = periodSummary(periodDays, scopeId);
+    const failures = periodFailures(periodDays, scopeId);
+    const insights = buildInsights(periodDays, scopeId);
+    const scoped = periodChecks(periodDays, scopeId);
+
     const byDate = {};
-    store.checks.forEach(c => { (byDate[c.date] ||= []).push(c.status); });
+    scoped.forEach(c => { (byDate[c.date] ||= []).push(c.status); });
+
+    const controls = `
+      <div class="hist-controls">
+        <div class="seg" role="group" aria-label="Période">
+          ${PERIODS.map(p => `
+            <button type="button" class="seg-btn ${p.days === periodDays ? 'is-on' : ''}"
+              data-period="${p.days === null ? 'all' : p.days}">${p.label}</button>`).join('')}
+        </div>
+        ${all.length ? `
+        <label class="hist-scope">
+          <span class="hist-scope-label">Portée</span>
+          <select id="hist-scope">
+            <option value="">Toutes les cartes</option>
+            ${all.map(h => `<option value="${h.id}" ${h.id === scopeId ? 'selected' : ''}>${esc(h.title)}${h.active === false ? ' (archivée)' : ''}</option>`).join('')}
+          </select>
+        </label>` : ''}
+      </div>`;
+
+    const timelineBlock = scopeId === null ? '' : (() => {
+      const days = periodTimeline(periodDays, scopeId);
+      if (!days.length) return '';
+      return `
+        <section class="hist-timeline">
+          <h4 class="section-label">Jour par jour</h4>
+          <div class="timeline-strip">
+            ${days.map(d => `<span class="timeline-day is-${d.state}" title="${formatDay(d.date)}"></span>`).join('')}
+          </div>
+          <div class="timeline-ends">
+            <span>${formatDay(days[0].date)}</span>
+            <span>${formatDay(days[days.length - 1].date)}</span>
+          </div>
+        </section>`;
+    })();
+
+    const insightBlock = insights.length
+      ? `<section class="insights">
+           <h4 class="section-label">Ce que le miroir voit</h4>
+           ${insights.slice(0, 3).map(i => `<div class="insight is-${i.tone}">${icon('spark', 16)}<span>${esc(i.text)}</span></div>`).join('')}
+         </section>`
+      : '';
+
+    const failuresBlock = failures.length
+      ? `<section class="failures">
+           <h4 class="section-label">Ce que tu n'as pas tenu <span class="deck-count">${failures.length}</span></h4>
+           ${failures.map(({ check, habit }) => `
+             <div class="failure-row ${habit.active === false ? 'is-buried' : ''}" data-habit="${habit.id}">
+               ${icon(themeById(habit.theme).id, 18)}
+               <div class="failure-body">
+                 <span class="failure-title">${esc(habit.title)}</span>
+                 <span class="failure-meta">${formatDay(check.date)}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</span>
+               </div>
+             </div>`).join('')}
+         </section>`
+      : '';
 
     host.innerHTML = `
+      ${controls}
+      <div class="hist-hero">
+        <div class="hist-rate">${summary.rate === null ? '—' : '0%'}</div>
+        <p class="hist-verdict">${esc(verdictFor(summary))}</p>
+      </div>
+      <div class="card week-grid">
+        <div class="week-cell is-kept"><span class="n">0</span><span class="l">tenues</span></div>
+        <div class="week-cell is-broken"><span class="n">0</span><span class="l">rompues</span></div>
+        <div class="week-cell is-frozen"><span class="n">0</span><span class="l">gelées</span></div>
+        <div class="week-cell is-missed"><span class="n">0</span><span class="l">sans réponse</span></div>
+      </div>
+      ${timelineBlock}
+      ${insightBlock}
+      ${failuresBlock}
       <div class="cal-wrap">
+        <h4 class="section-label">Calendrier</h4>
         <div class="month-nav">
           <button id="cal-prev" aria-label="Mois précédent">${icon('left', 20)}</button>
           <span class="label">${MONTH_LABELS[month]} ${year}</span>
@@ -931,6 +976,27 @@ function screenHistory() {
         </div>
       </div>`;
 
+    if (summary.rate !== null) fxCountUp(host.querySelector('.hist-rate'), summary.rate, { suffix: '%', duration: 900 });
+    const cells = host.querySelectorAll('.week-cell .n');
+    [summary.kept, summary.broken, summary.frozen, summary.missed].forEach((v, i) => {
+      setTimeout(() => fxCountUp(cells[i], v, { duration: 560 }), 100 + i * 90);
+    });
+
+    host.querySelectorAll('.seg-btn[data-period]').forEach(el =>
+      el.addEventListener('click', () => {
+        const raw = el.dataset.period;
+        periodDays = raw === 'all' ? null : Number(raw);
+        mount(host);
+      }));
+
+    const scopeSel = host.querySelector('#hist-scope');
+    if (scopeSel) {
+      scopeSel.addEventListener('change', () => {
+        scopeId = scopeSel.value || null;
+        mount(host);
+      });
+    }
+
     host.querySelector('#cal-prev').addEventListener('click', () => {
       if (month === 0) { month = 11; year--; } else month--;
       mount(host);
@@ -941,6 +1007,8 @@ function screenHistory() {
     });
     host.querySelectorAll('.cal-day[data-date]').forEach(el =>
       el.addEventListener('click', () => openDaySheet(el.dataset.date)));
+    host.querySelectorAll('.failure-row[data-habit]').forEach(el =>
+      el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
   }
 
   return { title: 'Historique', tab: '/history', chrome: true, mount };

@@ -81,7 +81,10 @@ function resolveScreen() {
     case '/home': return screenHome();
     case '/new': return screenNewHabit();
     case '/history': return screenHistory();
-    case '/week': return screenWeek();
+    // Ma semaine was folded into Historique, which now covers every period
+    // rather than a fixed rolling week. Old links land there instead of
+    // dead-ending on the default screen.
+    case '/week': return { redirect: '/history' };
     default: return { redirect: '/today' };
   }
 }
