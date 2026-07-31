@@ -92,6 +92,16 @@ function tierIndex(id) {
   return i === -1 ? 0 : i;
 }
 
+// A deterministic hash of the habit's id, turned into a 0-359 seed. Used
+// only to vary the fracture angle so two cards side by side don't crack
+// along the same line — never as a colour. Hue used to do this job before
+// hue was reserved for the time-remaining channel.
+function hashSeed(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h % 360;
+}
+
 // stats: { rate, daysAlive, streak, best, kept, total }
 // opts.dead: the habit was abandoned — greyed out, frozen at its tier of
 // death instead of showing progress toward a next one that will never come.
@@ -110,9 +120,22 @@ function habitCard(habit, stats, opts = {}) {
 
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
 
+  // The body's one colour that moves purely with the clock: green while
+  // today's range has barely started, sliding to red as its deadline nears,
+  // gold once answered "fait" (until midnight resets it). Independent of
+  // vitality — a dying card that was just answered still reads green/gold,
+  // and this never feeds back into vitalityOf.
+  const todayCheck = opts.dead ? null : todaysCheck(habit);
+  const timeState = todayCheck?.status === 'created' ? 'pending'
+    : todayCheck?.status === 'success' ? 'done'
+    : 'none';
+  const elapsed = timeState === 'pending' ? rangeElapsed(habit, todayCheck.date) : 0;
+  const timeHue = Math.round(140 * (1 - elapsed));
+  const fracSeed = habit.id ? hashSeed(habit.id) : 40;
+
   return `
-    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''} ${opts.awake ? 'is-awake' : ''}"
-      style="--card-hue:${theme.hue}; --vitality:${stats.vitality ?? 100}"
+    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : (stats.vitalityState || 'pleine')} time-${timeState} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
+      style="--time-hue:${timeHue}; --frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">

@@ -154,9 +154,12 @@ function toast(text) {
 const notified = new Set();
 
 // The first ping states the promise; the later ones state the clock. Tone
-// hardens for habits the user breaks more often than not.
-function reminderBody(habit, left) {
-  if (left <= 15) return `Il te reste ${left} min pour répondre. Sans réponse, « ${habit.title} » est compté comme non tenu.`;
+// hardens for habits the user breaks more often than not. Thresholds scale
+// with the habit's own range rather than a fixed hour, since that range is
+// now configurable per promise.
+function reminderBody(habit, left, windowMin) {
+  const soon = Math.max(5, Math.round(windowMin / 4));
+  if (left <= soon) return `Il te reste ${left} min pour répondre. Sans réponse, « ${habit.title} » est compté comme non tenu.`;
 
   const own = store.checks
     .filter(c => c.habit_id === habit.id && (c.status === 'success' || c.status === 'failed'))
@@ -164,21 +167,21 @@ function reminderBody(habit, left) {
     .slice(0, 7);
   const fails = own.filter(c => c.status === 'failed').length;
 
-  if (left <= 45) return `« ${habit.title} » — ${left} min avant que ce soit non tenu.`;
+  if (left <= Math.round(windowMin * 3 / 4)) return `« ${habit.title} » — ${left} min avant que ce soit non tenu.`;
 
   if (own.length >= 2 && fails / own.length >= 0.5) {
     const variants = [
       `Tu as rompu ${fails} fois sur tes ${own.length} derniers jours. Encore aujourd'hui ?`,
       `« ${habit.title} » : tu abandonnes plus souvent que tu ne tiens.`,
-      `Ta promesse « ${habit.title} » part en fumée. Une heure pour répondre.`,
+      `Ta promesse « ${habit.title} » part en fumée. ${left} min pour répondre.`,
     ];
     return variants[Math.floor(Math.random() * variants.length)];
   }
-  return `Tu avais promis : ${habit.title}. Une heure pour répondre.`;
+  return `Tu avais promis : ${habit.title}. ${left} min pour répondre.`;
 }
 
-// Fallback path only: fires at the reminder time, then every 15 minutes until
-// the hour is up, but exclusively while a tab is alive. Once a push
+// Fallback path only: fires at the reminder time, then at quarters of the
+// habit's own range, but exclusively while a tab is alive. Once a push
 // subscription exists the server owns the pings and this would double them.
 function checkReminders() {
   if (store.pushActive) return;
@@ -191,21 +194,22 @@ function checkReminders() {
     const habit = store.habits.find(h => h.id === c.habit_id);
     if (!habit) continue;
 
+    const windowMin = habit.window_minutes || 60;
     const opensAt = windowOpensAt(habit, today).getTime();
     const elapsed = Math.floor((now - opensAt) / 60000);
-    if (elapsed < 0 || elapsed >= ANSWER_WINDOW_MIN) continue;
+    if (elapsed < 0 || elapsed >= windowMin) continue;
 
     // Which of the four slots we are in, and only once per slot.
-    const step = REMINDER_STEPS.filter(s => elapsed >= s).pop();
+    const step = reminderStepsFor(windowMin).filter(s => elapsed >= s).pop();
     if (step === undefined) continue;
     const key = `${habit.id}-${today}-${step}`;
     if (notified.has(key)) continue;
     notified.add(key);
 
-    const left = ANSWER_WINDOW_MIN - step;
+    const left = windowMin - step;
     navigator.serviceWorker?.ready.then(reg =>
-      reg.showNotification(left <= 15 ? 'Dernière chance' : 'Promesse du jour', {
-        body: reminderBody(habit, left),
+      reg.showNotification(left <= Math.max(5, Math.round(windowMin / 4)) ? 'Dernière chance' : 'Promesse du jour', {
+        body: reminderBody(habit, left, windowMin),
         icon: 'icons/icon-192.png',
         tag: `${habit.id}-${today}`,
         renotify: true,
@@ -265,14 +269,17 @@ sb.auth.onAuthStateChange((event, session) => {
 
 setInterval(() => { if (store.user && store.loaded) checkReminders(); }, 30000);
 
-// The answer window is a live clock: re-render the pending screen every 30s so
-// the countdown ticks, and expire checks the moment their hour runs out.
+// The answer range is a live clock: re-render every 30s so the countdown
+// ticks, the card's time colour keeps sliding toward red, and checks expire
+// the moment their range runs out. Mon miroir is included alongside
+// Aujourd'hui so the deck's cards keep changing colour even while just
+// sitting there, unopened — the same "lives without a tap" idea as vitality.
 setInterval(async () => {
   if (!store.user || !store.loaded) return;
   const hadPending = pendingToday().length;
   const expiring = store.checks.some(c => c.status === 'created' && isExpired(c));
   if (expiring) await reconcileToday();
-  const onLiveScreen = location.hash === '#/today' || location.hash === '';
+  const onLiveScreen = location.hash === '#/today' || location.hash === '' || location.hash === '#/home';
   if (expiring || (onLiveScreen && hadPending)) renderRoute();
 }, 30000);
 

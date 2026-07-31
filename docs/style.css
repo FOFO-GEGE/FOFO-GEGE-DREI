@@ -111,7 +111,6 @@ body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  padding-top: env(safe-area-inset-top);
   overflow-x: hidden;
 }
 
@@ -163,7 +162,8 @@ button:disabled { opacity: .4; cursor: default; }
 
 .topbar {
   display: flex; align-items: center; gap: 10px;
-  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 20;
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: blur(16px);
@@ -225,20 +225,41 @@ button:disabled { opacity: .4; cursor: default; }
 .pcard {
   position: relative; overflow: hidden;
   border-radius: 20px; padding: 14px;
-  background:
-    linear-gradient(160deg,
-      hsl(var(--card-hue) 60% var(--card-tint-l) / var(--card-tint-a)),
-      var(--surface) 48%),
-    var(--surface);
-  border: 1px solid hsl(var(--card-hue) 60% 55% / .4);
+  background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12;
   display: flex; flex-direction: column; gap: 10px;
   transform: perspective(760px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
-  transition: transform .28s cubic-bezier(.16,1,.3,1), box-shadow .28s ease;
+  transition: transform .28s cubic-bezier(.16,1,.3,1), box-shadow .28s ease,
+    background 1s linear, border-color 1s linear;
   transform-style: preserve-3d;
 }
 .pcard[data-habit] { cursor: pointer; }
 .pcard[data-habit]:active { transform: perspective(760px) scale(.97); }
+
+/* ---------- Time-remaining body colour ----------
+   The one channel that answers "how much time is left today" — green while
+   the promise's own range has barely started, sliding to red as its deadline
+   nears, gold once answered "fait" and held there until midnight. Pure
+   render-time state (--time-hue, computed in habitCard()): never written
+   back, and gone the instant the range is settled one way or the other. This
+   is the only colour a card carries — theme shows through its icon alone. */
+.pcard.time-pending {
+  background:
+    linear-gradient(160deg,
+      hsl(var(--time-hue) 65% var(--card-tint-l) / var(--card-tint-a)),
+      var(--surface) 48%),
+    var(--surface);
+  border-color: hsl(var(--time-hue) 55% 55% / .4);
+}
+.pcard.time-done {
+  background:
+    linear-gradient(160deg,
+      color-mix(in srgb, var(--success) 42%, transparent),
+      var(--surface) 48%),
+    var(--surface);
+  border-color: color-mix(in srgb, var(--success) 55%, transparent);
+}
 
 /* Holographic film — every card has it, rarity turns up the gain. */
 .pcard-sheen {
@@ -280,25 +301,26 @@ button:disabled { opacity: .4; cursor: default; }
 
 /* Fractures, confined to the art panel and never drawn across the text — a
    card this small and this dense cannot survive a crack over its own numbers.
-   The angles are derived from --card-hue so that two cards side by side do
-   not fracture identically and read as one continuous line across the grid. */
+   The angles are derived from --frac-seed, a hash of the habit's id, so that
+   two cards side by side do not fracture identically and read as one
+   continuous line across the grid. */
 .pcard.vit-malade .pcard-art::after,
 .pcard.vit-mourante .pcard-art::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   background:
-    linear-gradient(calc(var(--card-hue) * 1deg + 28deg),
+    linear-gradient(calc(var(--frac-seed, 40) * 1deg + 28deg),
       transparent 47.7%, #000 48%, transparent 48.3%),
-    linear-gradient(calc(var(--card-hue) * -1deg + 96deg),
+    linear-gradient(calc(var(--frac-seed, 40) * -1deg + 96deg),
       transparent 63.7%, #000 64%, transparent 64.3%);
   opacity: .2;
 }
 .pcard.vit-mourante .pcard-art::after {
   background:
-    linear-gradient(calc(var(--card-hue) * 1deg + 28deg),
+    linear-gradient(calc(var(--frac-seed, 40) * 1deg + 28deg),
       transparent 47.7%, #000 48%, transparent 48.3%),
-    linear-gradient(calc(var(--card-hue) * -1deg + 96deg),
+    linear-gradient(calc(var(--frac-seed, 40) * -1deg + 96deg),
       transparent 63.7%, #000 64%, transparent 64.3%),
-    linear-gradient(calc(var(--card-hue) * 1deg + 132deg),
+    linear-gradient(calc(var(--frac-seed, 40) * 1deg + 132deg),
       transparent 33.7%, #000 34%, transparent 34.3%);
   opacity: .4;
 }
@@ -317,23 +339,6 @@ button:disabled { opacity: .4; cursor: default; }
   color: var(--text-dim); font-weight: 700; line-height: 1.3; text-wrap: balance;
 }
 
-/* ---------- Daily rhythm ----------
-   The one thing that changes a card purely with the clock, with no tap from
-   the user: while its own one-hour answer window is open, it visibly stirs;
-   the rest of the day it is still, whether or not it has already been
-   answered. Driven through `outline` rather than box-shadow/filter/transform
-   — those are already owned by the focus view's depth shadow, the vitality
-   ladder's desaturation, and the pointer-tilt effect, and animating any of
-   them here would silently override those while the card is awake. */
-.pcard.is-awake { outline: 2px solid transparent; animation: pcard-wake 2.6s ease-in-out infinite; }
-@keyframes pcard-wake {
-  0%, 100% { outline-color: hsl(var(--card-hue) 85% 62% / 0); outline-offset: 0px; }
-  50% { outline-color: hsl(var(--card-hue) 85% 62% / .6); outline-offset: 4px; }
-}
-/* Comes after the vitality ladder's own sheen rules so a card that is both
-   struggling and awake reads the tension of its open window first. */
-.pcard.is-awake .pcard-sheen { opacity: calc(var(--holo-a) * 1.7); }
-
 .pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .pcard-name {
   font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 700;
@@ -348,21 +353,19 @@ button:disabled { opacity: .4; cursor: default; }
 
 .pcard-art {
   position: relative; border-radius: 14px; padding: 18px 10px 10px;
-  background:
-    radial-gradient(70% 90% at 50% 0%, hsl(var(--card-hue) 70% 55% / .3), transparent 70%),
-    hsl(var(--card-hue) 55% 50% / .14);
-  border: 1px solid hsl(var(--card-hue) 60% 60% / .26);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   display: flex; flex-direction: column; align-items: center; gap: 6px;
-  color: hsl(var(--card-hue) 85% var(--card-ink-l));
+  color: var(--text);
   overflow: hidden;
 }
 .pcard-art-icon {
   position: relative;
-  filter: drop-shadow(0 0 12px hsl(var(--card-hue) 85% 60% / .55));
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--text) 25%, transparent));
 }
 .pcard-art-glow {
   position: absolute; inset: -40% -10% auto; height: 150%;
-  background: radial-gradient(ellipse at 50% 0%, hsl(var(--card-hue) 90% 62% / .4), transparent 66%);
+  background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--text) 10%, transparent), transparent 66%);
 }
 .pcard-theme {
   position: relative; font-size: 9.5px; font-weight: 800;
@@ -552,46 +555,6 @@ button:disabled { opacity: .4; cursor: default; }
   font-family: 'Fraunces', Georgia, serif; font-size: 21px; font-weight: 600; margin-top: 6px;
 }
 .ritual-intro > p { color: var(--text-dim); font-size: 13.5px; margin-top: 8px; }
-/* ---------- Story tray ----------
-   A horizontal row of tappable rings above the detailed list — the quick,
-   recognisable entry point; the list below stays for the actual detail
-   (title, exact countdown) a glance at a ring can't carry. */
-.story-tray {
-  display: flex; gap: 14px; margin: 20px 0 4px; padding: 2px 2px 6px;
-  overflow-x: auto; scrollbar-width: none;
-}
-.story-tray::-webkit-scrollbar { display: none; }
-.story-bubble {
-  flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 6px;
-}
-.story-bubble[disabled] { cursor: default; }
-.story-bubble:not([disabled]) { cursor: pointer; }
-.story-bubble:not([disabled]):active .story-ring { transform: scale(.94); }
-.story-ring {
-  width: 60px; height: 60px; border-radius: 50%; padding: 2.5px;
-  display: flex; transition: transform .15s ease;
-  background: var(--border);
-}
-.story-ring.is-open { background: linear-gradient(135deg, var(--success), var(--hot)); }
-.story-ring.is-urgent {
-  background: linear-gradient(135deg, var(--danger), var(--hot));
-  animation: story-pulse 1.8s ease-in-out infinite;
-}
-.story-ring.is-waiting { background: var(--border); opacity: .6; }
-@keyframes story-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 45%, transparent); }
-  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--danger) 0%, transparent); }
-}
-.story-avatar {
-  width: 100%; height: 100%; border-radius: 50%; border: 2.5px solid var(--bg);
-  background: hsl(var(--card-hue) 55% 50% / .16);
-  display: flex; align-items: center; justify-content: center;
-  color: hsl(var(--card-hue) 85% var(--card-ink-l));
-}
-.story-label {
-  font-size: 10.5px; font-weight: 600; color: var(--text-dim);
-  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
 
 .ritual-preview { list-style: none; margin: 24px 0; display: flex; flex-direction: column; gap: 8px; }
 .ritual-preview li {
@@ -627,14 +590,12 @@ button:disabled { opacity: .4; cursor: default; }
 
 .ritual-body { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .ritual-theme {
-  color: hsl(var(--card-hue, 40) 85% 65%); margin-bottom: 24px;
+  color: var(--text); margin-bottom: 24px;
   width: 116px; height: 116px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background:
-    radial-gradient(circle, hsl(var(--card-hue, 40) 80% 55% / .28), transparent 70%),
-    hsl(var(--card-hue, 40) 60% 50% / .12);
-  border: 1px solid hsl(var(--card-hue, 40) 70% 60% / .34);
-  box-shadow: 0 0 44px hsl(var(--card-hue, 40) 80% 55% / .3);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--text) 8%, transparent);
   animation: aura-pulse 3s ease-in-out infinite;
 }
 .ritual-prompt {
@@ -797,6 +758,15 @@ button:disabled { opacity: .4; cursor: default; }
   border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 600;
 }
 .day-chip.selected {
+  background: var(--success); color: var(--success-ink); border-color: transparent;
+  box-shadow: 0 0 16px color-mix(in srgb, var(--success) 55%, transparent);
+}
+.duration-grid { display: flex; gap: 6px; flex-wrap: wrap; }
+.duration-chip {
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim);
+  border-radius: 999px; padding: 9px 14px; font-size: 13px; font-weight: 600;
+}
+.duration-chip.selected {
   background: var(--success); color: var(--success-ink); border-color: transparent;
   box-shadow: 0 0 16px color-mix(in srgb, var(--success) 55%, transparent);
 }
@@ -1004,7 +974,6 @@ button:disabled { opacity: .4; cursor: default; }
   background: color-mix(in srgb, var(--danger) 10%, transparent);
   animation: pulse-urgent 1.6s ease-in-out infinite;
 }
-.countdown.is-waiting { color: var(--text-dim); }
 @keyframes pulse-urgent {
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--danger) 40%, transparent); }
   50% { box-shadow: 0 0 0 7px transparent; }
@@ -1029,7 +998,6 @@ button:disabled { opacity: .4; cursor: default; }
   background: color-mix(in srgb, var(--success) 14%, transparent);
 }
 .rp-left.is-urgent { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
-.rp-left.is-waiting { color: var(--text-dim); background: var(--surface-2); }
 
 .cal-day.created {
   background: var(--surface-2); color: var(--text);

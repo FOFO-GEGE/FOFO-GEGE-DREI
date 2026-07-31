@@ -104,12 +104,13 @@ function isDue(habit, iso) {
 }
 
 // ---------- The answer window ----------
-// A promise opens at its reminder time and stays answerable for one hour.
-// Silence past that hour is not missing data — it counts as broken, and it
-// breaks the streak exactly like an explicit "pas fait" would.
-
-const ANSWER_WINDOW_MIN = 60;
-const REMINDER_STEPS = [0, 15, 30, 45];
+// A promise's range starts at its reminder time and runs for its own
+// configurable window_minutes. Silence past that point is not missing data —
+// it counts as broken, and it breaks the streak exactly like an explicit
+// "pas fait" would. Unlike the range's end, its start no longer gates
+// *replying* — a promise can be answered the moment it exists, any time
+// before its deadline. The reminder time now only decides when notifications
+// fire and where the card's countdown colour starts.
 
 function windowOpensAt(habit, iso) {
   const [hh, mm] = (habit.reminder_time || '20:00').slice(0, 5).split(':').map(Number);
@@ -118,26 +119,19 @@ function windowOpensAt(habit, iso) {
 }
 
 function deadlineFor(habit, iso) {
-  return new Date(windowOpensAt(habit, iso).getTime() + ANSWER_WINDOW_MIN * 60000);
+  const minutes = habit.window_minutes || 60;
+  return new Date(windowOpensAt(habit, iso).getTime() + minutes * 60000);
 }
 
 function habitOf(check) {
   return store.habits.find(h => h.id === check.habit_id);
 }
 
-// null when the habit is gone; negative once the hour has run out.
+// null when the habit is gone; negative once the range has run out.
 function minutesLeft(check) {
   const habit = habitOf(check);
   if (!habit) return null;
   return Math.ceil((deadlineFor(habit, check.date).getTime() - Date.now()) / 60000);
-}
-
-function windowIsOpen(check) {
-  const habit = habitOf(check);
-  if (!habit) return false;
-  const now = Date.now();
-  return now >= windowOpensAt(habit, check.date).getTime()
-      && now <= deadlineFor(habit, check.date).getTime();
 }
 
 function isExpired(check) {
@@ -146,15 +140,41 @@ function isExpired(check) {
   return Date.now() > deadlineFor(habit, check.date).getTime();
 }
 
-// Whether a card should read as "awake" right now — its answer window is
-// open and still undecided. This is the one bit of state that changes a
-// card's appearance purely with the clock: no tap, no reply, nothing the
-// user did. The rest of the day it is dormant, whether or not it has
-// already been answered.
-function isAwake(habit) {
+// A 15-minute range makes "15 min left" meaningless as an urgency signal if
+// that is the entire range — urgency is a quarter of the range, floored at
+// 5 minutes so it never rounds away to nothing on a very short one.
+function isUrgent(check) {
+  const habit = habitOf(check);
+  if (!habit) return false;
+  const threshold = Math.max(5, Math.round((habit.window_minutes || 60) / 4));
+  return minutesLeft(check) <= threshold;
+}
+
+// The fraction of today's range already elapsed, purely for the card's
+// colour — clamped to [0,1]. 0 before the range opens (answering early must
+// never read as urgent, since it's no longer gated), 1 once the deadline has
+// passed. Never stored, never read by vitalityOf: the fold that decides
+// whether a card is alive only ever looks at finished days.
+function rangeElapsed(habit, iso) {
+  const opens = windowOpensAt(habit, iso).getTime();
+  const ends = deadlineFor(habit, iso).getTime();
+  if (ends <= opens) return 1;
+  const now = Date.now();
+  if (now <= opens) return 0;
+  if (now >= ends) return 1;
+  return (now - opens) / (ends - opens);
+}
+
+// Reminder pings land at quarters of the range rather than fixed 15-minute
+// steps, so a 4-hour range doesn't fall silent after the first hour and a
+// 15-minute one doesn't try to cram four pings where there's no room.
+function reminderStepsFor(windowMinutes) {
+  return [0, Math.floor(windowMinutes / 4), Math.floor(windowMinutes / 2), Math.floor(windowMinutes * 3 / 4)];
+}
+
+function todaysCheck(habit) {
   const today = todayStr();
-  const check = store.checks.find(c => c.habit_id === habit.id && c.date === today && c.status === 'created');
-  return !!check && windowIsOpen(check);
+  return store.checks.find(c => c.habit_id === habit.id && c.date === today);
 }
 
 // ---------- Loading ----------
@@ -326,28 +346,14 @@ function pendingToday() {
 }
 
 // The single ordering shared by Aujourd'hui's preview list and the ritual
-// queue: windows open right now come first, soonest deadline first; windows
-// still waiting for their hour follow, soonest to open first. Never sorted
-// by creation date — a promise whose hour hasn't started cannot be missed by
-// definition, so putting it ahead of one about to expire was a real bug that
-// could cost the user a promise they never had a chance to protect in time.
+// queue: soonest deadline first. Never sorted by creation date — a promise
+// created later but due sooner must still come first, which is exactly the
+// bug this fixed: taking pendingToday() as-is could block on a promise not
+// due for hours while another was about to expire behind it. Every pending
+// promise is answerable the instant it exists, so there is no other state
+// left to sort by.
 function pendingSorted() {
-  return [...pendingToday()].sort((a, b) => {
-    const aOpen = windowIsOpen(a.check), bOpen = windowIsOpen(b.check);
-    if (aOpen !== bOpen) return aOpen ? -1 : 1;
-    if (aOpen) return minutesLeft(a.check) - minutesLeft(b.check);
-    const ta = (a.habit.reminder_time || '20:00');
-    const tb = (b.habit.reminder_time || '20:00');
-    return ta < tb ? -1 : ta > tb ? 1 : 0;
-  });
-}
-
-// What the ritual is actually allowed to put in front of you: only promises
-// whose window is open. One that hasn't opened yet cannot be answered, so it
-// stays visible on Aujourd'hui but out of the forced sequence until its hour
-// comes — at which point the next reconcile picks it up.
-function pendingOpenSorted() {
-  return pendingSorted().filter(p => windowIsOpen(p.check));
+  return [...pendingToday()].sort((a, b) => minutesLeft(a.check) - minutesLeft(b.check));
 }
 
 function todayTally() {
@@ -511,6 +517,7 @@ async function createHabit(fields) {
     frequency: fields.frequency,
     target_days: fields.target_days,
     reminder_time: fields.reminder_time,
+    window_minutes: fields.window_minutes || 60,
     start_date: todayStr(),
     end_date: fields.end_date || null,
     active: true,
