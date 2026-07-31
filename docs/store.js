@@ -473,11 +473,18 @@ function rupturesBeforeDeath(v) {
   return Math.max(1, Math.ceil(v / -VITALITY_DELTA.failedSilent));
 }
 
-// The card's own short memory: the last seven days, oldest first. Its states
-// are deliberately the calendar's, so one day reads the same wherever you
-// meet it — and it is what stops today from being a blank square with no
-// account of how it got there. 'none' covers both a rest day and a day
-// before the promise existed; neither is a failure and neither is a win.
+// The card's own short memory: a sliding seven-day window, oldest first,
+// today always last. Its states are deliberately the calendar's, so one day
+// reads the same wherever you meet it — and it is what stops today from
+// being a blank square with no account of how it got there.
+//
+// Three states share what used to be a single flat "none", because they are
+// not the same fact: a day the promise wasn't due (weekdays not chosen, e.g.
+// a 2x/week habit) is a rest day, not a miss — 'rest'. A day before the
+// promise even existed is not part of its story at all — 'before', rendered
+// with no mark whatsoever, never as a grey failure. Conflating the two used
+// to make a habit created mid-week, or one that only runs twice a week, read
+// as having failed every day it was never asked to run.
 function lastWeekOf(habit, n = 7) {
   const asOf = habit.active === false && habit.deleted_at ? habit.deleted_at.slice(0, 10) : todayStr();
   const byDate = new Map(store.checks.filter(c => c.habit_id === habit.id).map(c => [c.date, c]));
@@ -485,14 +492,16 @@ function lastWeekOf(habit, n = 7) {
   for (let i = n - 1; i >= 0; i--) {
     const date = shiftDays(asOf, -i);
     const c = byDate.get(date);
-    out.push({
-      date,
-      state: !c ? 'none'
-        : c.status === 'success' ? 'kept'
-        : c.status === 'failed' ? 'broken'
-        : c.status === 'frozen' ? 'frozen'
-        : 'pending',
-    });
+    const dow = dowOf(date);
+    let state;
+    if (date < habit.start_date) state = 'before';
+    else if (!habit.target_days.includes(dow)) state = 'rest';
+    else if (!c) state = 'pending';
+    else if (c.status === 'success') state = 'kept';
+    else if (c.status === 'failed') state = 'broken';
+    else if (c.status === 'frozen') state = 'frozen';
+    else state = 'pending';
+    out.push({ date, dow, state });
   }
   return out;
 }

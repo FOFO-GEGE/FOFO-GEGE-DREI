@@ -109,12 +109,20 @@ and has to be verified against the project itself.
   Also covers the card's own composition after the redesign: no card of any
   size or lifespan announces the next tier any more (no countdown, no
   progress bar, no "se termine avant" — the badge changing is the whole
-  event), and the seven-day strip that replaced it renders one mark per day
-  in the calendar's own vocabulary (kept / broken / frozen / pending /
-  none), is omitted on a retired card along with the vitality gauge, and is
-  omitted entirely when the caller passed no week at all (a preview). Also
-  asserts what left the card for good: SÉRIE, the Record stat, and the
-  theme word under the icon.
+  event), and the seven-day strip that replaced it. The strip is a sliding
+  window (today always the last column) with a day-initial row underneath
+  and today's initial marked — without it a gap in the strip could only be
+  counted, never located on the calendar. 'rest' (not scheduled that day —
+  a 2x/week promise, say) and 'before' (the promise didn't exist yet) are
+  distinct from an actual miss, each with its own mark (a small dot, and no
+  mark at all, respectively) — conflating them used to make a promise
+  created mid-week, or one that only runs some days, read as failing every
+  day it was never asked to run. The strip is withheld entirely below two
+  actually-scheduled days in the window (a one-day promise has nothing here
+  to say). `lastWeekOf()` itself is covered directly for both the
+  mid-window "before" boundary and the rest/scheduled split. Also asserts
+  what left the card for good: SÉRIE, the Record stat, and the theme word
+  under the icon.
 
 ## Not covered here
 
