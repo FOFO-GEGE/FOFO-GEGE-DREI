@@ -644,14 +644,23 @@ function freezeCheck(checkId) {
 // never becomes tomorrow's schedule, unlike updateReminderTime(), which is
 // the permanent fix living on the detail screen. A kept or frozen day is a
 // real decision, not a mistake to undo, so those are left alone.
+//
+// A reopened check gets exactly one do-over. Without `reopened` marking that
+// it already had its second chance, a check that fails again after being
+// reopened would simply offer "Décaler" again — an unlimited way to dodge
+// the vitality cost of a real failure, forever. Once reopened, whatever
+// verdict lands next (kept, gelé, or failed once more) is the one that
+// stands.
 function snoozeCheck(checkId, minutesOrEod) {
   const check = store.checks.find(c => c.id === checkId);
   if (!check || (check.status !== 'created' && check.status !== 'failed')) return { error: 'not-found' };
+  if (check.status === 'failed' && check.reopened) return { error: 'already-reopened' };
   const wasFailed = check.status === 'failed';
   if (wasFailed) {
     check.status = 'created';
     check.expired = false;
     check.reason = null;
+    check.reopened = true;
   }
   const [y, mo, d] = check.date.split('-').map(Number);
   const endOfDay = new Date(y, mo - 1, d, 23, 59, 59, 999).getTime();
@@ -659,7 +668,7 @@ function snoozeCheck(checkId, minutesOrEod) {
   check.snoozed_until = new Date(target).toISOString();
   check.snooze_count = (check.snooze_count || 0) + 1;
   const values = { snoozed_until: check.snoozed_until, snooze_count: check.snooze_count };
-  if (wasFailed) Object.assign(values, { status: 'created', expired: false, reason: null });
+  if (wasFailed) Object.assign(values, { status: 'created', expired: false, reason: null, reopened: true });
   enqueue({ table: 'habit_checks', values, matchId: checkId });
   return { ok: true };
 }

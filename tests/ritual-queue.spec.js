@@ -214,9 +214,17 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
     }
     return false;
   };
+  // A fresh visit always starts the story from its first card -- resetting
+  // the module's own remembered cursor is what makes that deterministic;
+  // otherwise it re-enters wherever a previous pass last left off (which,
+  // after Décaler advances past the target card, could be *behind* it,
+  // somewhere findCard's forward-only search would never reach).
+  const freshVisitToday = async () => {
+    await page.evaluate(() => { todayCursorHabitId = null; location.hash = '#/today'; renderRoute(); });
+    await page.waitForSelector('.ritual-card .pcard');
+  };
 
-  await page.evaluate(() => { location.hash = '#/today'; renderRoute(); });
-  await page.waitForSelector('.ritual-card .pcard');
+  await freshVisitToday();
 
   step('locating the declared-failure card:', await findCard('Reopen declared') ? 'found' : 'NOT FOUND');
   const decalerVisibleOnFailed = await page.locator('#ritual-snooze').count();
@@ -243,10 +251,31 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (reopened.reminder_time !== scenario.declaredReminder) {
     throw new Error(`Décaler must never touch the habit's own reminder_time, got ${reopened.reminder_time}, expected ${scenario.declaredReminder}`);
   }
+  if (reopened.check.reopened !== true) throw new Error('a reopened check should be marked so, or it could be reopened again forever');
+
+  // --- One do-over only: if the reopened check fails again, the verdict
+  // stands and "Décaler" is gone for good on that day's own row ---
+  await page.evaluate(async id => {
+    const today = new Date().toISOString().slice(0, 10);
+    const check = store.checks.find(c => c.habit_id === id && c.date === today);
+    check.status = 'failed';
+    check.expired = true; // a silent second miss this time, doesn't matter which
+  }, scenario.declaredId);
+  await freshVisitToday();
+  step('locating the twice-failed card:', await findCard('Reopen declared') ? 'found' : 'NOT FOUND');
+  const decalerAfterSecondFailure = await page.locator('#ritual-snooze').count();
+  step('"Décaler" after a second failure:', decalerAfterSecondFailure, '(expect 0)');
+  if (decalerAfterSecondFailure !== 0) throw new Error('a check that already had its one reopen must not offer "Décaler" again after failing a second time');
+  const attempt = await page.evaluate(async id => {
+    const today = new Date().toISOString().slice(0, 10);
+    const check = store.checks.find(c => c.habit_id === id && c.date === today);
+    return snoozeCheck(check.id, 30);
+  }, scenario.declaredId);
+  step('snoozeCheck() itself refuses a second reopen:', JSON.stringify(attempt));
+  if (attempt.ok) throw new Error('snoozeCheck() must refuse to reopen an already-reopened, twice-failed check even called directly');
 
   // A kept (or frozen) day is a real decision, not a mistake — no "Décaler".
-  await page.evaluate(() => { location.hash = '#/today'; renderRoute(); });
-  await page.waitForSelector('.ritual-card .pcard');
+  await freshVisitToday();
   step('locating the kept card:', await findCard('Reopen kept') ? 'found' : 'NOT FOUND');
   const decalerVisibleOnKept = await page.locator('#ritual-snooze').count();
   step('"Décaler" visible on a kept day:', decalerVisibleOnKept, '(expect 0)');

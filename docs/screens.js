@@ -240,7 +240,10 @@ function screenToday() {
     // still be decaled: it reopens in the same stroke, today only, without
     // touching the habit's real reminder_time. A kept or frozen day is a
     // real decision, not a mistake to walk back, so it gets nothing here.
-    const decalable = pending || check.status === 'failed';
+    // One do-over only: once a reopened check fails again, `reopened` is
+    // already set and "Décaler" is gone for good on that day's own row —
+    // otherwise a repeat failure would just offer another reopen, forever.
+    const decalable = pending || (check.status === 'failed' && !check.reopened);
     todayCursorHabitId = habit.id;
     const stats = habitStats(habit);
 
