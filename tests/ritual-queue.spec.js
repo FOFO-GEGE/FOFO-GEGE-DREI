@@ -82,6 +82,24 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   const firstTitle = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
   step('first card:', firstTitle, '(expect the sport habit — 5 min left, most urgent)');
 
+  // --- Free navigation: moving to the next card never forces a verdict on
+  // this one, pending or not ---
+  const firstHabitId = await page.evaluate(() => document.querySelector('.ritual-card .pcard').dataset.habit);
+  await page.click('#ritual-next');
+  await page.waitForTimeout(150);
+  const secondTitle = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
+  step('"Suivant" moved on without deciding:', firstTitle, '->', secondTitle);
+  if (secondTitle === firstTitle) throw new Error('"Suivant" did not move to a different card');
+  const stillPending = await page.evaluate(id => store.checks.find(c => c.habit_id === id).status, firstHabitId);
+  step('the card skipped past is still undecided:', stillPending, '(expect "created")');
+  if (stillPending !== 'created') throw new Error('moving to the next card must not record a verdict on the one left behind');
+
+  await page.click('#ritual-prev');
+  await page.waitForTimeout(150);
+  const backToFirstPending = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
+  step('"Précédent" returned to it:', backToFirstPending === firstTitle ? 'OK' : 'FAIL');
+  if (backToFirstPending !== firstTitle) throw new Error('"Précédent" did not return to the previous card');
+
   // --- "Décaler": pushes the real deadline later today, never re-greens ---
   const bandBefore = await page.evaluate(() => document.querySelector('.ritual-card .pcard').className);
   step('band before snoozing (expect band-red, 5 min left of a 60-min range):', bandBefore);

@@ -185,6 +185,8 @@ function pushBanner() {
 // answered they fall in behind, still visible, as a plain record of the day
 // rather than something still owed. No numeric "3 restantes" anywhere — the
 // segmented bar at top says where you are without turning it into a score.
+// Précédent/Suivant move between cards freely, on every card, pending or
+// not — deciding one is never a condition for looking at the next.
 
 // Remembers position across a forced re-render (the background reconcile
 // can force one if something expires while you're mid-story) so a 30s tick
@@ -269,21 +271,22 @@ function screenToday() {
           ? `<button class="ritual-freeze" data-verdict="frozen">${icon('snow', 16)} Geler ce jour (1× ce mois)</button>`
           : ''}
         <button class="ritual-snooze-btn" id="ritual-snooze">Décaler à plus tard aujourd'hui</button>
-        ` : `
+        ` : ''}
         <div class="ritual-nav">
           <button class="btn-secondary" id="ritual-prev" ${index === 0 ? 'disabled' : ''}>${icon('left', 18)} Précédent</button>
-          <button class="btn-primary" id="ritual-next">Suivant ${icon('right', 18)}</button>
-        </div>`}
+          <button class="btn-secondary" id="ritual-next">Suivant ${icon('right', 18)}</button>
+        </div>
       </div>`;
 
     host.querySelector('#ritual-quit').addEventListener('click', () => { todayCursorHabitId = null; navigate('/home'); });
 
-    if (!pending) {
-      const prev = host.querySelector('#ritual-prev');
-      if (prev) prev.addEventListener('click', () => { index--; mount(host); });
-      host.querySelector('#ritual-next').addEventListener('click', () => { index++; mount(host); });
-      return;
-    }
+    // Moving on to another card is always free — deciding this one is never
+    // a condition for it, pending or not. Only the actions below actually
+    // resolve (or snooze) this specific check.
+    host.querySelector('#ritual-prev').addEventListener('click', () => { index--; mount(host); });
+    host.querySelector('#ritual-next').addEventListener('click', () => { index++; mount(host); });
+
+    if (!pending) return;
 
     const snoozeBtn = host.querySelector('#ritual-snooze');
     if (snoozeBtn) {
@@ -493,21 +496,6 @@ function screenHome() {
          <button class="btn-primary" data-nav="/new">Créer ma première carte</button>
        </div>`;
 
-  const failures = recentFailures(6);
-  const failuresBlock = failures.length
-    ? `<section class="failures">
-         <h4 class="section-label">Ce que tu n'as pas tenu</h4>
-         ${failures.map(({ check, habit }) => `
-           <div class="failure-row ${habit.active === false ? 'is-buried' : ''}" data-habit="${habit.id}">
-             ${icon(themeById(habit.theme).id, 18)}
-             <div class="failure-body">
-               <span class="failure-title">${esc(habit.title)}</span>
-               <span class="failure-meta">${formatDay(check.date)}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</span>
-             </div>
-           </div>`).join('')}
-       </section>`
-    : '';
-
   const cemetery = store.cemetery.length
     ? `<section class="cemetery">
          <button class="cemetery-toggle" id="cemetery-toggle" aria-expanded="false">
@@ -555,7 +543,6 @@ function screenHome() {
       <button class="btn-week" data-nav="/week">Voir ma semaine ${icon('right', 15)}</button>
     </div>
     ${insightBlock}
-    ${failuresBlock}
     ${cards}
     ${cemetery}`;
 
@@ -573,8 +560,6 @@ function screenHome() {
       }
       fxBindTilt(host);
       wireCardFocus(host, '.deck-grid .pcard[data-habit]', store.habits);
-      host.querySelectorAll('.failure-row[data-habit]').forEach(el =>
-        el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
 
       wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', store.cemetery, { dead: true });
 
@@ -630,6 +615,21 @@ function screenWeek() {
     : delta < 0 ? `Tu descends : ${w.rate}%, soit ${Math.abs(delta)} points de moins que la semaine dernière.`
     : `Tu stagnes : ${w.rate}%, exactement comme la semaine dernière.`;
 
+  const failures = weekFailures();
+  const failuresBlock = failures.length
+    ? `<section class="failures">
+         <h4 class="section-label">Ce que tu n'as pas tenu</h4>
+         ${failures.map(({ check, habit }) => `
+           <div class="failure-row ${habit.active === false ? 'is-buried' : ''}" data-habit="${habit.id}">
+             ${icon(themeById(habit.theme).id, 18)}
+             <div class="failure-body">
+               <span class="failure-title">${esc(habit.title)}</span>
+               <span class="failure-meta">${formatDay(check.date)}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</span>
+             </div>
+           </div>`).join('')}
+       </section>`
+    : '';
+
   const html = `
     <div class="week-hero">
       <div class="week-rate">${w.rate === null ? '—' : '0%'}</div>
@@ -640,7 +640,8 @@ function screenWeek() {
       <div class="week-cell is-broken"><span class="n">0</span><span class="l">rompues</span></div>
       <div class="week-cell is-frozen"><span class="n">0</span><span class="l">gelées</span></div>
       <div class="week-cell is-missed"><span class="n">0</span><span class="l">sans réponse</span></div>
-    </div>`;
+    </div>
+    ${failuresBlock}`;
 
   return {
     title: 'Ma semaine', tab: '/home', chrome: true, back: '/home', html,
@@ -650,6 +651,8 @@ function screenWeek() {
       [w.kept, w.broken, w.frozen, w.missed].forEach((v, i) => {
         setTimeout(() => fxCountUp(cells[i], v, { duration: 620 }), 120 + i * 110);
       });
+      host.querySelectorAll('.failure-row[data-habit]').forEach(el =>
+        el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
     },
   };
 }

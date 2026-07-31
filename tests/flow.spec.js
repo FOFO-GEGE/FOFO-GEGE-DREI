@@ -194,8 +194,10 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('day sheet reason:', await page.locator('.day-row-reason').textContent());
   await page.click('#day-close');
 
-  // --- "Ce que tu n'as pas tenu" survives the abandon ---
+  // --- "Ce que tu n'as pas tenu" lives on Ma semaine and survives the abandon ---
   await page.click('[data-nav="/home"]');
+  await page.waitForSelector('.mirror-ring');
+  await page.click('[data-nav="/week"]');
   await page.waitForSelector('.failures', { timeout: 4000 });
   step('failure row present after abandon:', await page.locator('.failure-row.is-buried').count());
 
