@@ -104,7 +104,13 @@ and has to be verified against the project itself.
   same pass through the story but leading a fresh visit again (still
   pending, still unresolved), and decided cards trailing behind the
   still-pending ones with no verdict buttons once everything for the day is
-  settled.
+  settled. Also covers "Décaler" reopening an already-failed day in place —
+  a declared "pas fait" or a silent expiry alike — resetting its status,
+  expiry flag and reason exactly as an ordinary snooze resets a pending one,
+  same day only and without ever touching the habit's own `reminder_time`
+  (that permanent correction stays on the detail screen's "Modifier
+  l'heure", covered in `flow.spec.js`). A kept (or frozen) day is a real
+  decision, not a mistake to walk back, so it offers no "Décaler" at all.
 - `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
   only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
   (including that `ageTierFor()` ignores vitality entirely, by design), a

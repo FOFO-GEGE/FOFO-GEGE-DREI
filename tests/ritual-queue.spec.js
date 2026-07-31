@@ -7,7 +7,10 @@
 // real deadline later today without ever making its colour band look less
 // urgent, decided cards trailing behind the still-pending ones and staying
 // browsable (prev/next) once everything pending is resolved, and no numeric
-// "X restantes" counter anywhere on screen.
+// "X restantes" counter anywhere on screen. Also covers "Décaler" reopening
+// an already-failed day (declared "pas fait" or silently ignored) in place —
+// same-day only, reminder_time untouched — while a kept or frozen day offers
+// no such button at all.
 const { chromium } = require('playwright');
 const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
 
@@ -182,6 +185,72 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   const backToFirst = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
   step('"Précédent" returned to the first card:', backToFirst === firstRecapTitle ? 'OK' : 'FAIL');
   if (backToFirst !== firstRecapTitle) throw new Error('"Précédent" did not return to the previous card');
+
+  // --- "Décaler" also reopens an already-failed day, same-day only ---
+  const scenario = await page.evaluate(async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const mk = async title => (await createHabit({
+      title, theme: 'ecrans', frequency: 'daily',
+      target_days: [0, 1, 2, 3, 4, 5, 6], reminder_time: '20:00', window_minutes: 60,
+    })).habit;
+
+    const declared = await mk('Reopen declared');
+    store.checks.push({ id: crypto.randomUUID(), habit_id: declared.id, date: day, status: 'failed', expired: false, reason: 'oubli' });
+
+    const kept = await mk('Reopen kept');
+    store.checks.push({ id: crypto.randomUUID(), habit_id: kept.id, date: day, status: 'success', expired: false });
+
+    return { declaredId: declared.id, keptId: kept.id, declaredReminder: declared.reminder_time };
+  });
+
+  const findCard = async title => {
+    for (let i = 0; i < 20; i++) {
+      const nameEl = page.locator('.ritual-card .pcard-name');
+      if (await nameEl.count() === 0) return false; // ran past the last card, into the summary
+      const current = (await nameEl.textContent()).trim();
+      if (current === title) return true;
+      await page.click('#ritual-next');
+      await page.waitForTimeout(150);
+    }
+    return false;
+  };
+
+  await page.evaluate(() => { location.hash = '#/today'; renderRoute(); });
+  await page.waitForSelector('.ritual-card .pcard');
+
+  step('locating the declared-failure card:', await findCard('Reopen declared') ? 'found' : 'NOT FOUND');
+  const decalerVisibleOnFailed = await page.locator('#ritual-snooze').count();
+  step('"Décaler" visible on an already-failed card:', decalerVisibleOnFailed, '(expect 1)');
+  if (decalerVisibleOnFailed !== 1) throw new Error('a declared/silent failure should still offer "Décaler"');
+  if (await page.locator('.ritual-actions').count() !== 0) throw new Error('a decided card must still show no Fait/Pas fait buttons, decalable or not');
+
+  await page.click('#ritual-snooze');
+  await page.waitForSelector('.modal-sheet');
+  await page.click('[data-snooze="30"]');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached', timeout: 3000 });
+
+  const reopened = await page.evaluate(async id => {
+    const today = new Date().toISOString().slice(0, 10);
+    const h = store.habits.find(x => x.id === id);
+    const check = store.checks.find(c => c.habit_id === id && c.date === today);
+    return { check, reminder_time: h?.reminder_time };
+  }, scenario.declaredId);
+  step('after Décaler on a declared failure:', JSON.stringify(reopened));
+  if (reopened.check.status !== 'created' || reopened.check.expired !== false || reopened.check.reason) {
+    throw new Error(`reopening via Décaler should reset status/expired/reason, got: ${JSON.stringify(reopened.check)}`);
+  }
+  if (!reopened.check.snoozed_until) throw new Error('reopening via Décaler should also push the deadline, same as an ordinary snooze');
+  if (reopened.reminder_time !== scenario.declaredReminder) {
+    throw new Error(`Décaler must never touch the habit's own reminder_time, got ${reopened.reminder_time}, expected ${scenario.declaredReminder}`);
+  }
+
+  // A kept (or frozen) day is a real decision, not a mistake — no "Décaler".
+  await page.evaluate(() => { location.hash = '#/today'; renderRoute(); });
+  await page.waitForSelector('.ritual-card .pcard');
+  step('locating the kept card:', await findCard('Reopen kept') ? 'found' : 'NOT FOUND');
+  const decalerVisibleOnKept = await page.locator('#ritual-snooze').count();
+  step('"Décaler" visible on a kept day:', decalerVisibleOnKept, '(expect 0)');
+  if (decalerVisibleOnKept !== 0) throw new Error('a kept day should never offer "Décaler" — nothing to walk back');
 
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();
