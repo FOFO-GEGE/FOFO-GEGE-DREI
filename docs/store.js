@@ -229,6 +229,29 @@ async function reconcileToday() {
     }
   }
 
+  // A promise with a fixed end date retires on its own once that date has
+  // passed — a natural completion, not a death. Runs before the starvation
+  // check below so an already-completed habit is never also weighed for
+  // vitality-based death, and only once its last due day has had its normal
+  // chance to resolve (end_date < today, not <=). Unlike a starved card,
+  // this needs no confirmation dialog — it isn't a loss to confront, so
+  // death_announced is set true immediately.
+  const completed = store.habits.filter(h => h.end_date && h.end_date < today);
+  for (const h of completed) {
+    const completedAt = new Date().toISOString();
+    h.active = false;
+    h.deleted_at = completedAt;
+    h.death_cause = 'completed';
+    h.death_announced = true;
+    store.habits = store.habits.filter(x => x.id !== h.id);
+    store.cemetery.unshift(h);
+    enqueue({
+      table: 'habits',
+      values: { active: false, deleted_at: completedAt, death_cause: 'completed', death_announced: true },
+      matchId: h.id,
+    });
+  }
+
   // A card whose vitality is spent dies on its own — no confirmation, no tap.
   // This is the only way something ever leaves the deck without an explicit
   // decision, and it is what makes the deck a place where things happen

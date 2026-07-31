@@ -76,14 +76,16 @@ and has to be verified against the project itself.
   coverage for a real bug — it used to take `pendingToday()` as-is, so it
   could block on a promise not due yet while another expired behind it), a
   promise not due today excluded from the story entirely, no numeric counter
-  anywhere on screen, "Décaler" pushing a card's real deadline later *today
-  only* without ever moving its colour band backwards (it's read off the
-  original schedule, not the snoozed one — a snooze buys time to act, it
-  doesn't make the card look less overdue), a snoozed promise not resurfacing
-  within the same pass through the story but leading a fresh visit again
-  (still pending, still unresolved), and decided cards trailing behind the
-  still-pending ones with no verdict buttons — just free `Précédent`/`Suivant`
-  browsing once everything for the day is settled.
+  anywhere on screen, free `Précédent`/`Suivant` navigation on every card
+  (pending or already decided — moving on never forces a verdict on the one
+  left behind), "Décaler" pushing a card's real deadline later *today only*
+  without ever moving its colour band backwards (it's read off the original
+  schedule, not the snoozed one — a snooze buys time to act, it doesn't make
+  the card look less overdue), a snoozed promise not resurfacing within the
+  same pass through the story but leading a fresh visit again (still
+  pending, still unresolved), and decided cards trailing behind the
+  still-pending ones with no verdict buttons once everything for the day is
+  settled.
 - `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
   only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
   (including that `ageTierFor()` ignores vitality entirely, by design), a
@@ -91,6 +93,19 @@ and has to be verified against the project itself.
   in place of the ordinary progress bar, the card's own CSS class reflecting
   the earned (lower) tier rather than the age ceiling, and recovery: once
   vitality clears the bar again, the tier is regained.
+- `completed-promises.spec.js` — a promise with a fixed end date (a one-day
+  commitment, or any finite run) retiring on its own once that date passes:
+  a natural completion, not a death. Covers the pure `habitCard()` output for
+  `opts.finished` (gold `.time-done`/`pcard-xp-kept` when mostly kept, red
+  `.time-broken`/`pcard-xp-broken` when not, and never the dead card's
+  `is-dead` greyscale either way), the end-to-end retirement through
+  `reconcileToday()` (leaves the active deck, tagged `death_cause:
+  'completed'`, `death_announced` already true so it never surfaces through
+  the death-notice dialog `unannouncedDeaths()` only watches for neglect),
+  Mon miroir splitting the old cemetery query into two sections — Cimetière
+  keeps only abandoned/neglected cards, a separate Terminées section holds
+  completions — and the detail screen offering none of the live/dead-specific
+  actions (no reminder edit, no abandon, no resurrect) for a finished promise.
 
 ## Not covered here
 

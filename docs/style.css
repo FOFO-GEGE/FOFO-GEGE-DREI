@@ -273,6 +273,14 @@ button:disabled { opacity: .4; cursor: default; }
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--success) 40%, transparent);
 }
+/* A finished (naturally completed) card that wasn't, on the whole, kept —
+   same red as band-red, but this one is permanent, not counting down. */
+.pcard.time-broken {
+  background: color-mix(in srgb, var(--danger) 36%, var(--surface));
+  border-color: var(--danger);
+  box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
+    0 0 24px color-mix(in srgb, var(--danger) 40%, transparent);
+}
 
 /* Holographic film — every card has it, rarity turns up the gain. */
 .pcard-sheen {
@@ -1025,6 +1033,22 @@ button:disabled { opacity: .4; cursor: default; }
 .cemetery-grid { margin-top: 10px; }
 .cemetery-grid[hidden] { display: none; }
 
+/* ---------- Terminées ---------- */
+/* Same collapsible pattern as the cemetery, but never greyed out — a
+   promise reaching its own end date on schedule isn't a loss. */
+
+.finished { margin-top: 26px; }
+.finished-toggle {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-dim); padding: 10px 2px;
+}
+.finished-toggle .deck-count { background: var(--surface-2); }
+.finished-chevron { margin-left: auto; transition: transform .2s ease; display: flex; }
+.finished-toggle.is-open .finished-chevron { transform: rotate(90deg); }
+.finished-grid { margin-top: 10px; }
+.finished-grid[hidden] { display: none; }
+
 .pcard.is-dead {
   filter: grayscale(0.85) brightness(0.72);
   box-shadow: none;
@@ -1034,6 +1058,11 @@ button:disabled { opacity: .4; cursor: default; }
 .pcard-xp-dead {
   display: flex; align-items: center; gap: 5px; color: var(--text-dim); font-weight: 700;
 }
+.pcard-xp-kept, .pcard-xp-broken {
+  display: flex; align-items: center; gap: 5px; font-weight: 700;
+}
+.pcard-xp-kept { color: var(--success); }
+.pcard-xp-broken { color: var(--danger); }
 
 /* ---------- Day sheet ---------- */
 

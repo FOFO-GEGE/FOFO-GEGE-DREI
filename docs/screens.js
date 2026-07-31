@@ -496,16 +496,37 @@ function screenHome() {
          <button class="btn-primary" data-nav="/new">Créer ma première carte</button>
        </div>`;
 
-  const cemetery = store.cemetery.length
+  // "Terminées" is not the cemetery: reaching a fixed end date on schedule
+  // is a natural completion, not a death, and doesn't belong in the same
+  // abandoned/neglect framing.
+  const buried = store.cemetery.filter(h => h.death_cause !== 'completed');
+  const finished = store.cemetery.filter(h => h.death_cause === 'completed');
+
+  const cemetery = buried.length
     ? `<section class="cemetery">
          <button class="cemetery-toggle" id="cemetery-toggle" aria-expanded="false">
-           ${icon('cross', 15)} Cimetière <span class="deck-count">${store.cemetery.length}</span>
+           ${icon('cross', 15)} Cimetière <span class="deck-count">${buried.length}</span>
            <span class="cemetery-chevron">${icon('right', 14)}</span>
          </button>
          <div class="deck-grid cemetery-grid" id="cemetery-grid" hidden>
-           ${store.cemetery.map(h => habitCard(h, habitStats(h), {
+           ${buried.map(h => habitCard(h, habitStats(h), {
              compact: true, habitId: h.id, dead: true,
              deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: h.death_cause,
+           })).join('')}
+         </div>
+       </section>`
+    : '';
+
+  const finishedBlock = finished.length
+    ? `<section class="finished">
+         <button class="finished-toggle" id="finished-toggle" aria-expanded="false">
+           ${icon('check', 15)} Terminées <span class="deck-count">${finished.length}</span>
+           <span class="finished-chevron">${icon('right', 14)}</span>
+         </button>
+         <div class="deck-grid finished-grid" id="finished-grid" hidden>
+           ${finished.map(h => habitCard(h, habitStats(h), {
+             compact: true, habitId: h.id, finished: true,
+             finishedDate: formatDay(h.deleted_at?.slice(0, 10)),
            })).join('')}
          </div>
        </section>`
@@ -544,7 +565,8 @@ function screenHome() {
     </div>
     ${insightBlock}
     ${cards}
-    ${cemetery}`;
+    ${cemetery}
+    ${finishedBlock}`;
 
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
@@ -561,7 +583,8 @@ function screenHome() {
       fxBindTilt(host);
       wireCardFocus(host, '.deck-grid .pcard[data-habit]', store.habits);
 
-      wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', store.cemetery, { dead: true });
+      wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', buried, { dead: true });
+      wireCardFocus(host, '.finished-grid .pcard[data-habit]', finished, { finished: true });
 
       const toggle = host.querySelector('#cemetery-toggle');
       if (toggle) {
@@ -571,6 +594,18 @@ function screenHome() {
           grid.hidden = open;
           toggle.setAttribute('aria-expanded', String(!open));
           toggle.classList.toggle('is-open', !open);
+          if (!open) fxBindTilt(host);
+        });
+      }
+
+      const finishedToggle = host.querySelector('#finished-toggle');
+      if (finishedToggle) {
+        finishedToggle.addEventListener('click', () => {
+          const grid = host.querySelector('#finished-grid');
+          const open = !grid.hidden;
+          grid.hidden = open;
+          finishedToggle.setAttribute('aria-expanded', String(!open));
+          finishedToggle.classList.toggle('is-open', !open);
           if (!open) fxBindTilt(host);
         });
       }
@@ -935,6 +970,8 @@ function openCardFocus(habit, opts = {}) {
   const stats = habitStats(habit);
   const cardOpts = opts.dead
     ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
+    : opts.finished
+    ? { finished: true, finishedDate: formatDay(habit.deleted_at?.slice(0, 10)) }
     : {};
 
   const overlay = document.createElement('div');
@@ -1059,7 +1096,10 @@ function openDaySheet(iso) {
 function screenHabitDetail(habitId) {
   const habit = store.habits.find(h => h.id === habitId) || store.cemetery.find(h => h.id === habitId);
   if (!habit) return { redirect: '/home' };
-  const dead = habit.active === false;
+  // A naturally completed promise (fixed end date reached) is retired but
+  // never "dead" — it gets its own framing, not the cemetery's.
+  const finished = habit.death_cause === 'completed';
+  const dead = habit.active === false && !finished;
 
   const stats = habitStats(habit);
   const own = store.checks.filter(c => c.habit_id === habit.id);
@@ -1091,9 +1131,12 @@ function screenHabitDetail(habitId) {
     ? `<div class="stat-line"><strong>${expiredN}</strong> fois, tu n'as simplement pas répondu dans l'heure.</div>`
     : '';
 
+  const retired = dead || finished;
   const html = `
     <div class="detail-card">${habitCard(habit, stats, dead
       ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
+      : finished
+      ? { finished: true, finishedDate: formatDay(habit.deleted_at?.slice(0, 10)) }
       : {})}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
@@ -1103,10 +1146,12 @@ function screenHabitDetail(habitId) {
       <div class="stat-line">${dead
         ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, ${
             habit.death_cause === 'neglect' ? "jusqu'à ce que tu la laisses mourir." : "jusqu'à son abandon."}`
+        : finished
+        ? `Elle a tenu <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}, jusqu'à sa fin prévue.`
         : `Elle survit depuis <strong>${stats.daysAlive}</strong> jour${stats.daysAlive > 1 ? 's' : ''}.`}</div>
-      ${!dead && stats.vitalityState !== 'pleine' ? `<div class="stat-line">${VITALITY_LINE[stats.vitalityState]}</div>` : ''}
+      ${!retired && stats.vitalityState !== 'pleine' ? `<div class="stat-line">${VITALITY_LINE[stats.vitalityState]}</div>` : ''}
     </div>
-    ${dead ? '' : `
+    ${retired ? '' : `
     <button class="reminder-row" id="edit-reminder-time">
       <span>Rappel à <strong>${(habit.reminder_time || '20:00').slice(0, 5)}</strong></span>
       <span class="reminder-row-edit">Modifier l'heure</span>
@@ -1114,7 +1159,7 @@ function screenHabitDetail(habitId) {
     ${dead && !habit.resurrected
       ? '<button class="btn-primary" id="resurrect-habit">Ressusciter cette promesse</button>'
       : ''}
-    ${dead ? '' : '<button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>'}`;
+    ${retired ? '' : '<button class="btn-danger-text" id="delete-habit">Abandonner cette promesse</button>'}`;
 
   return {
     title: habit.title, tab: '/home', chrome: true, back: '/home', html,
