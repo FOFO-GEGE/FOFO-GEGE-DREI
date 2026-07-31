@@ -1,11 +1,13 @@
-// The ritual queue: sorted by urgency (not creation order), a promise not due
-// today excluded entirely, "Plus tard" to requeue without a verdict, and
-// Aujourd'hui's preview list as an entry point. Regression coverage for the
-// bug this fixes: the ritual used to take pendingToday() as-is, so it could
-// block on a promise not due yet while another expired behind it. Every
-// pending promise is answerable the instant it exists (no more "waiting" for
-// its hour), so the ritual queue and the preview list both simply hold
-// everything pending, sorted soonest-deadline-first.
+// Aujourd'hui is no longer a screen that leads into a separate ritual behind
+// a button — it IS the ritual: tapping the tab drops straight into a full-
+// screen, one-card-at-a-time story. This covers: promises sorted by urgency
+// (regression coverage for a real bug — it used to take pendingToday() as-is,
+// so it could block on a promise not due yet while another expired behind
+// it), a promise not due today excluded entirely, "Décaler" pushing a card's
+// real deadline later today without ever making its colour band look less
+// urgent, decided cards trailing behind the still-pending ones and staying
+// browsable (prev/next) once everything pending is resolved, and no numeric
+// "X restantes" counter anywhere on screen.
 const { chromium } = require('playwright');
 const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
 
@@ -47,12 +49,12 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   // Created in an order that is the OPPOSITE of urgency: the last one created
   // (sport) has the least time left, so a fix that sorted by anything but
   // urgency would present them in the wrong order.
-  await createHabit('lecture', 5);   // reminder 5 min ago -> 55 min left
-  await createHabit('sommeil', 40);  // reminder 40 min ago -> 20 min left
-  await createHabit('sport', 55);   // reminder 55 min ago -> 5 min left (most urgent)
+  await createHabit('lecture', 5);   // 55 min left
+  await createHabit('sommeil', 40);  // 20 min left
+  await createHabit('sport', 55);   // 5 min left (most urgent)
   step('created 3 habits, least urgent first, most urgent last');
 
-  // A 4th, not due today at all -> must never enter the forced sequence.
+  // A 4th, not due today at all -> must never enter the story.
   await page.click('[data-nav="/new"]');
   await page.waitForSelector('.creator');
   await page.click('[data-theme="argent"]');
@@ -65,93 +67,103 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('#nh-time');
   await page.click('#nh-next');
   await page.waitForFunction(() => location.hash === '#/home');
-  step('created a 4th habit not due today (must stay out of the deck entirely)');
+  step('created a 4th habit not due today (must stay out of the story entirely)');
 
-  // A 5th, due today but its reminder is 3h out — no longer "waiting": since
-  // answering is allowed any time before the deadline, it is already part of
-  // the same queue, just the least urgent entry (~240 min left).
-  await page.click('[data-nav="/new"]');
-  await page.waitForSelector('.creator');
-  await page.click('[data-theme="travail"]');
-  await page.waitForSelector('.suggestions');
-  await page.locator('.suggestion').first().click();
-  await page.click('#nh-next');
-  await page.waitForSelector('.day-picker');
-  await page.click('#nh-next');
-  await page.waitForSelector('#nh-time');
-  // reminder_time is a bare time-of-day, reinterpreted against *today's*
-  // date — so if "+3h" crosses midnight, the stored time reads as earlier
-  // today (already past), the deadline is already passed instead of hours
-  // out, and reconcileToday() never creates a check for it at all. Clamp to
-  // just before midnight instead when the run happens to start late enough.
-  const now = new Date();
-  let future = new Date(now.getTime() + 3 * 3600000);
-  if (future.getDate() !== now.getDate() || future.getMonth() !== now.getMonth()) {
-    future = new Date(now); future.setHours(23, 59, 0, 0);
-  }
-  await page.fill('#nh-time', `${String(future.getHours()).padStart(2, '0')}:${String(future.getMinutes()).padStart(2, '0')}`);
-  await page.click('#nh-next');
-  await page.waitForFunction(() => location.hash === '#/home');
-  step('created a 5th habit due today, reminder 3h out — already answerable, just the least urgent');
-
-  // --- Aujourd'hui: sorted by urgency, all four pending entries clickable ---
+  // --- Tapping the tab drops straight into the story, sorted by urgency ---
   await page.click('[data-nav="/today"]');
-  await page.waitForSelector('.ritual-preview');
-  const order = await page.locator('.ritual-preview .rp-title').allTextContents();
-  step('preview order (most urgent first):', order.join(' | '));
-  const clickable = await page.locator('.ritual-preview li.rp-clickable').count();
-  step('clickable entries:', clickable, '(expect 4 — every pending promise is answerable now; only the 4th habit, not due today, is excluded)');
-  if (clickable !== 4) throw new Error(`expected 4 clickable preview entries, got ${clickable}`);
+  await page.waitForSelector('.ritual-card .pcard');
+  step('no tabbar while in the story:', await page.locator('.tabbar').count(), '(expect 0)');
+  step('no numeric counter anywhere:', await page.locator('.ritual-count').count(), '(expect 0 — the class shouldn\'t even exist)');
 
-  // The ritual is always reachable — no "no open window" state left that
-  // could hide the button (the regression this covers).
-  const startBtn = await page.locator('#start-ritual').count();
-  step('"Commencer le check-in" button present:', startBtn, '(expect 1 — always reachable)');
-  if (startBtn !== 1) throw new Error('the ritual start button must always be present once something is pending');
-
-  // Clicking a specific entry starts the ritual there, not at the most urgent
-  // one — an entry point, distinct from the generic start button.
-  const targetTitle = order[1]; // the middle one, deliberately not the most urgent
-  await page.locator('.ritual-preview li.rp-clickable', { hasText: targetTitle }).click();
-  await page.waitForSelector('.ritual-title');
-  const enteredAt = (await page.locator('.ritual-title').textContent()).trim();
-  step('entered the ritual via the preview list at:', enteredAt, '(expect:', targetTitle, ')');
-  if (enteredAt !== targetTitle) throw new Error(`clicking a preview entry did not start the ritual there: got "${enteredAt}"`);
-  await page.click('#ritual-quit');
-  await page.waitForFunction(() => location.hash === '#/today');
-
-  // --- The ritual holds all 4 pending promises, most urgent first ---
-  await page.click('#start-ritual');
-  await page.waitForSelector('.ritual-title');
-  const firstTitle = (await page.locator('.ritual-title').textContent()).trim();
-  step('first card in the ritual:', firstTitle, '(expect the sport habit — 5 min left, most urgent)');
   const dotsTotal = await page.locator('.ritual-progress span').count();
-  step('progress dots:', dotsTotal, '(expect 4 — every pending promise, including the one 3h out; only the not-due 4th is excluded)');
-  if (dotsTotal !== 4) throw new Error(`ritual queue should hold all 4 pending promises, got ${dotsTotal} dots`);
+  step('progress dots:', dotsTotal, '(expect 3 — the not-due 4th habit is excluded)');
+  if (dotsTotal !== 3) throw new Error(`expected 3 progress dots, got ${dotsTotal}`);
 
-  // --- "Plus tard": no verdict, goes to the back, no penalty ---
-  await page.click('#ritual-later');
-  await page.waitForTimeout(150);
-  const secondTitle = (await page.locator('.ritual-title').textContent()).trim();
-  step('after "Plus tard", now showing:', secondTitle, '(expect a different habit)');
-  if (secondTitle === firstTitle) throw new Error('"Plus tard" did not move to a different promise');
-  const stillCreated = await page.evaluate(t => store.checks.find(c => {
-    const h = store.habits.find(x => x.id === c.habit_id);
-    return h && h.title === t;
-  })?.status, firstTitle);
-  step('deferred promise still unanswered:', stillCreated, '(expect "created" — no verdict was recorded)');
-  if (stillCreated !== 'created') throw new Error('"Plus tard" recorded a verdict, it should not have');
+  const firstTitle = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
+  step('first card:', firstTitle, '(expect the sport habit — 5 min left, most urgent)');
 
-  // Answer the three remaining, then the deferred one must resurface last.
+  // --- "Décaler": pushes the real deadline later today, never re-greens ---
+  const bandBefore = await page.evaluate(() => document.querySelector('.ritual-card .pcard').className);
+  step('band before snoozing (expect band-red, 5 min left of a 60-min range):', bandBefore);
+  if (!bandBefore.includes('band-red')) throw new Error(`expected the most urgent card to already be band-red, got: ${bandBefore}`);
+
+  const snoozedHabitId = await page.evaluate(() => document.querySelector('.ritual-card .pcard').dataset.habit);
+  await page.click('#ritual-snooze');
+  await page.waitForSelector('.modal-sheet');
+  await page.click('[data-snooze="30"]');
+  await page.waitForSelector('.modal-backdrop', { state: 'detached' });
+
+  const snoozed = await page.evaluate(id => {
+    const c = store.checks.find(x => x.habit_id === id);
+    return { minutesLeft: minutesLeft(c), snoozeCount: c.snooze_count, status: c.status };
+  }, snoozedHabitId);
+  step('after a +30min snooze:', JSON.stringify(snoozed), '(expect minutesLeft near 30, snoozeCount 1, still "created")');
+  if (snoozed.snoozeCount !== 1) throw new Error(`expected snooze_count 1, got ${snoozed.snoozeCount}`);
+  if (snoozed.status !== 'created') throw new Error('snoozing must not record a verdict');
+  if (!(snoozed.minutesLeft >= 25)) throw new Error(`expected the snooze to buy real time, got ${snoozed.minutesLeft} min left`);
+
+  step('advanced to the next card after snoozing:', (await page.locator('.ritual-card .pcard-name').textContent()).trim());
+
+  // --- Answer the two remaining pending cards ---
   await page.click('.ritual-btn.is-yes');
   await page.waitForTimeout(700);
   await page.click('.ritual-btn.is-yes');
   await page.waitForTimeout(700);
+
+  // The snoozed one never resurfaces in THIS pass — a snooze buys time
+  // outside the current session, not a spot back in the same queue — so the
+  // story ends here even though one promise is still technically undecided.
+  await page.waitForSelector('.summary-tallies', { timeout: 4000 });
+  step('story ends on the summary once every card in this pass is behind us: OK');
+  await page.click('#ritual-done');
+  await page.waitForFunction(() => location.hash === '#/home');
+
+  // --- Re-opening Aujourd'hui: the still-pending (snoozed) card leads again,
+  // decided ones trail behind it ---
+  await page.click('[data-nav="/today"]');
+  await page.waitForSelector('.ritual-card .pcard');
+  const reopenedFirst = await page.evaluate(() => document.querySelector('.ritual-card .pcard').dataset.habit);
+  step('re-opening the story leads with the still-pending card again:', reopenedFirst === snoozedHabitId ? 'OK' : 'FAIL');
+  if (reopenedFirst !== snoozedHabitId) throw new Error('a still-pending (snoozed) promise must lead a fresh visit to the story, not trail behind decided ones');
+  step('band still red after the snooze — a snooze never re-greens a card:',
+    await page.evaluate(() => document.querySelector('.ritual-card .pcard').className));
+  const bandAfter = await page.evaluate(() => document.querySelector('.ritual-card .pcard').className);
+  if (!bandAfter.includes('band-red')) throw new Error(`snoozing must not improve the colour band, got: ${bandAfter}`);
+
+  // Resolve it too, so every promise created in this run is now decided.
+  // What comes right after it in this same array is a card already decided
+  // earlier (not the summary — the array is fixed at mount time and still
+  // has entries behind this one), so leave via the X rather than assume
+  // where exactly that lands.
   await page.click('.ritual-btn.is-yes');
   await page.waitForTimeout(700);
-  const lastTitle = (await page.locator('.ritual-title').textContent()).trim();
-  step('fourth and final card:', lastTitle, '(expect the deferred one, back at the front of the empty queue)');
-  if (lastTitle !== firstTitle) throw new Error('the deferred promise did not resurface');
+  step('last pending card resolved too');
+  await page.click('#ritual-quit');
+  await page.waitForFunction(() => location.hash === '#/home');
+
+  // --- Everything decided: a fresh visit is pure recap, freely browsable ---
+  await page.click('[data-nav="/today"]');
+  await page.waitForSelector('.ritual-card .pcard');
+  const noActions = await page.locator('.ritual-actions').count();
+  step('no Fait/Pas fait actions on a fully-decided day:', noActions, '(expect 0)');
+  if (noActions !== 0) throw new Error('a fully decided day should show no verdict buttons, only recap navigation');
+
+  const prevDisabled = await page.locator('#ritual-prev').isDisabled();
+  step('"Précédent" disabled on the first recap card:', prevDisabled, '(expect true)');
+  if (!prevDisabled) throw new Error('the first card in the recap should not allow going further back');
+
+  const firstRecapTitle = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
+  await page.click('#ritual-next');
+  await page.waitForTimeout(200);
+  const secondRecapTitle = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
+  step('free "Suivant" navigation moved to a different card:', firstRecapTitle, '->', secondRecapTitle);
+  if (firstRecapTitle === secondRecapTitle) throw new Error('"Suivant" on a decided card did not move to a different one');
+
+  await page.click('#ritual-prev');
+  await page.waitForTimeout(200);
+  const backToFirst = (await page.locator('.ritual-card .pcard-name').textContent()).trim();
+  step('"Précédent" returned to the first card:', backToFirst === firstRecapTitle ? 'OK' : 'FAIL');
+  if (backToFirst !== firstRecapTitle) throw new Error('"Précédent" did not return to the previous card');
 
   console.log('ERRORS:', JSON.stringify(errors));
   await browser.close();

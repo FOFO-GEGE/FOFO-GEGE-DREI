@@ -76,15 +76,12 @@ function resolveScreen() {
   const hash = location.hash.replace(/^#/, '') || '/today';
   const habit = hash.match(/^\/habit\/(.+)$/);
   if (habit) return screenHabitDetail(habit[1]);
-  const ritualAt = hash.match(/^\/ritual\/(.+)$/);
-  if (ritualAt) return screenRitual(ritualAt[1]);
   switch (hash) {
     case '/today': return screenToday();
     case '/home': return screenHome();
     case '/new': return screenNewHabit();
     case '/history': return screenHistory();
     case '/week': return screenWeek();
-    case '/ritual': return screenRitual();
     default: return { redirect: '/today' };
   }
 }
@@ -269,17 +266,21 @@ sb.auth.onAuthStateChange((event, session) => {
 
 setInterval(() => { if (store.user && store.loaded) checkReminders(); }, 30000);
 
-// The answer range is a live clock: re-render every 30s so the countdown
-// ticks, the card's time colour keeps sliding toward red, and checks expire
-// the moment their range runs out. Mon miroir is included alongside
-// Aujourd'hui so the deck's cards keep changing colour even while just
+// The answer range is a live clock: checks expire the moment their range
+// runs out, whether or not anyone is looking. Mon miroir is re-rendered
+// alongside so its deck's cards keep changing colour band while just
 // sitting there, unopened — the same "lives without a tap" idea as vitality.
+// Aujourd'hui is deliberately NOT force-rebuilt here: it's a one-card-at-a-
+// time story now, and losing your place in it every 30s would be exactly the
+// kind of disruption a passive list never had to worry about. A genuine
+// expiry still forces a rebuild everywhere (the data actually changed), it
+// just won't happen on a plain tick anymore.
 setInterval(async () => {
   if (!store.user || !store.loaded) return;
   const hadPending = pendingToday().length;
   const expiring = store.checks.some(c => c.status === 'created' && isExpired(c));
   if (expiring) await reconcileToday();
-  const onLiveScreen = location.hash === '#/today' || location.hash === '' || location.hash === '#/home';
+  const onLiveScreen = location.hash === '#/home' || location.hash === '';
   if (expiring || (onLiveScreen && hadPending)) renderRoute();
 }, 30000);
 

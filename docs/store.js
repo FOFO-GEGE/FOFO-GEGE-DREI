@@ -127,17 +127,28 @@ function habitOf(check) {
   return store.habits.find(h => h.id === check.habit_id);
 }
 
-// null when the habit is gone; negative once the range has run out.
-function minutesLeft(check) {
+// The real, effective cutoff for a specific check — the plain schedule
+// unless it's been snoozed today, in which case snoozed_until (an absolute
+// instant, never past that day's midnight) takes over. This is the only
+// thing snoozing changes: the card's colour keeps following the original
+// schedule regardless (see rangeElapsed) — a snooze buys time to act, it
+// does not make the card look less overdue than it is.
+function deadlineForCheck(check) {
   const habit = habitOf(check);
   if (!habit) return null;
-  return Math.ceil((deadlineFor(habit, check.date).getTime() - Date.now()) / 60000);
+  if (check.snoozed_until) return new Date(check.snoozed_until);
+  return deadlineFor(habit, check.date);
+}
+
+// null when the habit is gone; negative once the range has run out.
+function minutesLeft(check) {
+  const d = deadlineForCheck(check);
+  return d ? Math.ceil((d.getTime() - Date.now()) / 60000) : null;
 }
 
 function isExpired(check) {
-  const habit = habitOf(check);
-  if (!habit) return false;
-  return Date.now() > deadlineFor(habit, check.date).getTime();
+  const d = deadlineForCheck(check);
+  return d ? Date.now() > d.getTime() : false;
 }
 
 // A 15-minute range makes "15 min left" meaningless as an urgency signal if
@@ -356,6 +367,19 @@ function pendingSorted() {
   return [...pendingToday()].sort((a, b) => minutesLeft(a.check) - minutesLeft(b.check));
 }
 
+// Everything Aujourd'hui's story shows, in order: still-pending promises
+// first (soonest deadline first — the only part with real stakes), then
+// whatever was already decided today, trailing behind as a plain record of
+// the day rather than something you're still on the hook for.
+function todayItems() {
+  const today = todayStr();
+  const decided = store.checks
+    .filter(c => c.date === today && c.status !== 'created')
+    .map(c => ({ check: c, habit: store.habits.find(h => h.id === c.habit_id) }))
+    .filter(x => x.habit);
+  return [...pendingSorted(), ...decided];
+}
+
 function todayTally() {
   const today = todayStr();
   const rows = store.checks.filter(c => c.date === today);
@@ -506,6 +530,29 @@ function freezeCheck(checkId) {
   habit.freeze_used_month = currentMonthKey();
   enqueue({ table: 'habit_checks', values: { status: 'frozen' }, matchId: checkId });
   enqueue({ table: 'habits', values: { freeze_used_month: habit.freeze_used_month }, matchId: habit.id });
+}
+
+// Pushes a check's real deadline later *today only* — never past this same
+// day, no matter how large the offset. minutesOrEod is either a number of
+// minutes from now, or the literal 'eod' for "until 23:59:59". This is a
+// snoozed alarm, not an edit to the habit: reminder_time itself is
+// untouched, so tomorrow opens at the normal hour regardless of how much
+// today's copy was pushed back. Doesn't touch the card's colour either (see
+// rangeElapsed) — buying time is not the same as looking on track.
+function snoozeCheck(checkId, minutesOrEod) {
+  const check = store.checks.find(c => c.id === checkId);
+  if (!check || check.status !== 'created') return { error: 'not-found' };
+  const [y, mo, d] = check.date.split('-').map(Number);
+  const endOfDay = new Date(y, mo - 1, d, 23, 59, 59, 999).getTime();
+  const target = minutesOrEod === 'eod' ? endOfDay : Math.min(Date.now() + minutesOrEod * 60000, endOfDay);
+  check.snoozed_until = new Date(target).toISOString();
+  check.snooze_count = (check.snooze_count || 0) + 1;
+  enqueue({
+    table: 'habit_checks',
+    values: { snoozed_until: check.snoozed_until, snooze_count: check.snooze_count },
+    matchId: checkId,
+  });
+  return { ok: true };
 }
 
 async function createHabit(fields) {

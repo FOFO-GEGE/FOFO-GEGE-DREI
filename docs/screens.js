@@ -177,112 +177,71 @@ function pushBanner() {
   return '';
 }
 
-// ---------- Aujourd'hui : entrée du rituel ----------
+// ---------- Aujourd'hui : la story ----------
+// Aujourd'hui no longer leads into the ritual through an intro screen and a
+// button — it IS the ritual. One real card at a time, full screen, with its
+// own tier/série/fissures, not a simplified stand-in. Pending promises come
+// first (soonest deadline first — the only part with actual stakes); once
+// answered they fall in behind, still visible, as a plain record of the day
+// rather than something still owed. No numeric "3 restantes" anywhere — the
+// segmented bar at top says where you are without turning it into a score.
+
+// Remembers position across a forced re-render (the background reconcile
+// can force one if something expires while you're mid-story) so a 30s tick
+// doesn't silently snap you back to the first card.
+let todayCursorHabitId = null;
 
 function screenToday() {
-  const pending = pendingSorted();
-  const tally = todayTally();
-
   const notifBanner = pushBanner();
 
-  let body;
   if (!store.habits.length) {
-    body = `<div class="empty-rich">
-        ${icon('spark', 40)}
-        <h3>Aucune promesse.</h3>
-        <p>Rien à te reprocher pour l'instant. Ça ne durera pas.</p>
-        <button class="btn-primary" data-nav="/new">Faire une promesse</button>
-      </div>`;
-  } else if (!pending.length) {
-    body = `<div class="empty-rich">
-        ${icon('check', 40)}
-        <h3>Tu as répondu à tout.</h3>
-        <p>${tally.kept} tenue${tally.kept > 1 ? 's' : ''}, ${tally.broken} rompue${tally.broken > 1 ? 's' : ''}${tally.frozen ? `, ${tally.frozen} gelée${tally.frozen > 1 ? 's' : ''}` : ''} aujourd'hui.</p>
-        <button class="btn-secondary" data-nav="/home">Voir mon miroir</button>
-      </div>`;
-  } else {
-    // Every pending promise is answerable right now — the tightest deadline
-    // among them drives the urgency banner, and pending is already sorted
-    // soonest-first.
-    const soonest = minutesLeft(pending[0].check);
-
-    body = `
-      <div class="ritual-intro">
-        <div class="ritual-count">${pending.length}</div>
-        <h3>promesse${pending.length > 1 ? 's' : ''} pas encore faite${pending.length > 1 ? 's' : ''}</h3>
-        <p class="deadline-banner ${isUrgent(pending[0].check) ? 'is-urgent' : ''}">
-          Sans réponse dans <strong>${soonest} min</strong>, c'est compté comme non tenu.
-        </p>
-        <ul class="ritual-preview">
-          ${pending.map(p => `
-            <li class="rp-clickable" data-habit="${p.habit.id}">
-              ${icon(themeById(p.habit.theme).id, 18)}
-              <span class="rp-title">${esc(p.habit.title)}</span>
-              <span class="rp-left ${isUrgent(p.check) ? 'is-urgent' : ''}">${minutesLeft(p.check)} min</span>
-            </li>`).join('')}
-        </ul>
-        <button class="btn-primary" id="start-ritual">Commencer le check-in</button>
-      </div>`;
+    return {
+      title: "Aujourd'hui", tab: '/today', chrome: true,
+      html: notifBanner + `<div class="empty-rich">
+          ${icon('spark', 40)}
+          <h3>Aucune promesse.</h3>
+          <p>Rien à te reprocher pour l'instant. Ça ne durera pas.</p>
+          <button class="btn-primary" data-nav="/new">Faire une promesse</button>
+        </div>`,
+      wire: host => wireNotifBanner(host),
+    };
   }
 
-  return {
-    title: "Aujourd'hui", tab: '/today', chrome: true,
-    html: notifBanner + body,
-    wire(host) {
-      const nb = host.querySelector('#notif-enable');
-      if (nb) {
-        nb.addEventListener('click', async () => {
-          nb.disabled = true;
-          const res = await registerPush();
-          if (res.ok) { toast('Rappels activés.'); return navigate('/today'); }
-          nb.disabled = false;
-          const err = host.querySelector('#notif-error');
-          if (err) {
-            err.textContent = res.reason === 'denied'
-              ? 'Tu as refusé les notifications. Réautorise-les dans les réglages du navigateur.'
-              : res.reason === 'needs-install'
-              ? "Ajoute d'abord MIRROIR à ton écran d'accueil."
-              : `Impossible d'activer les rappels : ${res.reason}`;
-            err.style.display = 'block';
-          }
-        });
-      }
-      const start = host.querySelector('#start-ritual');
-      if (start) start.addEventListener('click', () => navigate('/ritual'));
-      host.querySelectorAll('.rp-clickable[data-habit]').forEach(li =>
-        li.addEventListener('click', () => navigate('/ritual/' + li.dataset.habit)));
-    },
-  };
-}
-
-// ---------- Le rituel ----------
-
-// startHabitId: the ritual can be entered at a specific promise from
-// Aujourd'hui's preview list — it becomes the first card, the rest of the
-// queue is unaffected.
-function screenRitual(startHabitId) {
-  const queue = pendingSorted();
-  if (startHabitId) {
-    const at = queue.findIndex(p => p.habit.id === startHabitId);
-    if (at > 0) queue.unshift(queue.splice(at, 1)[0]);
+  const items = todayItems();
+  if (!items.length) {
+    todayCursorHabitId = null;
+    return {
+      title: "Aujourd'hui", tab: '/today', chrome: true,
+      html: notifBanner + `<div class="empty-rich">
+          ${icon('spark', 40)}
+          <h3>Repos aujourd'hui.</h3>
+          <p>Aucune promesse prévue pour aujourd'hui. Reviens demain.</p>
+          <button class="btn-secondary" data-nav="/home">Voir mon miroir</button>
+        </div>`,
+      wire: host => wireNotifBanner(host),
+    };
   }
-  // Fixed once, for the progress dots — "plus tard" reorders the queue but
-  // never changes how many promises there were to begin with.
-  const totalCount = queue.length;
-  const result = { kept: 0, broken: 0, frozen: 0 };
+
+  let index = 0;
+  if (todayCursorHabitId) {
+    const at = items.findIndex(p => p.habit.id === todayCursorHabitId);
+    if (at >= 0) index = at;
+  }
+  const totalCount = items.length;
 
   function mount(host) {
-    if (!queue.length) return mountSummary(host);
+    if (index >= items.length) { todayCursorHabitId = null; return mountSummary(host); }
 
-    const { check, habit } = queue[0];
-    // Guard against the 30s background reconcile resolving this exact check
-    // (expiry) while the user was deliberating on an earlier "Plus tard" —
-    // rare, but a stale entry must never be answered twice.
-    if (check.status !== 'created') { queue.shift(); return mount(host); }
+    const { check, habit } = items[index];
+    const pending = check.status === 'created';
+    todayCursorHabitId = habit.id;
+    const stats = habitStats(habit);
 
-    const theme = themeById(habit.theme);
-    const streak = habit.current_streak || 0;
-    const answered = result.kept + result.broken + result.frozen;
+    const snoozeLine = check.snooze_count
+      ? `<p class="ritual-snooze-line">Repoussée ${check.snooze_count} fois aujourd'hui</p>`
+      : '';
+    const statusLine = pending ? '' : `
+      <p class="ritual-status is-${check.status}">${STATUS_LABEL[check.status] || check.status}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</p>`;
 
     host.innerHTML = `
       <div class="ritual">
@@ -290,20 +249,18 @@ function screenRitual(startHabitId) {
           <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           <div class="ritual-progress">
             ${Array.from({ length: totalCount }, (_, i) =>
-              `<span class="${i < answered ? 'done' : i === answered ? 'now' : ''}"></span>`).join('')}
+              `<span class="${i < index ? 'done' : i === index ? 'now' : ''}"></span>`).join('')}
           </div>
         </div>
 
         <div class="ritual-body">
-          <div class="ritual-theme">${icon(theme.id, 44)}</div>
-          <p class="ritual-prompt">Tu avais promis</p>
-          <h2 class="ritual-title">${esc(habit.title)}</h2>
-          ${streak > 0
-            ? `<p class="ritual-streak">${icon('flame', 16)} Série de ${streak} jour${streak > 1 ? 's' : ''} en jeu</p>`
-            : '<p class="ritual-streak muted">Aucune série en cours.</p>'}
-          ${countdownChip(check)}
+          ${pending ? '<p class="ritual-prompt">Tu avais promis</p>' : ''}
+          <div class="ritual-card">${habitCard(habit, stats, { habitId: habit.id })}</div>
+          ${pending ? countdownChip(check) : statusLine}
+          ${snoozeLine}
         </div>
 
+        ${pending ? `
         <div class="ritual-actions">
           <button class="ritual-btn is-no" data-verdict="failed">${icon('cross', 22)}<span>Pas fait</span></button>
           <button class="ritual-btn is-yes" data-verdict="success">${icon('check', 22)}<span>Fait</span></button>
@@ -311,22 +268,29 @@ function screenRitual(startHabitId) {
         ${canFreeze(habit)
           ? `<button class="ritual-freeze" data-verdict="frozen">${icon('snow', 16)} Geler ce jour (1× ce mois)</button>`
           : ''}
-        ${queue.length > 1
-          ? '<button class="ritual-later" id="ritual-later">Plus tard</button>'
-          : ''}
+        <button class="ritual-snooze-btn" id="ritual-snooze">Décaler à plus tard aujourd'hui</button>
+        ` : `
+        <div class="ritual-nav">
+          <button class="btn-secondary" id="ritual-prev" ${index === 0 ? 'disabled' : ''}>${icon('left', 18)} Précédent</button>
+          <button class="btn-primary" id="ritual-next">Suivant ${icon('right', 18)}</button>
+        </div>`}
       </div>`;
 
-    host.querySelector('#ritual-quit').addEventListener('click', () => navigate('/today'));
+    host.querySelector('#ritual-quit').addEventListener('click', () => { todayCursorHabitId = null; navigate('/home'); });
 
-    // No penalty, no verdict recorded — it just goes to the back of today's
-    // queue. The 1h window already punishes ignoring a promise entirely, so
-    // adding friction here would only be redundant.
-    const later = host.querySelector('#ritual-later');
-    if (later) {
-      later.addEventListener('click', () => {
-        queue.push(queue.shift());
+    if (!pending) {
+      const prev = host.querySelector('#ritual-prev');
+      if (prev) prev.addEventListener('click', () => { index--; mount(host); });
+      host.querySelector('#ritual-next').addEventListener('click', () => { index++; mount(host); });
+      return;
+    }
+
+    const snoozeBtn = host.querySelector('#ritual-snooze');
+    if (snoozeBtn) {
+      snoozeBtn.addEventListener('click', () => openSnoozeSheet(check, () => {
+        index++;
         mount(host);
-      });
+      }));
     }
 
     host.querySelectorAll('[data-verdict]').forEach(btn => {
@@ -338,17 +302,14 @@ function screenRitual(startHabitId) {
 
         if (verdict === 'frozen') {
           freezeCheck(check.id);
-          result.frozen++;
           vibrate(12);
         } else if (verdict === 'success') {
           markCheck(check.id, verdict);
-          result.kept++;
           vibrate(25);
           fxBurstFrom(btn, { count: 54, speed: 8 });
         } else {
           // Commit happens on the reason step so the answer and its reason
           // land as one write instead of two.
-          result.broken++;
           vibrate([10, 40, 60]);
           fxShake(stage, 'hard');
           const r = stage.getBoundingClientRect();
@@ -363,7 +324,7 @@ function screenRitual(startHabitId) {
 
         setTimeout(() => {
           if (verdict === 'failed') return mountReason(host, check);
-          queue.shift();
+          index++;
           mount(host);
         }, 640);
       });
@@ -389,7 +350,7 @@ function screenRitual(startHabitId) {
 
     const commit = reason => {
       markCheck(check.id, 'failed', reason);
-      queue.shift();
+      index++;
       mount(host);
     };
     host.querySelectorAll('[data-reason]').forEach(b =>
@@ -398,8 +359,9 @@ function screenRitual(startHabitId) {
   }
 
   function mountSummary(host) {
-    const total = result.kept + result.broken + result.frozen;
-    const perfect = total > 0 && result.broken === 0;
+    const today = todayTally();
+    const total = today.kept + today.broken + today.frozen;
+    const perfect = total > 0 && today.broken === 0;
     if (perfect && Math.random() < 0.35) {
       setTimeout(() => toast(SURPRISE_MESSAGES[Math.floor(Math.random() * SURPRISE_MESSAGES.length)]), 400);
     }
@@ -408,11 +370,11 @@ function screenRitual(startHabitId) {
       <div class="ritual ritual-summary">
         <div class="ritual-body">
           <p class="ritual-prompt">Aujourd'hui</p>
-          <h2 class="ritual-title">${perfect ? 'Rien à te reprocher.' : result.kept === 0 && total > 0 ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>
+          <h2 class="ritual-title">${perfect ? 'Rien à te reprocher.' : today.kept === 0 && total > 0 ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>
           <div class="summary-tallies">
-            <div class="tally is-kept"><span class="n">${result.kept}</span><span class="l">tenue${result.kept > 1 ? 's' : ''}</span></div>
-            <div class="tally is-broken"><span class="n">${result.broken}</span><span class="l">rompue${result.broken > 1 ? 's' : ''}</span></div>
-            ${result.frozen ? `<div class="tally is-frozen"><span class="n">${result.frozen}</span><span class="l">gelée${result.frozen > 1 ? 's' : ''}</span></div>` : ''}
+            <div class="tally is-kept"><span class="n">${today.kept}</span><span class="l">tenue${today.kept > 1 ? 's' : ''}</span></div>
+            <div class="tally is-broken"><span class="n">${today.broken}</span><span class="l">rompue${today.broken > 1 ? 's' : ''}</span></div>
+            ${today.frozen ? `<div class="tally is-frozen"><span class="n">${today.frozen}</span><span class="l">gelée${today.frozen > 1 ? 's' : ''}</span></div>` : ''}
           </div>
         </div>
         <div class="ritual-actions single">
@@ -421,7 +383,7 @@ function screenRitual(startHabitId) {
       </div>`;
     // Tallies land one after the other rather than all at once.
     const nums = host.querySelectorAll('.summary-tallies .n');
-    const values = [result.kept, result.broken, result.frozen];
+    const values = [today.kept, today.broken, today.frozen];
     nums.forEach((el, i) => {
       el.textContent = '0';
       setTimeout(() => fxCountUp(el, values[i], { duration: 700 }), 160 + i * 170);
@@ -433,6 +395,57 @@ function screenRitual(startHabitId) {
   }
 
   return { chrome: false, mount };
+}
+
+function wireNotifBanner(host) {
+  const nb = host.querySelector('#notif-enable');
+  if (!nb) return;
+  nb.addEventListener('click', async () => {
+    nb.disabled = true;
+    const res = await registerPush();
+    if (res.ok) { toast('Rappels activés.'); return navigate('/today'); }
+    nb.disabled = false;
+    const err = host.querySelector('#notif-error');
+    if (err) {
+      err.textContent = res.reason === 'denied'
+        ? 'Tu as refusé les notifications. Réautorise-les dans les réglages du navigateur.'
+        : res.reason === 'needs-install'
+        ? "Ajoute d'abord MIRROIR à ton écran d'accueil."
+        : `Impossible d'activer les rappels : ${res.reason}`;
+      err.style.display = 'block';
+    }
+  });
+}
+
+// A snooze only ever buys today — never past this same midnight — so the
+// choices are all same-day. Deliberately a plain, unassuming sheet: this is
+// an escape hatch, not an equal option to Fait/Pas fait.
+function openSnoozeSheet(check, onSnoozed) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal-sheet" role="dialog" aria-modal="true">
+      <h3>Décaler à plus tard aujourd'hui</h3>
+      <p>Ça ne change rien pour demain — juste un délai pour aujourd'hui, jamais après minuit.</p>
+      <div class="duration-grid">
+        <button type="button" class="duration-chip" data-snooze="15">+15 min</button>
+        <button type="button" class="duration-chip" data-snooze="30">+30 min</button>
+        <button type="button" class="duration-chip" data-snooze="60">+1 h</button>
+        <button type="button" class="duration-chip" data-snooze="eod">Jusqu'à 23h59</button>
+      </div>
+      <button class="btn-ghost" id="snooze-cancel">Annuler</button>
+    </div>`;
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+  backdrop.querySelector('#snooze-cancel').addEventListener('click', close);
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  backdrop.querySelectorAll('[data-snooze]').forEach(b => b.addEventListener('click', () => {
+    const v = b.dataset.snooze;
+    snoozeCheck(check.id, v === 'eod' ? 'eod' : Number(v));
+    close();
+    onSnoozed();
+  }));
 }
 
 // ---------- Mon miroir ----------

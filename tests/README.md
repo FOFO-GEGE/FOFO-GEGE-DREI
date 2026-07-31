@@ -34,19 +34,21 @@ and has to be verified against the project itself.
 
 ## Specs
 
-- `flow.spec.js` — signup, guided creation, the answer-window countdown, the
-  ritual, the failure-reason step, the write queue draining, the card-focus
-  overlay (the card pivots around X/Y on a one-finger drag without ever
-  translating — checked by asserting its on-screen center barely moves while
-  its rotation passes 90° — springs back flat on release, and a real turn
-  doesn't also count as the tap that closes it, while a plain tap or a
-  backdrop tap does), reminder-time editing (blocked while today's check is
-  live, allowed once it isn't), the cemetery (abandon, toggle open **and**
-  closed — checked via computed style, not just the `hidden` attribute), the
-  clickable calendar day sheet, and the card's time-remaining colour (`.pcard`
-  carries `.time-pending` while unanswered, and settles to neither
-  `.time-pending` nor `.time-done` once answered "Pas fait" — `.time-done` is
-  reserved for "Fait", see `answer-window.spec.js`).
+- `flow.spec.js` — signup, guided creation, Aujourd'hui as the story itself
+  (tapping the tab drops straight onto the real card, full screen, no chrome),
+  the answer-window countdown, the failure-reason step, the write queue
+  draining, the card-focus overlay (the card pivots around X/Y on a
+  one-finger drag without ever translating — checked by asserting its
+  on-screen center barely moves while its rotation passes 90° — springs back
+  flat on release, and a real turn doesn't also count as the tap that closes
+  it, while a plain tap or a backdrop tap does), reminder-time editing
+  (blocked while today's check is still live, allowed once it isn't), the
+  cemetery (abandon, toggle open **and** closed — checked via computed style,
+  not just the `hidden` attribute), the clickable calendar day sheet, and the
+  card's time-remaining colour (`.pcard` carries `.time-pending` while
+  unanswered, and settles to neither `.time-pending` nor `.time-done` once
+  answered "Pas fait" — `.time-done` is reserved for "Fait", see
+  `answer-window.spec.js`).
 - `expiry.spec.js` — the core rule: silence past a promise's own range becomes
   a failure with the `expired` flag, breaks the streak, and a range that has
   already closed never opens a check at all.
@@ -69,17 +71,19 @@ and has to be verified against the project itself.
   carries a permanent scar visible even in the compact deck grid, persists to
   the database, and — the one-resurrection-ever ceiling — a card that dies a
   second time cannot be revived again.
-- `ritual-queue.spec.js` — the ritual queue: sorted by urgency rather than
-  creation order (regression coverage for a real bug — it used to take
-  `pendingToday()` as-is, so it could block on a promise not due yet while
-  another expired behind it), a promise not due today at all excluded from
-  the deck entirely, "Plus tard" requeues without recording a verdict, a
-  click on Aujourd'hui's preview list enters the ritual at that specific
-  promise rather than the most urgent one, and the "Commencer le check-in"
-  button is always present once anything is pending — regression coverage for
-  a real bug where it vanished entirely whenever nothing happened to be
-  "open" yet, since every pending promise is answerable now regardless of how
-  far off its reminder time is.
+- `ritual-queue.spec.js` — Aujourd'hui as a one-card-at-a-time story rather
+  than a list behind a button: pending promises sorted by urgency (regression
+  coverage for a real bug — it used to take `pendingToday()` as-is, so it
+  could block on a promise not due yet while another expired behind it), a
+  promise not due today excluded from the story entirely, no numeric counter
+  anywhere on screen, "Décaler" pushing a card's real deadline later *today
+  only* without ever moving its colour band backwards (it's read off the
+  original schedule, not the snoozed one — a snooze buys time to act, it
+  doesn't make the card look less overdue), a snoozed promise not resurfacing
+  within the same pass through the story but leading a fresh visit again
+  (still pending, still unresolved), and decided cards trailing behind the
+  still-pending ones with no verdict buttons — just free `Précédent`/`Suivant`
+  browsing once everything for the day is settled.
 - `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
   only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
   (including that `ageTierFor()` ignores vitality entirely, by design), a
