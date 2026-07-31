@@ -12,19 +12,15 @@ const MONTH_LABELS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 
 const SURPRISE_MESSAGES = ['Jour parfait.', 'Tu tiens le rythme.', 'Plus régulier que la moyenne cette semaine.'];
 
-// Shared chip describing where a pending check sits in its hour.
+// Shared chip describing where a pending check sits in its range.
 function countdownChip(check) {
   const habit = store.habits.find(h => h.id === check.habit_id);
   if (!habit) return '';
   if (isExpired(check)) {
     return `<p class="countdown is-urgent">${icon('spark', 14)} Le temps est écoulé</p>`;
   }
-  if (!windowIsOpen(check)) {
-    const at = (habit.reminder_time || '20:00').slice(0, 5);
-    return `<p class="countdown is-waiting">Ouvre à ${at}</p>`;
-  }
   const left = minutesLeft(check);
-  return `<p class="countdown ${left <= 15 ? 'is-urgent' : ''}">
+  return `<p class="countdown ${isUrgent(check) ? 'is-urgent' : ''}">
     ${icon('spark', 14)} ${left} min avant « non tenu »
   </p>`;
 }
@@ -205,52 +201,27 @@ function screenToday() {
         <button class="btn-secondary" data-nav="/home">Voir mon miroir</button>
       </div>`;
   } else {
-    // The tightest deadline across everything still open drives the urgency.
-    const open = pending.filter(p => windowIsOpen(p.check));
-    const soonest = open.length ? Math.min(...open.map(p => minutesLeft(p.check))) : null;
+    // Every pending promise is answerable right now — the tightest deadline
+    // among them drives the urgency banner, and pending is already sorted
+    // soonest-first.
+    const soonest = minutesLeft(pending[0].check);
 
     body = `
       <div class="ritual-intro">
         <div class="ritual-count">${pending.length}</div>
         <h3>promesse${pending.length > 1 ? 's' : ''} pas encore faite${pending.length > 1 ? 's' : ''}</h3>
-        ${soonest !== null
-          ? `<p class="deadline-banner ${soonest <= 15 ? 'is-urgent' : ''}">
-               Sans réponse dans <strong>${soonest} min</strong>, c'est compté comme non tenu.
-             </p>`
-          : `<p>Une par une. Pas de liste à cocher à la va-vite.</p>`}
-        <div class="story-tray">
-          ${pending.map(p => {
-            const theme = themeById(p.habit.theme);
-            const openNow = windowIsOpen(p.check);
-            const urgent = openNow && minutesLeft(p.check) <= 15;
-            // Only an open promise is a valid entry point — same rule as the
-            // list below, just as a tappable ring instead of a row.
-            return `
-            <button type="button" class="story-bubble" ${openNow ? `data-habit="${p.habit.id}"` : 'disabled'}>
-              <span class="story-ring ${openNow ? (urgent ? 'is-urgent' : 'is-open') : 'is-waiting'}">
-                <span class="story-avatar" style="--card-hue:${theme.hue}">${icon(theme.id, 22)}</span>
-              </span>
-              <span class="story-label">${esc(p.habit.title)}</span>
-            </button>`;
-          }).join('')}
-        </div>
+        <p class="deadline-banner ${isUrgent(pending[0].check) ? 'is-urgent' : ''}">
+          Sans réponse dans <strong>${soonest} min</strong>, c'est compté comme non tenu.
+        </p>
         <ul class="ritual-preview">
-          ${pending.map(p => {
-            const openNow = windowIsOpen(p.check);
-            // Only an open promise can actually start the ritual there — one
-            // still waiting for its hour isn't answerable yet, so it isn't a
-            // valid entry point.
-            return `
-            <li class="${openNow ? 'rp-clickable' : ''}" ${openNow ? `data-habit="${p.habit.id}"` : ''}>
+          ${pending.map(p => `
+            <li class="rp-clickable" data-habit="${p.habit.id}">
               ${icon(themeById(p.habit.theme).id, 18)}
               <span class="rp-title">${esc(p.habit.title)}</span>
-              ${openNow
-                ? `<span class="rp-left ${minutesLeft(p.check) <= 15 ? 'is-urgent' : ''}">${minutesLeft(p.check)} min</span>`
-                : `<span class="rp-left is-waiting">${(p.habit.reminder_time || '20:00').slice(0, 5)}</span>`}
-            </li>`;
-          }).join('')}
+              <span class="rp-left ${isUrgent(p.check) ? 'is-urgent' : ''}">${minutesLeft(p.check)} min</span>
+            </li>`).join('')}
         </ul>
-        ${open.length ? '<button class="btn-primary" id="start-ritual">Commencer le check-in</button>' : ''}
+        <button class="btn-primary" id="start-ritual">Commencer le check-in</button>
       </div>`;
   }
 
@@ -280,8 +251,6 @@ function screenToday() {
       if (start) start.addEventListener('click', () => navigate('/ritual'));
       host.querySelectorAll('.rp-clickable[data-habit]').forEach(li =>
         li.addEventListener('click', () => navigate('/ritual/' + li.dataset.habit)));
-      host.querySelectorAll('.story-bubble[data-habit]').forEach(b =>
-        b.addEventListener('click', () => navigate('/ritual/' + b.dataset.habit)));
     },
   };
 }
@@ -292,7 +261,7 @@ function screenToday() {
 // Aujourd'hui's preview list — it becomes the first card, the rest of the
 // queue is unaffected.
 function screenRitual(startHabitId) {
-  const queue = pendingOpenSorted();
+  const queue = pendingSorted();
   if (startHabitId) {
     const at = queue.findIndex(p => p.habit.id === startHabitId);
     if (at > 0) queue.unshift(queue.splice(at, 1)[0]);
@@ -316,7 +285,7 @@ function screenRitual(startHabitId) {
     const answered = result.kept + result.broken + result.frozen;
 
     host.innerHTML = `
-      <div class="ritual" style="--card-hue:${theme.hue}">
+      <div class="ritual">
         <div class="ritual-top">
           <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           <div class="ritual-progress">
@@ -501,7 +470,7 @@ function screenHome() {
     ? `<section class="deck">
          <h4 class="section-label">Tes cartes <span class="deck-count">${store.habits.length}</span></h4>
          <div class="deck-grid">
-           ${store.habits.map(h => habitCard(h, habitStats(h), { compact: true, habitId: h.id, awake: isAwake(h) })).join('')}
+           ${store.habits.map(h => habitCard(h, habitStats(h), { compact: true, habitId: h.id })).join('')}
          </div>
        </section>`
     : `<div class="empty-rich">
@@ -674,10 +643,22 @@ function screenWeek() {
 
 // ---------- Nouvelle promesse (parcours guidé) ----------
 
+// How long a promise stays answerable once its range opens — the reminder
+// time is only where it starts. A short range is a harder version of the
+// same promise: there's no partial credit for answering late.
+const WINDOW_PRESETS = [
+  { minutes: 15, label: '15 min' },
+  { minutes: 30, label: '30 min' },
+  { minutes: 60, label: '1 h' },
+  { minutes: 120, label: '2 h' },
+  { minutes: 240, label: '4 h' },
+  { minutes: 480, label: '8 h' },
+];
+
 function screenNewHabit() {
   const draft = {
     title: '', theme: '', type: 'daily', frequency: 3,
-    target_days: new Set([1, 2, 3, 4, 5, 6, 0]), reminder_time: '20:00', end_date: '',
+    target_days: new Set([1, 2, 3, 4, 5, 6, 0]), reminder_time: '20:00', window_minutes: 60, end_date: '',
   };
   let step = 0;
   const STEPS = 3;
@@ -737,10 +718,17 @@ function screenNewHabit() {
         <input type="time" id="nh-time" value="${draft.reminder_time}" />
       </div>
       <div class="form-group">
+        <label>Plage pour répondre</label>
+        <div class="duration-grid">
+          ${WINDOW_PRESETS.map(w => `
+            <button type="button" class="duration-chip ${draft.window_minutes === w.minutes ? 'selected' : ''}" data-window="${w.minutes}">${w.label}</button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group">
         <label for="nh-end">Date de fin (optionnel)</label>
         <input type="date" id="nh-end" value="${draft.end_date}" />
       </div>
-      <p class="hint-msg">Tu pourras geler un jour par mois, gratuitement, sans casser ta série.</p>`;
+      <p class="hint-msg">Passé ce délai après l'heure de vérification, sans réponse, c'est compté comme non tenu. Tu pourras geler un jour par mois, gratuitement, sans casser ta série.</p>`;
   }
 
   function canAdvance() {
@@ -798,6 +786,9 @@ function screenNewHabit() {
     if (freq) freq.addEventListener('input', () => { draft.frequency = Number(freq.value); });
     const time = host.querySelector('#nh-time');
     if (time) time.addEventListener('input', () => { draft.reminder_time = time.value; });
+    host.querySelectorAll('[data-window]').forEach(b => b.addEventListener('click', () => {
+      draft.window_minutes = Number(b.dataset.window); rerender();
+    }));
     const end = host.querySelector('#nh-end');
     if (end) end.addEventListener('input', () => { draft.end_date = end.value; });
 
@@ -819,6 +810,7 @@ function screenNewHabit() {
         frequency: draft.type === 'frequency' ? draft.frequency : null,
         target_days: Array.from(draft.target_days),
         reminder_time: draft.reminder_time,
+        window_minutes: draft.window_minutes,
         end_date: draft.end_date || null,
       });
       if (error) {
@@ -927,7 +919,7 @@ function openCardFocus(habit, opts = {}) {
   const stats = habitStats(habit);
   const cardOpts = opts.dead
     ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
-    : { awake: isAwake(habit) };
+    : {};
 
   const overlay = document.createElement('div');
   overlay.className = 'card-focus-backdrop';
@@ -1086,7 +1078,7 @@ function screenHabitDetail(habitId) {
   const html = `
     <div class="detail-card">${habitCard(habit, stats, dead
       ? { dead: true, deathDate: formatDay(habit.deleted_at?.slice(0, 10)), deathCause: habit.death_cause }
-      : { awake: isAwake(habit) })}</div>
+      : {})}</div>
     <div class="card">
       <div class="stat-line">Promise <strong>${stats.total}</strong> fois. Tenue <strong>${stats.kept}</strong> fois.</div>
       ${lines}

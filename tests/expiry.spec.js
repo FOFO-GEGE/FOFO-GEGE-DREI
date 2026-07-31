@@ -39,7 +39,6 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   let s = await page.evaluate(() => ({
     status: store.checks[0].status,
     left: minutesLeft(store.checks[0]),
-    open: windowIsOpen(store.checks[0]),
     expired: isExpired(store.checks[0]),
   }));
   step('before expiry ->', JSON.stringify(s));

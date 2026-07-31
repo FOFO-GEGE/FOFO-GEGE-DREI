@@ -1,9 +1,11 @@
-// The ritual queue: sorted by urgency (not creation order), windows that
-// haven't opened yet excluded from the forced sequence, "Plus tard" to
-// requeue without a verdict, and Aujourd'hui's preview list as an entry
-// point. Regression coverage for the bug this fixes: the ritual used to take
-// pendingToday() as-is, so it could block on a promise not due yet while
-// another expired behind it.
+// The ritual queue: sorted by urgency (not creation order), a promise not due
+// today excluded entirely, "Plus tard" to requeue without a verdict, and
+// Aujourd'hui's preview list as an entry point. Regression coverage for the
+// bug this fixes: the ritual used to take pendingToday() as-is, so it could
+// block on a promise not due yet while another expired behind it. Every
+// pending promise is answerable the instant it exists (no more "waiting" for
+// its hour), so the ritual queue and the preview list both simply hold
+// everything pending, sorted soonest-deadline-first.
 const { chromium } = require('playwright');
 const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
 
@@ -45,9 +47,9 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   // Created in an order that is the OPPOSITE of urgency: the last one created
   // (sport) has the least time left, so a fix that sorted by anything but
   // urgency would present them in the wrong order.
-  await createHabit('lecture', 5);   // opened 5 min ago -> 55 min left
-  await createHabit('sommeil', 40);  // opened 40 min ago -> 20 min left
-  await createHabit('sport', 55);   // opened 55 min ago -> 5 min left (most urgent)
+  await createHabit('lecture', 5);   // reminder 5 min ago -> 55 min left
+  await createHabit('sommeil', 40);  // reminder 40 min ago -> 20 min left
+  await createHabit('sport', 55);   // reminder 55 min ago -> 5 min left (most urgent)
   step('created 3 habits, least urgent first, most urgent last');
 
   // A 4th, not due today at all -> must never enter the forced sequence.
@@ -65,8 +67,9 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForFunction(() => location.hash === '#/home');
   step('created a 4th habit not due today (must stay out of the deck entirely)');
 
-  // A 5th, due today but its reminder hasn't opened yet -> visible on
-  // Aujourd'hui, waiting, but excluded from the ritual's active queue.
+  // A 5th, due today but its reminder is 3h out — no longer "waiting": since
+  // answering is allowed any time before the deadline, it is already part of
+  // the same queue, just the least urgent entry (~240 min left).
   await page.click('[data-nav="/new"]');
   await page.waitForSelector('.creator');
   await page.click('[data-theme="travail"]');
@@ -78,8 +81,8 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('#nh-time');
   // reminder_time is a bare time-of-day, reinterpreted against *today's*
   // date — so if "+3h" crosses midnight, the stored time reads as earlier
-  // today (already past), the window is already closed instead of "not open
-  // yet", and reconcileToday() never creates a check for it at all. Clamp to
+  // today (already past), the deadline is already passed instead of hours
+  // out, and reconcileToday() never creates a check for it at all. Clamp to
   // just before midnight instead when the run happens to start late enough.
   const now = new Date();
   let future = new Date(now.getTime() + 3 * 3600000);
@@ -89,50 +92,25 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.fill('#nh-time', `${String(future.getHours()).padStart(2, '0')}:${String(future.getMinutes()).padStart(2, '0')}`);
   await page.click('#nh-next');
   await page.waitForFunction(() => location.hash === '#/home');
-  step('created a 5th habit due today but not open for 3 more hours');
+  step('created a 5th habit due today, reminder 3h out — already answerable, just the least urgent');
 
-  // --- Aujourd'hui: sorted by urgency, the not-yet-open one shows as waiting ---
+  // --- Aujourd'hui: sorted by urgency, all four pending entries clickable ---
   await page.click('[data-nav="/today"]');
   await page.waitForSelector('.ritual-preview');
   const order = await page.locator('.ritual-preview .rp-title').allTextContents();
   step('preview order (most urgent first):', order.join(' | '));
   const clickable = await page.locator('.ritual-preview li.rp-clickable').count();
-  step('clickable (open) entries:', clickable, '(expect 3 — the 4th habit is not due, the 5th is not open yet)');
-  if (clickable !== 3) throw new Error(`expected 3 clickable preview entries, got ${clickable}`);
+  step('clickable entries:', clickable, '(expect 4 — every pending promise is answerable now; only the 4th habit, not due today, is excluded)');
+  if (clickable !== 4) throw new Error(`expected 4 clickable preview entries, got ${clickable}`);
 
-  const waitingCount = await page.locator('.ritual-preview .rp-left.is-waiting').count();
-  step('waiting (not-yet-open) entries shown:', waitingCount, '(expect 1)');
-  if (waitingCount !== 1) throw new Error(`expected exactly 1 waiting entry, got ${waitingCount}`);
+  // The ritual is always reachable — no "no open window" state left that
+  // could hide the button (the regression this covers).
+  const startBtn = await page.locator('#start-ritual').count();
+  step('"Commencer le check-in" button present:', startBtn, '(expect 1 — always reachable)');
+  if (startBtn !== 1) throw new Error('the ritual start button must always be present once something is pending');
 
-  // --- The story tray mirrors the same rule: one ring per pending promise
-  // (open or waiting, but never the 4th habit which isn't due at all), only
-  // the open ones tappable, most urgent ring first ---
-  const bubbles = await page.locator('.story-bubble').count();
-  step('story bubbles total:', bubbles, '(expect 4 — 3 open + 1 waiting)');
-  if (bubbles !== 4) throw new Error(`expected 4 story bubbles, got ${bubbles}`);
-  const tappableBubbles = await page.locator('.story-bubble[data-habit]').count();
-  step('tappable (open) bubbles:', tappableBubbles, '(expect 3)');
-  if (tappableBubbles !== 3) throw new Error(`expected 3 tappable bubbles, got ${tappableBubbles}`);
-  const waitingBubbles = await page.locator('.story-ring.is-waiting').count();
-  step('waiting-ring bubbles:', waitingBubbles, '(expect 1)');
-  if (waitingBubbles !== 1) throw new Error(`expected 1 waiting-ring bubble, got ${waitingBubbles}`);
-
-  // Tapping the first (most urgent) bubble enters the ritual there.
-  const firstBubbleHabit = await page.locator('.story-bubble[data-habit]').first().getAttribute('data-habit');
-  await page.locator('.story-bubble[data-habit]').first().click();
-  await page.waitForSelector('.ritual-title');
-  const enteredViaBubble = await page.evaluate(
-    id => store.habits.find(h => h.id === id)?.title,
-    firstBubbleHabit
-  );
-  const shownTitle = (await page.locator('.ritual-title').textContent()).trim();
-  step('tapping the first story bubble entered the ritual at:', shownTitle, '(expect:', enteredViaBubble, ')');
-  if (shownTitle !== enteredViaBubble) throw new Error('tapping a story bubble did not start the ritual at that promise');
-  await page.click('#ritual-quit');
-  await page.waitForFunction(() => location.hash === '#/today');
-
-  // --- Clicking a specific open entry starts the ritual there, not at the
-  // most urgent one — an entry point, distinct from the generic start button ---
+  // Clicking a specific entry starts the ritual there, not at the most urgent
+  // one — an entry point, distinct from the generic start button.
   const targetTitle = order[1]; // the middle one, deliberately not the most urgent
   await page.locator('.ritual-preview li.rp-clickable', { hasText: targetTitle }).click();
   await page.waitForSelector('.ritual-title');
@@ -142,14 +120,14 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.click('#ritual-quit');
   await page.waitForFunction(() => location.hash === '#/today');
 
-  // --- The ritual itself only ever holds the 3 open promises, most urgent first ---
+  // --- The ritual holds all 4 pending promises, most urgent first ---
   await page.click('#start-ritual');
   await page.waitForSelector('.ritual-title');
   const firstTitle = (await page.locator('.ritual-title').textContent()).trim();
   step('first card in the ritual:', firstTitle, '(expect the sport habit — 5 min left, most urgent)');
   const dotsTotal = await page.locator('.ritual-progress span').count();
-  step('progress dots:', dotsTotal, '(expect 3 — the not-yet-open and not-due habits are excluded)');
-  if (dotsTotal !== 3) throw new Error(`ritual queue should only ever hold the 3 open promises, got ${dotsTotal} dots`);
+  step('progress dots:', dotsTotal, '(expect 4 — every pending promise, including the one 3h out; only the not-due 4th is excluded)');
+  if (dotsTotal !== 4) throw new Error(`ritual queue should hold all 4 pending promises, got ${dotsTotal} dots`);
 
   // --- "Plus tard": no verdict, goes to the back, no penalty ---
   await page.click('#ritual-later');
@@ -164,13 +142,15 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('deferred promise still unanswered:', stillCreated, '(expect "created" — no verdict was recorded)');
   if (stillCreated !== 'created') throw new Error('"Plus tard" recorded a verdict, it should not have');
 
-  // Answer the two remaining, then the deferred one must resurface last.
+  // Answer the three remaining, then the deferred one must resurface last.
+  await page.click('.ritual-btn.is-yes');
+  await page.waitForTimeout(700);
   await page.click('.ritual-btn.is-yes');
   await page.waitForTimeout(700);
   await page.click('.ritual-btn.is-yes');
   await page.waitForTimeout(700);
   const lastTitle = (await page.locator('.ritual-title').textContent()).trim();
-  step('third and final card:', lastTitle, '(expect the deferred one, back at the front of the empty queue)');
+  step('fourth and final card:', lastTitle, '(expect the deferred one, back at the front of the empty queue)');
   if (lastTitle !== firstTitle) throw new Error('the deferred promise did not resurface');
 
   console.log('ERRORS:', JSON.stringify(errors));

@@ -43,12 +43,20 @@ and has to be verified against the project itself.
   backdrop tap does), reminder-time editing (blocked while today's check is
   live, allowed once it isn't), the cemetery (abandon, toggle open **and**
   closed — checked via computed style, not just the `hidden` attribute), the
-  clickable calendar day sheet, and the daily rhythm (a card is `.is-awake`
-  while its window is open, and no longer once it has been answered — even
-  though the window itself is still technically open).
-- `expiry.spec.js` — the core rule: silence past the one-hour window becomes a
-  failure with the `expired` flag, breaks the streak, and a window that has
+  clickable calendar day sheet, and the card's time-remaining colour (`.pcard`
+  carries `.time-pending` while unanswered, and settles to neither
+  `.time-pending` nor `.time-done` once answered "Pas fait" — `.time-done` is
+  reserved for "Fait", see `answer-window.spec.js`).
+- `expiry.spec.js` — the core rule: silence past a promise's own range becomes
+  a failure with the `expired` flag, breaks the streak, and a range that has
   already closed never opens a check at all.
+- `answer-window.spec.js` — the configurable per-habit range that replaced
+  the fixed one-hour window: `rangeElapsed()` as a pure function (0 just after
+  opening, clamped to 0 before the range opens so answering early never reads
+  as urgent, clamped to 1 past the deadline), a habit created with a
+  30-minute range whose reminder is 2h out — answerable immediately rather
+  than "waiting" — and the card settling to the gold `.time-done` state (not
+  the green→red `.time-pending` one) once answered "Fait".
 - `vitality.spec.js` — the value that makes a card change while the app is
   closed. Its case table is **the contract between two implementations**:
   `vitalityOf()` in JS and `mirroir_vitality()` in PL/pgSQL compute the same
@@ -64,12 +72,14 @@ and has to be verified against the project itself.
 - `ritual-queue.spec.js` — the ritual queue: sorted by urgency rather than
   creation order (regression coverage for a real bug — it used to take
   `pendingToday()` as-is, so it could block on a promise not due yet while
-  another expired behind it), promises whose window hasn't opened excluded
-  from the forced sequence entirely, "Plus tard" requeues without recording a
-  verdict, a click on Aujourd'hui's preview list enters the ritual at that
-  specific promise rather than the most urgent one, and the story tray above
-  it (one ring per pending promise, only the open ones tappable) mirrors the
-  same rule and enters the ritual at whichever ring was tapped.
+  another expired behind it), a promise not due today at all excluded from
+  the deck entirely, "Plus tard" requeues without recording a verdict, a
+  click on Aujourd'hui's preview list enters the ritual at that specific
+  promise rather than the most urgent one, and the "Commencer le check-in"
+  button is always present once anything is pending — regression coverage for
+  a real bug where it vanished entirely whenever nothing happened to be
+  "open" yet, since every pending promise is answerable now regardless of how
+  far off its reminder time is.
 - `tier-gating.spec.js` — a tier now needs both age and vitality; age alone
   only raises the ceiling. Covers the pure `tierFor(days, vitality)` table
   (including that `ageTierFor()` ignores vitality entirely, by design), a
