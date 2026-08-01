@@ -54,10 +54,12 @@ and has to be verified against the project itself.
   cemetery (abandon, toggle open **and** closed — checked via computed style,
   not just the `hidden` attribute — the toggle reveals a `.yard` graveyard
   panel wrapping the `cemetery-grid`, and the tier badge carries its emoji),
-  the clickable calendar day sheet, and the card's time-remaining colour
-  (`.pcard` carries `.time-pending` while unanswered, and settles to neither
+  the clickable calendar day sheet, and the card's day-state classes (`.pcard`
+  carries `.time-pending` while unanswered, and settles to neither
   `.time-pending` nor `.time-done` once answered "Pas fait" — `.time-done` is
-  reserved for "Fait", see `answer-window.spec.js`).
+  reserved for "Fait", see `answer-window.spec.js`). Those classes now drive
+  the status glyph rather than the body colour; what the body is painted with
+  is `card-colour.spec.js`'s business.
 - `expiry.spec.js` — the core rule: silence past a promise's own range becomes
   a failure with the `expired` flag, breaks the streak, and a range that has
   already closed never opens a check at all.
@@ -91,6 +93,32 @@ and has to be verified against the project itself.
   entirely and keep the flat -8. Mirrored by hand in `mirroir_vitality()`
   (`20260731_one_day_vitality.sql`) — the mock does not run real SQL, so this
   case table is the JS half of that contract.
+- `card-colour.spec.js` — what a card's colour means, after the two channels
+  swapped places. The body used to be painted by today's answer (green→red as
+  the range ran down, gold once answered), which put the shortest-lived fact
+  in the app on the channel the eye reads first and left the promise's own
+  health with no voice at all. The body now carries **vitality** — the same
+  three bands the VIE gauge fills with, plus grey for death, and no gold
+  anywhere (gold is the reward colour, and a card that merely still has a
+  pulse hasn't earned it) — while **today** moved to a single status glyph
+  top right. Covers: the body class following vitality and ignoring today's
+  answer entirely (a healthy promise reads `vit-pleine` whether it was kept
+  or broken today; one kept day does not repaint a dying card), those classes
+  actually resolving to four distinct painted backgrounds (a class nothing
+  paints would satisfy the class assertions while leaving every card
+  identical on screen), `faiblit`/`malade` deliberately sharing one amber
+  band, and the full glyph table — ⏳/⏰/🚨 counting today's range down,
+  ✅/❌/❄️/🌙 for how it settled, 🏆/🪦 for a card that has left the deck,
+  each with a written label since an emoji is a picture and not a name, and
+  no glyph at all on a synthetic preview card that has no real "today".
+  Its headline case, and the reason the file exists: **a retired card keeps
+  the colour it had the moment it left the deck.** A promise abandoned in
+  perfect health stays green in the cemetery — you are meant to see that you
+  threw away something that was working — and one that starved is grey with
+  no special rule anywhere, because its vitality really was zero when it
+  went. The muting is `.is-retired`'s job, which preserves that colour; the
+  blanket greyscale that used to repaint every buried card identically is
+  gone.
 - `ritual-queue.spec.js` — Aujourd'hui as a one-card-at-a-time story rather
   than a list behind a button: pending promises sorted by urgency (regression
   coverage for a real bug — it used to take `pendingToday()` as-is, so it

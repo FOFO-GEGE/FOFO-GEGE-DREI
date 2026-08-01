@@ -63,6 +63,23 @@ const TIERS = [
   { id: 'legendaire', label: 'Légendaire', emoji: '✨', minDays: 180, minVitality: 85, blurb: 'Six mois. Rare.' },
 ];
 
+// The card's day-state channel: what today is, in one glyph. Three of them
+// count today's range down, four state how it was settled, and the last two
+// mark a card that has left the deck for good. Every one carries a written
+// label too — an emoji is a picture, not a name, and the glyph alone would
+// be unreadable to a screen reader and ambiguous to everyone else.
+const CARD_STATUS = {
+  plenty:   { glyph: '⏳', label: 'Il te reste du temps aujourd’hui' },
+  half:     { glyph: '⏰', label: 'La fenêtre se referme' },
+  urgent:   { glyph: '🚨', label: 'Dernières minutes pour répondre' },
+  kept:     { glyph: '✅', label: 'Tenue aujourd’hui' },
+  broken:   { glyph: '❌', label: 'Pas tenue aujourd’hui' },
+  frozen:   { glyph: '❄️', label: 'Gelée aujourd’hui' },
+  rest:     { glyph: '🌙', label: 'Rien à faire aujourd’hui' },
+  finished: { glyph: '🏆', label: 'Promesse terminée' },
+  dead:     { glyph: '🪦', label: 'Promesse enterrée' },
+};
+
 // The ceiling age alone allows — used only to detect a missed evolution
 // (see tierFor below), never as the displayed tier by itself.
 function ageTierFor(days) {
@@ -129,20 +146,28 @@ function habitCard(habit, stats, opts = {}) {
   const rateText = stats.rate === null ? '—' : `${stats.rate}%`;
   const keptOverall = stats.rate !== null && stats.rate >= 50;
 
-  // The body's one colour. For a live card it moves purely with the clock:
-  // three flat, vivid bands — green / amber / red — as today's range goes
-  // by, never a fade between them, gold once answered "fait" (until
-  // midnight resets it). Bands are read off the original schedule only (see
-  // rangeElapsed) — a snooze buys real time to act but never turns a card
-  // back a band, it only postpones the deadline. Never fed by vitality — a
-  // dying card that was just answered still reads green/gold. A finished
-  // card instead just settles on whichever of those two colours it earned
-  // overall (gold if mostly kept, red if not) and stays there for good.
+  // Today's state, and today's alone. It used to be the body's colour, which
+  // put a fact that turns over within the hour on the one channel the eye
+  // reads first — so a promise you'd kept for three months looked identical
+  // to one created this morning, and the card said nothing at all about the
+  // promise's own health. Colour now belongs to that health (see below), and
+  // today gets this: one glyph, top right. It also states the day plainly
+  // rather than by comparison — an emptying hourglass is legible on a single
+  // card, whereas "green" only meant "earlier than amber" if an amber card
+  // happened to be next to it.
+  //
+  // The bands behind the three pending glyphs are read off the original
+  // schedule only (see rangeElapsed) — a snooze buys real time to act but
+  // never walks a card back a band, it only postpones the deadline.
   let timeState = 'none';
   let timeBand = '';
+  let status = null;
   if (opts.finished) {
     timeState = keptOverall ? 'done' : 'broken';
-  } else if (!opts.dead) {
+    status = CARD_STATUS.finished;
+  } else if (opts.dead) {
+    status = CARD_STATUS.dead;
+  } else {
     const todayCheck = todaysCheck(habit);
     timeState = todayCheck?.status === 'created' ? 'pending'
       : todayCheck?.status === 'success' ? 'done'
@@ -150,8 +175,20 @@ function habitCard(habit, stats, opts = {}) {
     if (timeState === 'pending') {
       const elapsed = rangeElapsed(habit, todayCheck.date);
       timeBand = elapsed < 1 / 3 ? 'green' : elapsed < 2 / 3 ? 'amber' : 'red';
+      status = timeBand === 'green' ? CARD_STATUS.plenty
+        : timeBand === 'amber' ? CARD_STATUS.half
+        : CARD_STATUS.urgent;
+    } else {
+      status = todayCheck?.status === 'success' ? CARD_STATUS.kept
+        : todayCheck?.status === 'failed' ? CARD_STATUS.broken
+        : todayCheck?.status === 'frozen' ? CARD_STATUS.frozen
+        : CARD_STATUS.rest;
     }
   }
+  // A synthetic card (the onboarding demo, a preview) belongs to no real
+  // promise, so it has no "today" to report — better silent than inventing a
+  // rest day for a habit that doesn't exist.
+  if (!habit.id) status = null;
   const fracSeed = habit.id ? hashSeed(habit.id) : 40;
 
   // A real gauge, not just a filter — the vitality ladder used to only show
@@ -207,12 +244,13 @@ function habitCard(habit, stats, opts = {}) {
     : '';
 
   return `
-    <article class="pcard tier-${tier.id} vit-${opts.dead ? 'morte' : opts.finished ? 'pleine' : (stats.vitalityState || 'pleine')} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${opts.dead ? 'is-dead' : ''}"
+    <article class="pcard tier-${tier.id} vit-${stats.vitalityState || 'pleine'} time-${timeState} ${timeBand ? 'band-' + timeBand : ''} ${opts.compact ? 'is-compact' : ''} ${retired ? 'is-retired' : ''} ${opts.dead ? 'is-dead' : ''}"
       style="--frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">
         <h3 class="pcard-name">${esc(habit.title || 'Ta promesse')}</h3>
+        ${status ? `<span class="pcard-status" role="img" title="${esc(status.label)}" aria-label="${esc(status.label)}">${status.glyph}</span>` : ''}
       </header>
 
       ${!retired ? `

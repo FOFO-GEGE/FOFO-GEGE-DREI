@@ -241,45 +241,54 @@ button:disabled { opacity: .4; cursor: default; }
 .pcard[data-habit] { cursor: pointer; }
 .pcard[data-habit]:active { transform: perspective(760px) scale(.97); }
 
-/* ---------- Time-remaining body colour ----------
-   The one channel that answers "how much time is left today" — three flat,
-   vivid bands (green / amber / red) as the promise's own range goes by,
-   never a fade between them: a threshold crossing is a visible event, not
-   something that creeps up on you. Gold once answered "fait", held there
-   until midnight. Pure render-time state (computed in habitCard()): never
-   written back, gone the instant the range is settled. This is the only
-   colour a card carries — theme shows through its icon alone. */
-.pcard.band-green {
+/* ---------- The body's colour: the promise's life ----------
+   Not today's answer — that turns over within the hour and now has its own
+   channel (the status glyph, top right of the card). The body answers the
+   slower and far more useful question: is this promise in good health? Three
+   flat bands, deliberately the same three the VIE gauge fills with, so the
+   gauge and the body can never contradict each other — green while it holds,
+   amber once it starts slipping, red when it is close to dying. Grey is death
+   and death alone. Gold appears nowhere here: it is the reward colour
+   everywhere else in the app, and a card that merely still has a pulse hasn't
+   earned it. Theme shows through the icon alone, as before. */
+.pcard.vit-pleine {
   background: color-mix(in srgb, var(--band-green) 38%, var(--surface));
   border-color: var(--band-green);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--band-green) 40%, transparent);
 }
-.pcard.band-amber {
+/* Faiblit and malade share a band on purpose. They are two steps of one
+   slide, and the gauge already separates them by width — splitting them by
+   colour too would have needed a fourth hue, and the only one left was gold. */
+.pcard.vit-faiblit,
+.pcard.vit-malade {
   background: color-mix(in srgb, var(--band-amber) 38%, var(--surface));
   border-color: var(--band-amber);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--band-amber) 40%, transparent);
 }
-.pcard.band-red {
+.pcard.vit-mourante {
   background: color-mix(in srgb, var(--danger) 36%, var(--surface));
   border-color: var(--danger);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--danger) 40%, transparent);
 }
-.pcard.time-done {
-  background: color-mix(in srgb, var(--success) 40%, var(--surface));
-  border-color: var(--success);
-  box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
-    0 0 24px color-mix(in srgb, var(--success) 40%, transparent);
+.pcard.vit-morte {
+  background: color-mix(in srgb, var(--text-dim) 20%, var(--surface));
+  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
+  box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12;
 }
-/* A finished (naturally completed) card that wasn't, on the whole, kept —
-   same red as band-red, but this one is permanent, not counting down. */
-.pcard.time-broken {
-  background: color-mix(in srgb, var(--danger) 36%, var(--surface));
-  border-color: var(--danger);
-  box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
-    0 0 24px color-mix(in srgb, var(--danger) 40%, transparent);
+
+/* ---------- A card that has left the deck ----------
+   It keeps the colour it had the moment it left, muted — never repainted to
+   a verdict of its own. That is the whole point: a promise abandoned in good
+   health stays green, and you can see you threw away something that was
+   working. One that starved is already grey without any special rule, because
+   its vitality really was zero when it went. The reason it left is carried by
+   the glyph and the footer, not by the colour. */
+.pcard.is-retired {
+  filter: saturate(.45) brightness(.86);
+  box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12;
 }
 
 /* Holographic film — every card has it, rarity turns up the gain. */
@@ -306,17 +315,16 @@ button:disabled { opacity: .4; cursor: default; }
    notice a plant is wilting. Colour drains, the holographic film slows and
    dies, and fractures spread as it goes. Dead cards keep .is-dead below. */
 
-/* No progressive desaturation any more. Draining colour was a third way of
-   saying what the VIE gauge and the fractures already say, and it made a
-   struggling card look like a dead one — greyscale is now the signature of
-   death alone (.is-dead), never of a card still in play. What remains here
-   is the holographic film going quiet, and the dying card's red border. */
+/* The body's colour is the loudest of these signals and lives above; what is
+   left here is everything that happens on top of it — the holographic film
+   going quiet as the card weakens, the flicker of one about to go out, and
+   the fractures. All of it is for cards still in play: a retired card is
+   settled, so it neither flickers nor cracks any further. */
 .pcard.vit-faiblit .pcard-sheen { opacity: calc(var(--holo-a) * .55); }
 
 .pcard.vit-malade .pcard-sheen { opacity: calc(var(--holo-a) * .22); }
 
-.pcard.vit-mourante {
-  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+.pcard.vit-mourante:not(.is-retired) {
   animation: vit-flicker 3.4s ease-in-out infinite;
 }
 .pcard.vit-mourante .pcard-sheen { opacity: 0; }
@@ -326,8 +334,8 @@ button:disabled { opacity: .4; cursor: default; }
    The angles are derived from --frac-seed, a hash of the habit's id, so that
    two cards side by side do not fracture identically and read as one
    continuous line across the grid. */
-.pcard.vit-malade .pcard-art::after,
-.pcard.vit-mourante .pcard-art::after {
+.pcard.vit-malade:not(.is-retired) .pcard-art::after,
+.pcard.vit-mourante:not(.is-retired) .pcard-art::after {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
   background:
     linear-gradient(calc(var(--frac-seed, 40) * 1deg + 28deg),
@@ -336,7 +344,7 @@ button:disabled { opacity: .4; cursor: default; }
       transparent 63.7%, #000 64%, transparent 64.3%);
   opacity: .2;
 }
-.pcard.vit-mourante .pcard-art::after {
+.pcard.vit-mourante:not(.is-retired) .pcard-art::after {
   background:
     linear-gradient(calc(var(--frac-seed, 40) * 1deg + 28deg),
       transparent 47.7%, #000 48%, transparent 48.3%),
@@ -365,6 +373,31 @@ button:disabled { opacity: .4; cursor: default; }
 .pcard-name {
   font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 700;
   line-height: 1.2; letter-spacing: -.01em; text-wrap: balance;
+}
+/* Today's state, in the one spot the eye reaches after the name. Sits on its
+   own disc rather than floating on the body, because the body is now a colour
+   that changes underneath it and an emoji alone on amber loses its edges. */
+.pcard-status {
+  flex: none; font-size: 15px; line-height: 1;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  /* The card's own surface, undyed. Whichever band is painting the body, the
+     disc is the one thing on it that isn't tinted, so it separates in both
+     themes — a fixed dark disc read well on a light card and vanished into a
+     dark one. */
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: inset 0 0 0 1px #00000024;
+}
+/* The three counting-down glyphs are the only ones asking for anything. The
+   last one gets a pulse — it is the difference between noticing at 10 minutes
+   left and noticing tomorrow. */
+.pcard.band-red .pcard-status { animation: status-pulse 1.9s ease-in-out infinite; }
+@keyframes status-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.13); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pcard.band-red .pcard-status { animation: none; }
 }
 
 .pcard-vitality { display: flex; align-items: center; gap: 6px; }
@@ -1155,14 +1188,17 @@ button:disabled { opacity: .4; cursor: default; }
   border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border));
 }
 .shelf[hidden] { display: none; }
-.finished-grid .pcard {
+/* Qualified with .is-retired so it outweighs .pcard.is-retired's own
+   shadow reset — every card on the shelf carries that class by definition. */
+.finished-grid .pcard.is-retired {
   box-shadow: 0 3px 0 color-mix(in srgb, var(--success) 30%, transparent), 0 8px 30px #00000047, inset 0 1px 0 #ffffff12;
 }
 
-.pcard.is-dead {
-  filter: grayscale(0.85) brightness(0.72);
-  box-shadow: none;
-}
+/* The blanket greyscale that used to live here is gone: it repainted every
+   buried card the same colour, so a promise abandoned in perfect health
+   looked exactly like one that starved to death. Muting is now .is-retired's
+   job (shared with finished cards) and it preserves the exit colour; what is
+   left specific to death is the holographic film, which stops for good. */
 .pcard.is-dead .pcard-sheen { display: none; }
 .pcard.is-dead:active { transform: perspective(760px) scale(.97); }
 .pcard-xp-dead {
