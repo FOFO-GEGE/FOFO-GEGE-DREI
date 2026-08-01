@@ -109,8 +109,14 @@ and has to be verified against the project itself.
   identical on screen), `faiblit`/`malade` deliberately sharing one amber
   band, and the full glyph table — ⏳/⏰/🚨 counting today's range down,
   ✅/❌/❄️/🌙 for how it settled, 🏆/🪦 for a card that has left the deck,
-  each with a written label since an emoji is a picture and not a name, and
-  no glyph at all on a synthetic preview card that has no real "today".
+  each with a written label since an emoji is a picture and not a name, no
+  glyph at all on a synthetic preview card that has no real "today", and none
+  either when the caller passes `opts.noStatus` — the ritual card on
+  Aujourd'hui opts out this way, since the same fact is already the countdown
+  chip or the status line sitting right below it. Also covers Taux/Jours
+  sitting genuinely centred under the card (regression coverage: it used to
+  be a 3-column grid holding only 2 stat boxes, so the pair sat left with an
+  empty third column's worth of space to their right).
   Its headline case, and the reason the file exists: **a retired card keeps
   the colour it had the moment it left the deck.** A promise abandoned in
   perfect health stays green in the cemetery — you are meant to see that you

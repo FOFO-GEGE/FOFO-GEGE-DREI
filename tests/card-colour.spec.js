@@ -101,6 +101,30 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (painted.faiblit.bg !== painted.malade.bg) throw new Error('faiblit and malade deliberately share one amber band');
   if (painted.pleine.bg === painted.plain.bg) throw new Error('vit-pleine must actually paint the body, not fall through to the plain surface');
 
+  // --- Taux/Jours sit centred at the card's own bottom ---
+  // Regression coverage: pcard-stats used to be a 3-column grid holding only
+  // 2 stat boxes, so the pair sat left, with an empty third column's worth of
+  // space to their right rather than in the middle of the card.
+  const statsCentering = await page.evaluate(() => {
+    const habit = { id: 'c3', title: 'Test', theme: 'sport', start_date: '2024-01-01' };
+    const stats = { rate: 50, daysAlive: 10, streak: 0, best: 0, kept: 1, total: 2, vitality: 100, vitalityState: 'pleine' };
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-9999px;top:0;width:350px';
+    host.innerHTML = habitCard(habit, stats, {});
+    document.body.appendChild(host);
+    const cardBox = host.querySelector('.pcard').getBoundingClientRect();
+    const statsBox = host.querySelector('.pcard-stats').getBoundingClientRect();
+    host.remove();
+    return {
+      leftGap: statsBox.left - cardBox.left,
+      rightGap: cardBox.right - statsBox.right,
+    };
+  });
+  step('Taux/Jours gaps (left, right):', JSON.stringify(statsCentering));
+  if (Math.abs(statsCentering.leftGap - statsCentering.rightGap) > 2) {
+    throw new Error(`Taux/Jours must be centred under the card, got left=${statsCentering.leftGap} right=${statsCentering.rightGap}`);
+  }
+
   // --- Today moved to the glyph ---
   // The three counting-down glyphs are asserted against rangeElapsed rather
   // than against the wall clock: what belongs here is the band -> glyph
@@ -138,6 +162,10 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
     out.dead = glyphOf(habitCard(habit, stats, { compact: true, dead: true, deathDate: '01/01' }));
     // A synthetic card belongs to no real promise and has no "today" to report.
     out.preview = glyphOf(habitCard({ title: 'Demo', theme: 'sport', start_date: '2024-01-01' }, stats, {}));
+    // The ritual card on Aujourd'hui opts out (noStatus) — the same fact is
+    // already the countdown chip or the status line sitting right below it.
+    put('created');
+    out.noStatus = glyphOf(habitCard(habit, stats, { habitId: habit.id, noStatus: true }));
     return out;
   });
   step('glyphs:', JSON.stringify(glyphs));
@@ -156,6 +184,7 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   expectGlyph('finished', '🏆');
   expectGlyph('dead', '🪦');
   if (glyphs.preview !== null) throw new Error('a synthetic preview card has no real "today" and must show no status glyph');
+  if (glyphs.noStatus !== null) throw new Error('opts.noStatus must suppress the glyph even on a card that otherwise has one to show');
 
   // --- The headline case: a promise abandoned in good health keeps its
   // colour in the cemetery. It must not be repainted to a death colour it

@@ -484,11 +484,15 @@ button:disabled { opacity: .4; cursor: default; }
   font-size: 9.5px; font-weight: 700; color: var(--danger);
 }
 
-.pcard-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+/* A leftover third grid column used to sit empty to the right of Taux/Jours,
+   pushing the pair toward the left edge instead of the card's centre — fixed
+   by sizing the row to its two real stats and centring that row itself. */
+.pcard-stats { display: flex; justify-content: center; gap: 6px; }
 .pcard-stat {
-  min-width: 0;
+  min-width: 0; flex: 0 1 120px;
   background: color-mix(in srgb, var(--surface-2) 78%, transparent);
   border-radius: 10px; padding: 7px 8px; display: flex; flex-direction: column; gap: 1px;
+  align-items: center; text-align: center;
 }
 .pcard-stat .k {
   font-size: 8.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
