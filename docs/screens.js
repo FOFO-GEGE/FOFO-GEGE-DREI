@@ -474,18 +474,6 @@ function screenHome() {
   const label = score === null ? '—' : `${score}%`;
   const isLow = score !== null && score < 50;
 
-  const phrase = score === null
-    ? 'Pas encore assez de données.'
-    : `Tu tiens ${score}% de tes engagements.`;
-
-  const insights = buildInsights();
-  const insightBlock = insights.length
-    ? `<section class="insights">
-         <h4 class="section-label">Ce que le miroir voit</h4>
-         ${insights.slice(0, 3).map(i => `<div class="insight is-${i.tone}">${icon('spark', 16)}<span>${esc(i.text)}</span></div>`).join('')}
-       </section>`
-    : '';
-
   const cards = store.habits.length
     ? `<section class="deck">
          <h4 class="section-label">Tes cartes <span class="deck-count">${store.habits.length}</span></h4>
@@ -563,9 +551,7 @@ function screenHome() {
           </svg>
         </div>
       </div>
-      <p class="score-phrase">${esc(phrase)}</p>
     </div>
-    ${insightBlock}
     ${cards}
     ${cemetery}
     ${finishedBlock}`;
