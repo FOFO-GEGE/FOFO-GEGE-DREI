@@ -56,11 +56,11 @@ function themeById(id) {
 const TIERS = [
   // Never "vient d'éclore" — the tier *after* this one is called Éclose, so
   // an egg claiming to have hatched contradicted the ladder it sits on.
-  { id: 'oeuf',       label: 'Œuf',        minDays: 0,   minVitality: 0,  blurb: 'Moins d’une semaine.' },
-  { id: 'eclose',     label: 'Éclose',     minDays: 7,   minVitality: 30, blurb: 'A tenu une semaine.' },
-  { id: 'enracinee',  label: 'Enracinée',  minDays: 30,  minVitality: 55, blurb: 'Un mois de survie.' },
-  { id: 'gravee',     label: 'Gravée',     minDays: 90,  minVitality: 70, blurb: 'Trois mois. Ça compte.' },
-  { id: 'legendaire', label: 'Légendaire', minDays: 180, minVitality: 85, blurb: 'Six mois. Rare.' },
+  { id: 'oeuf',       label: 'Œuf',        emoji: '🥚', minDays: 0,   minVitality: 0,  blurb: 'Moins d’une semaine.' },
+  { id: 'eclose',     label: 'Éclose',     emoji: '🐣', minDays: 7,   minVitality: 30, blurb: 'A tenu une semaine.' },
+  { id: 'enracinee',  label: 'Enracinée',  emoji: '🌿', minDays: 30,  minVitality: 55, blurb: 'Un mois de survie.' },
+  { id: 'gravee',     label: 'Gravée',     emoji: '🪨', minDays: 90,  minVitality: 70, blurb: 'Trois mois. Ça compte.' },
+  { id: 'legendaire', label: 'Légendaire', emoji: '✨', minDays: 180, minVitality: 85, blurb: 'Six mois. Rare.' },
 ];
 
 // The ceiling age alone allows — used only to detect a missed evolution
@@ -233,7 +233,7 @@ function habitCard(habit, stats, opts = {}) {
       </div>
 
       <div class="pcard-tier">
-        <span class="pcard-tier-name">${tier.label}</span>
+        <span class="pcard-tier-name">${tier.emoji} ${tier.label}</span>
         <span class="pcard-tier-blurb">${opts.dead
           // A one-day promise's day count is always exactly 1 -- stating it
           // says nothing "Abandonnée"/"Terminée" alone doesn't already say.

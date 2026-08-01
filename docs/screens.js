@@ -497,14 +497,17 @@ function screenHome() {
   const cemetery = buried.length
     ? `<section class="cemetery">
          <button class="cemetery-toggle" id="cemetery-toggle" aria-expanded="false">
-           ${icon('cross', 15)} Cimetière <span class="deck-count">${buried.length}</span>
+           <span class="section-glyph" aria-hidden="true">🪦</span> Cimetière <span class="deck-count">${buried.length}</span>
            <span class="cemetery-chevron">${icon('right', 14)}</span>
          </button>
-         <div class="deck-grid cemetery-grid" id="cemetery-grid" hidden>
-           ${buried.map(h => habitCard(h, habitStats(h), {
-             compact: true, habitId: h.id, dead: true,
-             deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: h.death_cause,
-           })).join('')}
+         <div class="yard" id="cemetery-grid" hidden>
+           <div class="yard-moon" aria-hidden="true"></div>
+           <div class="deck-grid cemetery-grid">
+             ${buried.map(h => habitCard(h, habitStats(h), {
+               compact: true, habitId: h.id, dead: true,
+               deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: h.death_cause,
+             })).join('')}
+           </div>
          </div>
        </section>`
     : '';
@@ -512,14 +515,16 @@ function screenHome() {
   const finishedBlock = finished.length
     ? `<section class="finished">
          <button class="finished-toggle" id="finished-toggle" aria-expanded="false">
-           ${icon('check', 15)} Terminées <span class="deck-count">${finished.length}</span>
+           <span class="section-glyph" aria-hidden="true">🏆</span> Terminées <span class="deck-count">${finished.length}</span>
            <span class="finished-chevron">${icon('right', 14)}</span>
          </button>
-         <div class="deck-grid finished-grid" id="finished-grid" hidden>
-           ${finished.map(h => habitCard(h, habitStats(h), {
-             compact: true, habitId: h.id, finished: true,
-             finishedDate: formatDay(h.deleted_at?.slice(0, 10)),
-           })).join('')}
+         <div class="shelf" id="finished-grid" hidden>
+           <div class="deck-grid finished-grid">
+             ${finished.map(h => habitCard(h, habitStats(h), {
+               compact: true, habitId: h.id, finished: true,
+               finishedDate: formatDay(h.deleted_at?.slice(0, 10)),
+             })).join('')}
+           </div>
          </div>
        </section>`
     : '';
