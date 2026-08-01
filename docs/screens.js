@@ -253,6 +253,10 @@ function screenToday() {
     const statusLine = pending ? '' : `
       <p class="ritual-status is-${check.status}">${STATUS_LABEL[check.status] || check.status}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</p>`;
 
+    // The card here skips its own status glyph (noStatus) — today's state is
+    // already the countdown chip or the status line right below it, and
+    // repeating it as a glyph on the card too would just double the story up
+    // on itself.
     host.innerHTML = `
       <div class="ritual">
         <div class="ritual-top">
@@ -265,7 +269,7 @@ function screenToday() {
 
         <div class="ritual-body">
           ${pending ? '<p class="ritual-prompt">Tu avais promis</p>' : ''}
-          <div class="ritual-card">${habitCard(habit, stats, { habitId: habit.id })}</div>
+          <div class="ritual-card">${habitCard(habit, stats, { habitId: habit.id, noStatus: true })}</div>
           ${pending ? countdownChip(check) : statusLine}
           ${snoozeLine}
         </div>

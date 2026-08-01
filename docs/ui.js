@@ -250,7 +250,7 @@ function habitCard(habit, stats, opts = {}) {
       <div class="pcard-sheen" aria-hidden="true"></div>
       <header class="pcard-head">
         <h3 class="pcard-name">${esc(habit.title || 'Ta promesse')}</h3>
-        ${status ? `<span class="pcard-status" role="img" title="${esc(status.label)}" aria-label="${esc(status.label)}">${status.glyph}</span>` : ''}
+        ${status && !opts.noStatus ? `<span class="pcard-status" role="img" title="${esc(status.label)}" aria-label="${esc(status.label)}">${status.glyph}</span>` : ''}
       </header>
 
       ${!retired ? `
