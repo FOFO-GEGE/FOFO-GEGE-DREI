@@ -378,15 +378,13 @@ button:disabled { opacity: .4; cursor: default; }
    own disc rather than floating on the body, because the body is now a colour
    that changes underneath it and an emoji alone on amber loses its edges. */
 .pcard-status {
-  flex: none; font-size: 15px; line-height: 1;
-  width: 26px; height: 26px; border-radius: 50%;
+  flex: none; font-size: 17px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
-  /* The card's own surface, undyed. Whichever band is painting the body, the
-     disc is the one thing on it that isn't tinted, so it separates in both
-     themes — a fixed dark disc read well on a light card and vanished into a
-     dark one. */
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: inset 0 0 0 1px #00000024;
+  /* No disc — a plate behind the glyph read as a plain white blob on the
+     light theme's near-white --surface. A soft drop shadow keeps the glyph
+     legible against every band colour instead, without adding a shape of
+     its own on top of the card. */
+  filter: drop-shadow(0 1px 3px #00000055);
 }
 /* The three counting-down glyphs are the only ones asking for anything. The
    last one gets a pulse — it is the difference between noticing at 10 minutes
