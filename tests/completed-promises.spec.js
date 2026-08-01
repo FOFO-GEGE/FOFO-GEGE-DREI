@@ -258,6 +258,8 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('finished card class:', finishedCardClass);
   if (!finishedCardClass.includes('time-done')) throw new Error(`expected the kept finished card to be time-done, got: ${finishedCardClass}`);
   if (finishedCardClass.includes('is-dead')) throw new Error('a finished card must not look like a dead one');
+  step('trophy shelf panel present:', await page.locator('.shelf').count(), '(expect 1)');
+  if (await page.locator('.shelf').count() !== 1) throw new Error('the finished toggle should reveal a .shelf trophy panel wrapping the finished grid');
 
   // --- Detail screen: "Terminée" framing, no abandon/reminder/resurrect ---
   const habitId = await page.evaluate(() => store.cemetery[0].id);

@@ -174,6 +174,11 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('#cemetery-grid:not([hidden])');
   step('cemetery cards:', await page.locator('.cemetery-grid .pcard.is-dead').count());
   step('death stamp:', await page.locator('.cemetery-grid .pcard-xp-dead').textContent());
+  step('graveyard panel present:', await page.locator('.yard').count(), '(expect 1)');
+  if (await page.locator('.yard').count() !== 1) throw new Error('the cemetery toggle should reveal a .yard graveyard panel wrapping the cemetery grid');
+  const cemeteryTierBadge = await page.locator('.cemetery-grid .pcard-tier-name').first().textContent();
+  step('cemetery card tier badge (should carry an emoji):', cemeteryTierBadge);
+  if (!/[🥚🐣🌿🪨✨]/u.test(cemeteryTierBadge)) throw new Error(`expected the tier badge to carry an emoji, got: "${cemeteryTierBadge}"`);
 
   // Regression check for the toggle bug: the [hidden] attribute alone did not
   // catch it (an author .deck-grid{display:grid} rule was silently beating

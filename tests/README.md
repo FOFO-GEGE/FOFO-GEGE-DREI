@@ -52,11 +52,12 @@ and has to be verified against the project itself.
   doesn't get to leave a frozen verdict standing — but does nothing if the
   new time still lies behind the clock), the
   cemetery (abandon, toggle open **and** closed — checked via computed style,
-  not just the `hidden` attribute), the clickable calendar day sheet, and the
-  card's time-remaining colour (`.pcard` carries `.time-pending` while
-  unanswered, and settles to neither `.time-pending` nor `.time-done` once
-  answered "Pas fait" — `.time-done` is reserved for "Fait", see
-  `answer-window.spec.js`).
+  not just the `hidden` attribute — the toggle reveals a `.yard` graveyard
+  panel wrapping the `cemetery-grid`, and the tier badge carries its emoji),
+  the clickable calendar day sheet, and the card's time-remaining colour
+  (`.pcard` carries `.time-pending` while unanswered, and settles to neither
+  `.time-pending` nor `.time-done` once answered "Pas fait" — `.time-done` is
+  reserved for "Fait", see `answer-window.spec.js`).
 - `expiry.spec.js` — the core rule: silence past a promise's own range becomes
   a failure with the `expired` flag, breaks the streak, and a range that has
   already closed never opens a check at all.
@@ -134,8 +135,10 @@ and has to be verified against the project itself.
   the death-notice dialog `unannouncedDeaths()` only watches for neglect),
   Mon miroir splitting the old cemetery query into two sections — Cimetière
   keeps only abandoned/neglected cards, a separate Terminées section holds
-  completions — and the detail screen offering none of the live/dead-specific
-  actions (no reminder edit, no abandon, no resurrect) for a finished promise.
+  completions, its toggle revealing a `.shelf` trophy panel wrapping the
+  `finished-grid` — and the detail screen offering none of the
+  live/dead-specific actions (no reminder edit, no abandon, no resurrect) for
+  a finished promise.
   Also covers the card's own composition after the redesign: no card of any
   size or lifespan announces the next tier any more (no countdown, no
   progress bar, no "se termine avant" — the badge changing is the whole
