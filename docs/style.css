@@ -1253,6 +1253,10 @@ button:disabled { opacity: .4; cursor: default; }
 }
 .reason-chip:active { transform: scale(.95); }
 .reason-step .ritual-title { max-width: 18ch; }
+/* Geler/Décaler, when they ride along on this same page — same gap as
+   .reason-grid above it gets from .ritual-title, .ritual-actions itself
+   has none. */
+.reason-alt-actions { margin-top: 20px; width: 100%; max-width: 320px; }
 
 /* ---------- Sync indicator ---------- */
 
