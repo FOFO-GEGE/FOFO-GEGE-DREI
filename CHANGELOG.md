@@ -41,3 +41,6 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   coloré selon l'issue du jour (réutilise `vitalityStory()`), tap à
   droite ajouté pour sortir vers Mon miroir (bouton conservé aussi).
   Fichiers : `screens.js`, `style.css`.
+- `.ritual-status` (« Non tenu » etc. sur une carte déjà décidée)
+  alignée sur `.countdown` : `margin-top` ajouté, ne collait plus la
+  bande des 7 jours. Fichier : `style.css`.

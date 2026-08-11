@@ -36,14 +36,13 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : l'écran de fin de story (« Voilà les faits »/mountSummary)
-habillé comme les cartes qui le précèdent au lieu du chrome plat
-générique (`rs-interstitial`) qu'il partageait avec « Pourquoi ? ».
-Fond plein écran coloré selon l'issue du jour, en réutilisant
-`vitalityStory()` (pleine=parfait, mourante=journée blanche,
-faiblit=mitigé) — pas de nouvelle palette. Titre en `.rs-story-title`.
-Tap à droite ajouté (en plus du bouton « Voir mon miroir » qui reste)
-pour sortir vers Mon miroir, cohérent avec le reste de la story.
+Description : `.ritual-status` (pastille « Non tenu »/« Tenu »/« Gelé »
+sur une carte déjà décidée) n'avait pas de `margin-top`, contrairement
+à `.countdown` (son équivalent pour une carte en attente) qui en a un
+— collé à la bande des 7 jours juste au-dessus. Aligné sur
+`.countdown` : `margin-top: 14px` ajouté.
+
+Fichiers concernés : `style.css`.
 
 Fichiers concernés : `screens.js`, `style.css`.
 
