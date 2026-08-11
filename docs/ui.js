@@ -280,8 +280,6 @@ function habitCard(habit, stats, opts = {}) {
         <div class="pcard-vitality-bar"><div class="pcard-vitality-fill is-${vitalityBand}" style="width:${Math.max(2, Math.min(100, stats.vitality ?? 100))}%"></div></div>
       </div>` : ''}
 
-      ${!retired ? weekStripHTML(stats.week) : ''}
-
       <div class="pcard-art">
         <div class="pcard-art-glow" aria-hidden="true"></div>
         ${icon(theme.id, opts.compact ? 40 : 56, 'pcard-art-icon')}
@@ -309,6 +307,8 @@ function habitCard(habit, stats, opts = {}) {
         <div class="pcard-stat"><span class="k">Taux</span><span class="v">${rateText}</span></div>
         <div class="pcard-stat"><span class="k">Jours</span><span class="v">${daysCount(stats.daysAlive)}</span></div>
       </div>
+
+      ${!retired ? weekStripHTML(stats.week) : ''}
 
       ${footerContent ? `<footer class="pcard-foot">${footerContent}</footer>` : ''}
     </article>
