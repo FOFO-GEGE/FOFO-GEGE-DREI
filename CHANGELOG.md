@@ -19,3 +19,12 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   Taux/Jours, sur le deck et sur la story ; `weekStripHTML()`
   factorisée dans `ui.js` au lieu d'être dupliquée. Fichiers : `ui.js`,
   `screens.js`, `style.css`.
+- Refonte de la story Aujourd'hui façon Instagram stories : fond
+  plein écran couleur de vitalité (CSS `.rs-story-*` écrit, n'existait
+  pas), seuls Fait/Pas fait visibles (Geler/Décaler regroupés derrière
+  « Pas fait », même ergonomie de bouton), tap gauche/droite rendu
+  fonctionnel, minuteur d'avance automatique supprimé, story = écran
+  par défaut à l'ouverture. Piège CSS : `backdrop-filter`/`filter`
+  dans la zone de tap crée un contexte d'empilement qui passe au-
+  dessus des zones de tap quel que soit l'ordre DOM. Fichiers :
+  `screens.js`, `app.js`, `style.css`.
