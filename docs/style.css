@@ -492,7 +492,7 @@ button:disabled { opacity: .4; cursor: default; }
    have read as a second gauge instead of seven separate days. A day-initial
    row underneath is what makes any of it locatable on the calendar at all —
    without it a gap could only be counted, never dated. */
-.pcard-week { display: flex; flex-direction: column; gap: 3px; }
+.pcard-week { display: flex; flex-direction: column; gap: 3px; width: 100%; }
 .pcard-week-days, .pcard-week-dow { display: flex; align-items: center; gap: 3px; }
 .pcard-week-dow span {
   flex: 1; text-align: center; font-size: 8px; font-weight: 700;

@@ -315,6 +315,8 @@ function screenToday() {
             <div class="rs-story-stat"><span class="v">${daysCount(stats.daysAlive)}</span><span class="k">Jours</span></div>
           </div>
 
+          ${weekStripHTML(stats.week)}
+
           ${pending ? countdownChip(check) : statusLine}
           ${snoozeLine}
         </div>

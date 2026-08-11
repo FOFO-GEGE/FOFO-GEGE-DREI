@@ -138,6 +138,30 @@ function hashSeed(id) {
   return h % 360;
 }
 
+// The seven-day memory strip: a row of coloured marks plus their weekday
+// initials, shared by the card grid and the Aujourd'hui story. Withheld
+// below two actually-scheduled days in the window — a one-day promise, or
+// one just created, has nothing here the rest of the card doesn't already
+// say.
+function weekStripHTML(rawWeek) {
+  const week = Array.isArray(rawWeek) ? rawWeek : [];
+  const dueInWeek = week.filter(d => d.state !== 'before' && d.state !== 'rest').length;
+  if (dueInWeek < 2) return '';
+  // D L M M J V S — single-letter initials indexed the same way getDay()
+  // does (0 = dimanche). Without these the strip was unreadable: nothing
+  // told you which mark was which day, so a gap could not be located on the
+  // calendar at all, only counted.
+  const DOW_LETTER = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  const WEEK_WORDS = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', rest: 'repos', before: '' };
+  const todayIso = todayStr();
+  const weekLabel = `Sept derniers jours : ${week.filter(d => d.state !== 'before').map(d => WEEK_WORDS[d.state] || d.state).join(', ')}.`;
+  return `
+    <div class="pcard-week" role="img" aria-label="${esc(weekLabel)}">
+      <div class="pcard-week-days">${week.map(d => `<span class="pcard-day is-${d.state}"></span>`).join('')}</div>
+      <div class="pcard-week-dow">${week.map(d => `<span class="${d.date === todayIso ? 'is-today' : ''}">${DOW_LETTER[d.dow]}</span>`).join('')}</div>
+    </div>`;
+}
+
 // stats: { rate, daysAlive, streak, best, kept, total }
 // opts.dead: the habit was abandoned or starved — greyed out, fissured,
 // frozen at its tier of death instead of showing progress toward a next one
@@ -216,26 +240,6 @@ function habitCard(habit, stats, opts = {}) {
     : (stats.vitalityState === 'malade' || stats.vitalityState === 'faiblit') ? 'low'
     : 'ok';
 
-  // A sliding seven-day window, oldest first, today last — the card's
-  // memory, and what stops today from being a blank square that says
-  // nothing about yesterday. It carries the good history too, not only the
-  // damage: a row of kept days is the reward the vitality gauge alone never
-  // showed. Absent when the caller didn't compute it (a preview, a
-  // synthetic card), and also withheld below two actually-scheduled days in
-  // the window — a one-day promise, or one just created, has nothing here
-  // for the strip to say that the rest of the card doesn't already.
-  const rawWeek = Array.isArray(stats.week) ? stats.week : [];
-  const dueInWeek = rawWeek.filter(d => d.state !== 'before' && d.state !== 'rest').length;
-  const week = dueInWeek >= 2 ? rawWeek : [];
-  const WEEK_WORDS = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', rest: 'repos', before: '' };
-  const weekLabel = `Sept derniers jours : ${week.filter(d => d.state !== 'before').map(d => WEEK_WORDS[d.state] || d.state).join(', ')}.`;
-  // D L M M J V S — single-letter initials indexed the same way getDay()
-  // does (0 = dimanche). Without these the strip was unreadable: nothing
-  // told you which mark was which day, so a gap could not be located on the
-  // calendar at all, only counted.
-  const DOW_LETTER = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
-  const todayIso = todayStr();
-
   const footerContent = opts.dead
     ? `<span class="pcard-xp-label pcard-xp-dead">${icon('cross', 12)} ${opts.deathCause === 'neglect' ? 'Morte de négligence' : 'Abandonnée'} le ${opts.deathDate || ''}</span>`
     : opts.finished
@@ -276,11 +280,7 @@ function habitCard(habit, stats, opts = {}) {
         <div class="pcard-vitality-bar"><div class="pcard-vitality-fill is-${vitalityBand}" style="width:${Math.max(2, Math.min(100, stats.vitality ?? 100))}%"></div></div>
       </div>` : ''}
 
-      ${!retired && week.length ? `
-      <div class="pcard-week" role="img" aria-label="${esc(weekLabel)}">
-        <div class="pcard-week-days">${week.map(d => `<span class="pcard-day is-${d.state}"></span>`).join('')}</div>
-        <div class="pcard-week-dow">${week.map(d => `<span class="${d.date === todayIso ? 'is-today' : ''}">${DOW_LETTER[d.dow]}</span>`).join('')}</div>
-      </div>` : ''}
+      ${!retired ? weekStripHTML(stats.week) : ''}
 
       <div class="pcard-art">
         <div class="pcard-art-glow" aria-hidden="true"></div>

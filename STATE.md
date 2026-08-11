@@ -15,7 +15,8 @@ empaquetage Capacitor pour iOS natif.
   fenêtre fixe d'1h), avec rappels échelonnés.
 - Réponse Fait / Pas fait (+ raison), ou silence = échec (`expired`).
 - Aujourd'hui : file rituelle une carte à la fois, tri par urgence,
-  navigation libre, « Décaler » (report same-day, une fois par jour).
+  navigation libre, « Décaler » (report same-day, une fois par jour),
+  bande des 7 derniers jours sous Taux/Jours sur la carte.
 - Vitalité (jauge de vie) + mort autonome + résurrection unique.
 - Couleur de carte pilotée par la vitalité ; statut du jour en glyphe.
 - Paliers (âge + vitalité) avec badges emoji.
@@ -26,17 +27,23 @@ empaquetage Capacitor pour iOS natif.
 
 ## Fonctionnalités en cours
 
-Aucune à cette date.
+Refonte de la story Aujourd'hui (plein écran façon Instagram stories,
+actions Pas fait/Geler/Décaler unifiées sous un seul bouton, sans
+minuteur d'avance automatique, tap gauche/droite à rendre
+fonctionnel, story comme premier écran à l'ouverture) : cadrée avec
+l'utilisateur, en attente de feu vert avant implémentation.
 
 ## Dernière évolution
 
-Description : couleur de la carte pilotée par la vitalité plutôt que
-la réponse du jour ; stats Taux/Jours recentrées sous la carte ;
-retrait de l'émoji d'état du rituel (ombre portée seule) ; ambiance
-visuelle + emoji des paliers pour Cimetière/Terminées.
+Description : bande des 7 derniers jours ajoutée sous Taux/Jours sur
+la carte de la story Aujourd'hui, en réutilisant `lastWeekOf()` et le
+composant `.pcard-week` déjà utilisé sur les cartes du deck.
+`weekStripHTML()` factorisée dans `ui.js` (partagée par les deux) au
+lieu d'être dupliquée. Seul changement CSS : `width:100%` sur
+`.pcard-week` pour qu'il s'étire correctement hors du contexte
+`.pcard` (qui le faisait par `align-items:stretch` implicite).
 
-Fichiers concernés : `ui.js`, `screens.js`,
-`tests/card-colour.spec.js`, `tests/completed-promises.spec.js`.
+Fichiers concernés : `ui.js`, `screens.js`, `style.css`.
 
 ## Problèmes connus
 
@@ -44,6 +51,15 @@ Voir « Limites connues » dans `docs/README.md` : pas de vrais boutons
 Oui/Non sur notification web, Web Push nécessite l'installation sur
 iOS, livraison push non vérifiée bout en bout, `vibrate()` inopérant
 sur iOS.
+
+- `tests/ritual-queue.spec.js` et `tests/completed-promises.spec.js`
+  échouent déjà sur la branche de base (vérifié par comparaison avant/
+  après les changements ci-dessus, aucun rapport avec eux) :
+  `[data-nav="/today"]` n'existe plus dans la tabbar (Aujourd'hui
+  n'est plus un onglet, cf. commentaire `app.js`) et `.finished-toggle`
+  est introuvable. Les deux specs ciblent une architecture antérieure
+  (`.ritual-card .pcard`) déjà remplacée par la story plein écran
+  actuelle (`rs-story`) — à mettre à jour, hors périmètre ici.
 
 ## Décisions techniques récentes
 
