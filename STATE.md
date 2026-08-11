@@ -35,13 +35,15 @@ l'utilisateur, en attente de feu vert avant implémentation.
 
 ## Dernière évolution
 
-Description : bande des 7 derniers jours ajoutée sous Taux/Jours sur
-la carte de la story Aujourd'hui, en réutilisant `lastWeekOf()` et le
-composant `.pcard-week` déjà utilisé sur les cartes du deck.
-`weekStripHTML()` factorisée dans `ui.js` (partagée par les deux) au
-lieu d'être dupliquée. Seul changement CSS : `width:100%` sur
-`.pcard-week` pour qu'il s'étire correctement hors du contexte
-`.pcard` (qui le faisait par `align-items:stretch` implicite).
+Description : bande des 7 derniers jours repositionnée en bas de la
+carte, après Taux/Jours — sur la carte du deck (`habitCard()`, où
+elle était plus haut, sous VIE) et sur la carte de la story
+Aujourd'hui (nouvel ajout, réutilisant `lastWeekOf()` et le composant
+`.pcard-week`). `weekStripHTML()` factorisée dans `ui.js`, partagée
+par les deux au lieu d'être dupliquée. Seul changement CSS :
+`width:100%` sur `.pcard-week` pour qu'il s'étire correctement hors
+du contexte `.pcard` (qui le faisait par `align-items:stretch`
+implicite).
 
 Fichiers concernés : `ui.js`, `screens.js`, `style.css`.
 
