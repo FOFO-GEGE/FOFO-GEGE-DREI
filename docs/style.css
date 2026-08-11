@@ -790,6 +790,8 @@ button:disabled { opacity: .4; cursor: default; }
     linear-gradient(180deg, rgba(0, 0, 0, .34) 0%, rgba(0, 0, 0, 0) 24%, rgba(0, 0, 0, 0) 66%, rgba(0, 0, 0, .42) 100%),
     var(--story-bg);
   color: #fff;
+  border-radius: 24px;
+  overflow: hidden;
 }
 .rs-story .ritual-quit { color: #fff; opacity: .85; }
 
