@@ -853,6 +853,11 @@ button:disabled { opacity: .4; cursor: default; }
 .rs-story-stat .v { font-size: 18px; font-weight: 800; }
 .rs-story-stat .k { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; opacity: .82; }
 
+/* On the deck card .pcard-week gets its gap for free from .pcard's own
+   flex gap; .ritual-body has no such gap, so here it sat flush against
+   Taux/Jours without this. */
+.rs-story .pcard-week { margin-top: 14px; }
+
 .rs-story .countdown, .rs-story .ritual-snooze-line { color: rgba(255, 255, 255, .88); border-color: rgba(255, 255, 255, .35); }
 .rs-story .countdown.is-urgent { color: #fff; background: rgba(0, 0, 0, .28); border-color: rgba(255, 255, 255, .55); }
 

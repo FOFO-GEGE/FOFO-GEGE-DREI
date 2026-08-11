@@ -36,18 +36,12 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : 3 retouches sur la story Aujourd'hui, après retour
-utilisateur sur la refonte précédente.
-- Émoji du palier affiché une seule fois (le gros) — le libellé
-  (« ÉCLOSE » etc.) le répétait en petit à côté, retiré.
-- Bande des 7 jours plus visible sur le fond coloré : anneau clair
-  autour de chaque carré (`box-shadow`, contourne les cas où la
-  couleur de la marque se fond dans le dégradé de vitalité derrière),
-  lettres du jour éclaircies.
-- Texte « glisse vers le bas pour revenir » retiré (le geste reste
-  actif, seul le texte disparaît).
+Description : espace ajouté entre Taux/Jours et la bande des 7 jours
+sur la story (collés — `.ritual-body` n'a pas le `gap` que `.pcard`
+a, donc rien ne les séparait là où le deck en profitait gratuitement).
+`margin-top` scopé à `.rs-story .pcard-week`, sans effet sur le deck.
 
-Fichiers concernés : `screens.js`, `style.css`.
+Fichiers concernés : `style.css`.
 
 ## Problèmes connus
 
