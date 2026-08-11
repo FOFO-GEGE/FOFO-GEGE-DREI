@@ -12,16 +12,40 @@ const MONTH_LABELS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 
 const SURPRISE_MESSAGES = ['Jour parfait.', 'Tu tiens le rythme.', 'Plus régulier que la moyenne cette semaine.'];
 
+// Week strip for the story screen: fixed Mon–Sun order, today highlighted.
+function storyWeekHTML(habit) {
+  const todayIso = todayStr();
+  const jsDay = new Date(todayIso + 'T12:00:00').getDay(); // 0=Dim..6=Sam
+  const toMon = jsDay === 0 ? -6 : 1 - jsDay;             // décalage vers le Lundi
+  const LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  const byDate = new Map(store.checks.filter(c => c.habit_id === habit.id).map(c => [c.date, c]));
+  const slots = LABELS.map((label, i) => {
+    const iso = shiftDays(todayIso, toMon + i);
+    const check = byDate.get(iso);
+    let state;
+    if (iso > todayIso) state = 'before';
+    else if (!check) state = habit.start_date && iso < habit.start_date ? 'before' : 'rest';
+    else state = check.status;
+    return { date: iso, state, label };
+  });
+  const W = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', rest: 'repos', before: '' };
+  const aria = `Cette semaine : ${slots.filter(s => s.state !== 'before').map(s => W[s.state] || s.state).join(', ')}.`;
+  return `<div class="pcard-week" role="img" aria-label="${esc(aria)}">
+    <div class="pcard-week-days">${slots.map(s => `<span class="pcard-day is-${s.state}"></span>`).join('')}</div>
+    <div class="pcard-week-dow">${slots.map(s => `<span class="${s.date === todayIso ? 'is-today' : ''}">${s.label}</span>`).join('')}</div>
+  </div>`;
+}
+
 // Shared chip describing where a pending check sits in its range.
 function countdownChip(check) {
   const habit = store.habits.find(h => h.id === check.habit_id);
   if (!habit) return '';
   if (isExpired(check)) {
-    return `<p class="countdown is-urgent">${icon('spark', 14)} Le temps est écoulé</p>`;
+    return `<p class="countdown is-urgent">Le temps est écoulé</p>`;
   }
   const left = minutesLeft(check);
   return `<p class="countdown ${isUrgent(check) ? 'is-urgent' : ''}">
-    ${icon('spark', 14)} ${left} min avant « non tenu »
+    Il reste ${left} min pour répondre
   </p>`;
 }
 
@@ -274,8 +298,8 @@ function screenToday() {
     host.innerHTML = `
       <div class="ritual rs-story vit-${vitState} tier-${tier.id} ${timeBand ? 'band-' + timeBand : ''}"
         data-habit="${habit.id}" style="--story-bg:${story.gradient}">
-        <div class="rs-story-tap rs-story-tap-prev" data-tap="prev" aria-hidden="true"></div>
-        <div class="rs-story-tap rs-story-tap-next" data-tap="next" aria-hidden="true"></div>
+        <button class="rs-story-tap rs-story-tap-prev" data-tap="prev" aria-label="Carte précédente"></button>
+        <button class="rs-story-tap rs-story-tap-next" data-tap="next" aria-label="Carte suivante"></button>
 
         <div class="ritual-top">
           <div class="ritual-progress">
@@ -284,7 +308,6 @@ function screenToday() {
           </div>
           <div class="rs-story-head">
             <span class="rs-story-icon" aria-hidden="true">${icon(theme.id, 15)}</span>
-            <span class="rs-story-name">${esc(habit.title)}</span>
             <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           </div>
         </div>
@@ -304,7 +327,7 @@ function screenToday() {
             <div class="rs-story-stat"><span class="v">${daysCount(stats.daysAlive)}</span><span class="k">Jours</span></div>
           </div>
 
-          ${weekStripHTML(stats.week)}
+          ${storyWeekHTML(habit)}
 
           ${pending ? countdownChip(check) : statusLine}
           ${snoozeLine}
@@ -343,7 +366,9 @@ function screenToday() {
     // threshold, a real exit past it.
     let dragStartY = null, dragging = false;
     stage.addEventListener('pointerdown', e => {
-      if (e.target.closest('button')) return;
+      // Skip swipe-down for action buttons; tap zones are buttons too but
+      // should still allow a swipe-down if the user drags from the side.
+      if (e.target.closest('button') && !e.target.closest('[data-tap]')) return;
       dragStartY = e.clientY;
       dragging = true;
     });
@@ -489,7 +514,7 @@ function screenToday() {
 
     host.innerHTML = `
       <div class="ritual rs-story ritual-summary" style="--story-bg:${dayStory.gradient}">
-        <div class="rs-story-tap rs-story-tap-next" data-tap="next" aria-hidden="true"></div>
+        <button class="rs-story-tap rs-story-tap-next" data-tap="next" aria-label="Voir mon miroir"></button>
         <div class="ritual-body">
           <p class="ritual-prompt">Aujourd'hui</p>
           <h2 class="rs-story-title">${perfect ? 'Rien à te reprocher.' : blanche ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>

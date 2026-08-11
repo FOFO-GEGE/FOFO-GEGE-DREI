@@ -43,12 +43,12 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('card shows the pending time colour while unanswered:', await page.locator('.deck-grid .pcard.time-pending').count(), '(expect 1)');
 
   // --- Aujourd'hui is the story directly now: no intro screen, no button —
-  // tapping the tab drops straight onto the pending card, full screen ---
-  await page.click('[data-nav="/today"]');
-  await page.waitForSelector('.ritual-card .pcard');
-  step('story opens directly on the real card:', (await page.locator('.ritual-card .pcard-name').textContent()).trim());
+  // Aujourd'hui is no longer a tab, navigate via hash directly.
+  await page.evaluate(() => { todayCursorHabitId = null; location.hash = '#/today'; renderRoute(); });
+  await page.waitForSelector('.rs-story');
+  step('story opens directly on the real card:', (await page.locator('.rs-story-name').textContent()).trim());
   step('countdown chip:', (await page.locator('.countdown').textContent()).trim().replace(/\s+/g, ' '));
-  step('no chrome (tabbar) while in the story:', await page.locator('.tabbar').count(), '(expect 0)');
+  step('tabbar hidden while in the story:', await page.locator('.tabbar').isHidden(), '(expect true)');
 
   // --- Calendar shows "pas encore fait" --- (no tabbar while in the story —
   // jump the hash directly, same as leaving via the X would)
@@ -71,10 +71,9 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForSelector('.modal-backdrop', { state: 'detached' });
   step('reminder_time unchanged:', await page.evaluate(() => store.habits[0].reminder_time));
 
-  // --- Ritual: countdown chip, then failure -> reason picker --- (tapping
-  // the tab drops straight into the story — no button to start it)
-  await page.click('[data-nav="/today"]');
-  await page.waitForSelector('.ritual-card .pcard');
+  // --- Ritual: countdown chip, then failure -> reason picker ---
+  await page.evaluate(() => { todayCursorHabitId = null; location.hash = '#/today'; renderRoute(); });
+  await page.waitForSelector('.rs-story');
   step('ritual countdown chip:', (await page.locator('.countdown').textContent()).trim().replace(/\s+/g, ' '));
 
   await page.click('.ritual-btn.is-no');
@@ -91,8 +90,8 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   step('reason persisted on check:', reason);
 
   await page.click('#ritual-done');
-  await page.waitForSelector('.mirror-ring');
-  step('score after failure:', await page.locator('.mirror-num').textContent());
+  await page.waitForSelector('.rs-today-ring');
+  step('score after failure:', await page.locator('.rs-today-pct').textContent());
 
   // --- Sync queue drained ---
   const sync = await page.evaluate(() => ({ state: store.sync, queued: JSON.parse(localStorage.getItem('mirroir_write_queue') || '[]').length }));
@@ -170,25 +169,22 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   await page.waitForFunction(() => location.hash === '#/home');
   await page.waitForTimeout(300);
   step('deck size after abandon:', await page.locator('section.deck .pcard').count(), '(expect 0 — an empty-state renders instead)');
-  await page.click('#cemetery-toggle');
-  await page.waitForSelector('#cemetery-grid:not([hidden])');
+
+  // Cemetery is now a separate page (data-nav="/cemetery"), not an inline
+  // toggle — navigate there to check its contents then come back.
+  await page.evaluate(() => { location.hash = '#/cemetery'; renderRoute(); });
+  await page.waitForSelector('.cemetery-grid');
   step('cemetery cards:', await page.locator('.cemetery-grid .pcard.is-dead').count());
   step('death stamp:', await page.locator('.cemetery-grid .pcard-xp-dead').textContent());
   step('graveyard panel present:', await page.locator('.yard').count(), '(expect 1)');
-  if (await page.locator('.yard').count() !== 1) throw new Error('the cemetery toggle should reveal a .yard graveyard panel wrapping the cemetery grid');
+  if (await page.locator('.yard').count() !== 1) throw new Error('screenCemetery should render a .yard graveyard panel wrapping the cemetery grid');
   const cemeteryTierBadge = await page.locator('.cemetery-grid .pcard-tier-name').first().textContent();
   step('cemetery card tier badge (should carry an emoji):', cemeteryTierBadge);
   if (!/[🥚🐣🌿🪨✨]/u.test(cemeteryTierBadge)) throw new Error(`expected the tier badge to carry an emoji, got: "${cemeteryTierBadge}"`);
 
-  // Regression check for the toggle bug: the [hidden] attribute alone did not
-  // catch it (an author .deck-grid{display:grid} rule was silently beating
-  // the UA [hidden] rule), so assert the *computed* style instead.
-  await page.click('#cemetery-toggle');
-  await page.waitForFunction(
-    () => getComputedStyle(document.querySelector('#cemetery-grid')).display === 'none',
-    { timeout: 3000 }
-  );
-  step('cemetery panel is actually display:none after a second toggle click');
+  // Navigate back to home before continuing.
+  await page.evaluate(() => { location.hash = '#/home'; renderRoute(); });
+  await page.waitForFunction(() => location.hash === '#/home');
 
   // --- Calendar day now shows the stamped, still-visible failure ---
   await page.click('[data-nav="/history"]');

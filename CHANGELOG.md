@@ -64,3 +64,14 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   ne s'allumait. Corrigé en `tab: '/home'` (onglet Miroir actif,
   cohérent avec le bouton « Voir mon miroir » présent sur ces deux
   écrans). Fichier : `screens.js`.
+- Tests `ritual-queue`, `answer-window`, `flow` réécrits pour la story
+  actuelle (ciblaient l'ancienne archi par onglets : `[data-nav="/today"]`,
+  `.ritual-card .pcard`, `#ritual-next/prev`, etc.). Fichiers :
+  `tests/ritual-queue.spec.js`, `tests/answer-window.spec.js`,
+  `tests/flow.spec.js`.
+- Accessibilité story : zones de tap gauche/droite converties de
+  `<div aria-hidden>` en `<button aria-label>`. Navigables au clavier
+  (Tab + Entrée/Espace). CSS reset sur ces boutons pour préserver le
+  rendu. Guard swipe-down mis à jour pour exclure uniquement les vrais
+  boutons d'action, pas les zones de tap. Fichiers : `screens.js`,
+  `style.css`.
