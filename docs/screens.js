@@ -491,15 +491,23 @@ function screenToday() {
     const today = todayTally();
     const total = today.kept + today.broken + today.frozen;
     const perfect = total > 0 && today.broken === 0;
+    const blanche = today.kept === 0 && total > 0;
     if (perfect && Math.random() < 0.35) {
       setTimeout(() => toast(SURPRISE_MESSAGES[Math.floor(Math.random() * SURPRISE_MESSAGES.length)]), 400);
     }
 
+    // The last card in the story, not a different kind of screen — same
+    // full-bleed treatment as every other one, coloured by how the day
+    // went rather than by a single habit's vitality (reusing the same
+    // gradients, not inventing new ones).
+    const dayStory = vitalityStory(perfect ? 'pleine' : blanche ? 'mourante' : 'faiblit');
+
     host.innerHTML = `
-      <div class="ritual ritual-summary rs-interstitial">
+      <div class="ritual rs-story ritual-summary" style="--story-bg:${dayStory.gradient}">
+        <div class="rs-story-tap rs-story-tap-next" data-tap="next" aria-hidden="true"></div>
         <div class="ritual-body">
           <p class="ritual-prompt">Aujourd'hui</p>
-          <h2 class="ritual-title">${perfect ? 'Rien à te reprocher.' : today.kept === 0 && total > 0 ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>
+          <h2 class="rs-story-title">${perfect ? 'Rien à te reprocher.' : blanche ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>
           <div class="summary-tallies">
             <div class="tally is-kept"><span class="n">${today.kept}</span><span class="l">tenue${today.kept > 1 ? 's' : ''}</span></div>
             <div class="tally is-broken"><span class="n">${today.broken}</span><span class="l">rompue${today.broken > 1 ? 's' : ''}</span></div>
@@ -520,7 +528,12 @@ function screenToday() {
 
     if (perfect) setTimeout(fxConfetti, 260);
 
-    host.querySelector('#ritual-done').addEventListener('click', () => navigate('/home'));
+    // Tapping right again, same as every card before it, is one more way
+    // out — the explicit button stays for anyone who hasn't picked up on
+    // the gesture.
+    const goHome = () => navigate('/home');
+    host.querySelector('#ritual-done').addEventListener('click', goHome);
+    host.querySelector('.rs-story-tap-next').addEventListener('click', goHome);
   }
 
   return { chrome: false, mount };
