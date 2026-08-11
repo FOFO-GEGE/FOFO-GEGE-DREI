@@ -803,8 +803,7 @@ button:disabled { opacity: .4; cursor: default; }
 .rs-story-tap-prev { left: 0; }
 .rs-story-tap-next { right: 0; }
 .rs-story .ritual-top,
-.rs-story .ritual-actions,
-.rs-story .rs-story-swipe-hint {
+.rs-story .ritual-actions {
   position: relative; z-index: 1;
 }
 
@@ -857,7 +856,15 @@ button:disabled { opacity: .4; cursor: default; }
 .rs-story .countdown, .rs-story .ritual-snooze-line { color: rgba(255, 255, 255, .88); border-color: rgba(255, 255, 255, .35); }
 .rs-story .countdown.is-urgent { color: #fff; background: rgba(0, 0, 0, .28); border-color: rgba(255, 255, 255, .55); }
 
-.rs-story-swipe-hint { margin-top: 14px; text-align: center; font-size: 12px; opacity: .72; }
+/* The week strip's own colours (kept/broken/frozen/…) can land close in
+   lightness to whichever vitality gradient is behind them — a green "kept"
+   mark on the green "pleine" background all but disappears. A light ring
+   around every mark and brighter, bolder day-initials fix that regardless
+   of which of the two colours happen to be nearby. */
+.rs-story .pcard-day { box-shadow: 0 0 0 1px rgba(255, 255, 255, .55); }
+.rs-story .pcard-day.is-pending { box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .8); }
+.rs-story .pcard-week-dow span { color: rgba(255, 255, 255, .85); font-weight: 700; }
+.rs-story .pcard-week-dow span.is-today { color: #fff; }
 
 .summary-tallies { display: flex; gap: 10px; margin-top: 28px; }
 .tally {

@@ -36,32 +36,18 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : refonte de la story Aujourd'hui façon Instagram
-stories.
-- Fond plein écran = couleur de vitalité (`--story-bg`), tout le CSS
-  `.rs-story-*` écrit (n'existait pas du tout avant — le HTML était
-  posé mais jamais stylé).
-- Seuls Fait/Pas fait visibles sur la carte. Geler et Décaler ne sont
-  plus des boutons permanents : « Pas fait » ouvre une étape
-  (`mountFailChoice()`) avec Pas fait/Geler/Décaler en boutons de
-  même ergonomie (`.ritual-btn`) — Geler et/ou Décaler omis s'ils ne
-  sont pas disponibles (gel déjà pris ce mois, etc.). Précédent/
-  Suivant retirés (redondants avec le tap gauche/droite).
-- Tap gauche/droite pour changer de carte : rendu réellement
-  fonctionnel (zones existaient en JS mais sans CSS, donc sans effet).
-- Minuteur d'avance automatique (7s) supprimé entièrement.
-- Story = écran par défaut à l'ouverture (`resolveScreen()` dans
-  `app.js`), plus Mon miroir.
-- Glisser vers le bas pour quitter : préservé, vérifié après la
-  réorganisation des boutons.
+Description : 3 retouches sur la story Aujourd'hui, après retour
+utilisateur sur la refonte précédente.
+- Émoji du palier affiché une seule fois (le gros) — le libellé
+  (« ÉCLOSE » etc.) le répétait en petit à côté, retiré.
+- Bande des 7 jours plus visible sur le fond coloré : anneau clair
+  autour de chaque carré (`box-shadow`, contourne les cas où la
+  couleur de la marque se fond dans le dégradé de vitalité derrière),
+  lettres du jour éclaircies.
+- Texte « glisse vers le bas pour revenir » retiré (le geste reste
+  actif, seul le texte disparaît).
 
-Piège rencontré et documenté : `backdrop-filter`/`filter` sur un
-élément à l'intérieur de la zone de tap créent leur propre contexte
-d'empilement et passent au-dessus des zones de tap (z-index 0) quel
-que soit l'ordre DOM, les rendant mortes par endroits — remplacés par
-`text-shadow` et un fond translucide simple.
-
-Fichiers concernés : `screens.js`, `app.js`, `style.css`.
+Fichiers concernés : `screens.js`, `style.css`.
 
 ## Problèmes connus
 

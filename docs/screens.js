@@ -291,7 +291,7 @@ function screenToday() {
 
         <div class="ritual-body">
           <div class="rs-story-tier-emoji" aria-hidden="true">${tier.emoji}</div>
-          <span class="rs-story-tier-label">${tier.emoji} ${tier.label}</span>
+          <span class="rs-story-tier-label">${tier.label}</span>
           <h2 class="rs-story-title">${esc(habit.title)}</h2>
 
           <div class="rs-story-vitality">
@@ -320,7 +320,6 @@ function screenToday() {
           <button class="ritual-btn is-no" id="ritual-snooze">${icon('history', 22)}<span>Décaler à plus tard</span></button>
         </div>`
           : ''}
-        <p class="rs-story-swipe-hint">glisse vers le bas pour revenir ⌄</p>
       </div>`;
 
     const stage = host.querySelector('.ritual');
