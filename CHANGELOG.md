@@ -28,3 +28,8 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   dans la zone de tap crée un contexte d'empilement qui passe au-
   dessus des zones de tap quel que soit l'ordre DOM. Fichiers :
   `screens.js`, `app.js`, `style.css`.
+- 3 retouches sur cette story : émoji de palier affiché une seule
+  fois (n'était plus répété en petit dans le libellé), bande des 7
+  jours plus visible sur fond coloré (anneau clair + lettres
+  éclaircies), texte « glisse vers le bas pour revenir » retiré
+  (geste conservé). Fichiers : `screens.js`, `style.css`.
