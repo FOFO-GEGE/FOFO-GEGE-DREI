@@ -139,14 +139,17 @@ function hashSeed(id) {
 }
 
 // The seven-day memory strip: a row of coloured marks plus their weekday
-// initials, shared by the card grid and the Aujourd'hui story. Withheld
-// below two actually-scheduled days in the window — a one-day promise, or
-// one just created, has nothing here the rest of the card doesn't already
-// say.
+// initials, shared by the card grid and the Aujourd'hui story. Always shown
+// once the caller has a week to give it — even a brand-new promise, mostly
+// 'before' marks (fully transparent, see .pcard-day.is-before) plus
+// whatever's real. Used to be withheld below two actually-scheduled days,
+// but an omitted strip made that card shorter than its neighbours, so a
+// deck row with an older and a newer promise side by side came out
+// visibly uneven. Absent only when the caller never computed a week at
+// all (a preview, a synthetic card).
 function weekStripHTML(rawWeek) {
   const week = Array.isArray(rawWeek) ? rawWeek : [];
-  const dueInWeek = week.filter(d => d.state !== 'before' && d.state !== 'rest').length;
-  if (dueInWeek < 2) return '';
+  if (!week.length) return '';
   // D L M M J V S — single-letter initials indexed the same way getDay()
   // does (0 = dimanche). Without these the strip was unreadable: nothing
   // told you which mark was which day, so a gap could not be located on the

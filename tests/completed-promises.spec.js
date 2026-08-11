@@ -139,8 +139,10 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
     const compact = habitCard(habit, stats, { compact: true });
     const finished = habitCard(habit, stats, { compact: true, finished: true, finishedDate: '01/01' });
     const noWeek = habitCard(habit, { ...stats, week: undefined }, { compact: true });
-    // Below the two-scheduled-days floor: a promise with only one due day in
-    // the window has nothing here the rest of the card doesn't already say.
+    // Below the two-scheduled-days floor: mostly 'before'/'rest' marks, but
+    // the strip is still rendered (kept for card-height parity across a deck
+    // row — an omitted strip used to make this card shorter than its
+    // neighbours).
     const oneDueDay = habitCard(habit, { ...stats, week: [
       { date: '2024-01-01', dow: 1, state: 'before' }, { date: '2024-01-02', dow: 2, state: 'before' },
       { date: '2024-01-03', dow: 3, state: 'rest' }, { date: '2024-01-04', dow: 4, state: 'rest' },
@@ -178,7 +180,7 @@ const BASE = process.env.MIRROIR_TEST_BASE || 'http://localhost:8811';
   if (!weekStrip.compactHasVitalityGauge) throw new Error('a live compact card should still show the vitality gauge');
   if (weekStrip.finishedHasStrip || weekStrip.finishedHasVitalityGauge) throw new Error('a retired card shows neither the strip nor the gauge — its story is over');
   if (weekStrip.noWeekHasStrip) throw new Error('a card rendered without a week (a preview) should simply omit the strip');
-  if (weekStrip.oneDueDayHasStrip) throw new Error('a promise scheduled on only one day within the window should omit the strip entirely');
+  if (!weekStrip.oneDueDayHasStrip) throw new Error('a promise scheduled on only one day within the window should still get the strip, for height parity with the rest of the deck');
   if (weekStrip.hasStreak) throw new Error('SÉRIE is gone from the card — the strip already shows the current run, and a streak punished one miss twice');
   if (weekStrip.hasRecord) throw new Error('the Record stat is gone from the card');
   if (weekStrip.hasThemeWord) throw new Error('the theme word under the icon is gone — the icon already says it');
