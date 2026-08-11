@@ -76,9 +76,10 @@ function navigate(path) {
 }
 
 function resolveScreen() {
-  // Mon miroir is the front door now that Aujourd'hui isn't a tab — the
-  // ring on this screen is the only ordinary way into the story.
-  const hash = location.hash.replace(/^#/, '') || '/home';
+  // The story is the front door: whatever's left to answer today is the
+  // first thing open shows, same as Aujourd'hui always was before it lost
+  // its own tab. Mon miroir is one swipe-down away, not a detour to get here.
+  const hash = location.hash.replace(/^#/, '') || '/today';
   const habit = hash.match(/^\/habit\/(.+)$/);
   if (habit) return screenHabitDetail(habit[1]);
   switch (hash) {
@@ -285,7 +286,9 @@ setInterval(async () => {
   const hadPending = pendingToday().length;
   const expiring = store.checks.some(c => c.status === 'created' && isExpired(c));
   if (expiring) await reconcileToday();
-  const onLiveScreen = location.hash === '#/home' || location.hash === '';
+  // An empty hash used to mean Mon miroir; now it lands on the story (see
+  // resolveScreen), which must NOT be swept into "live screen" below.
+  const onLiveScreen = location.hash === '#/home';
   if (expiring || (onLiveScreen && hadPending)) renderRoute();
 }, 30000);
 

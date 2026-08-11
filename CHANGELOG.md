@@ -15,3 +15,7 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   emoji des paliers pour Cimetière/Terminées. Fichiers : `ui.js`,
   `screens.js`, `tests/card-colour.spec.js`,
   `tests/completed-promises.spec.js`.
+- Bande des 7 derniers jours repositionnée en bas de carte, après
+  Taux/Jours, sur le deck et sur la story ; `weekStripHTML()`
+  factorisée dans `ui.js` au lieu d'être dupliquée. Fichiers : `ui.js`,
+  `screens.js`, `style.css`.

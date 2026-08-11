@@ -709,7 +709,10 @@ button:disabled { opacity: .4; cursor: default; }
   padding: calc(16px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
   max-width: 480px; margin: 0 auto;
 }
-.ritual-top { display: flex; align-items: center; gap: 12px; }
+/* Column, not a row: the segmented bar is its own thin strip up top,
+   habit identity + quit button form their own row right under it —
+   stacking them was the missing piece once .rs-story-head existed. */
+.ritual-top { display: flex; flex-direction: column; gap: 10px; }
 .ritual-quit { color: var(--text-dim); padding: 6px; margin-left: -6px; }
 .ritual-progress { flex: 1; display: flex; gap: 4px; }
 .ritual-progress span { flex: 1; height: 4px; border-radius: 999px; background: var(--surface-2); }
@@ -725,11 +728,6 @@ button:disabled { opacity: .4; cursor: default; }
   font-family: var(--rs-font-display), Georgia, serif; font-size: 38px; font-weight: 700;
   line-height: 1.08; letter-spacing: -.025em; margin-top: 12px; text-wrap: balance; max-width: 14ch;
 }
-/* The real card, not a stand-in icon — its own tier, série and fissures are
-   the point. Bigger than the compact deck-grid rendering so it reads as the
-   thing the whole screen is about. */
-.ritual-card { width: 100%; max-width: 300px; margin: 0 auto 18px; }
-.ritual-card .pcard[data-habit] { cursor: default; }
 .ritual-status {
   font-size: 13.5px; font-weight: 700; padding: 7px 15px; border-radius: 999px;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim);
@@ -757,25 +755,6 @@ button:disabled { opacity: .4; cursor: default; }
   color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
-.ritual-freeze {
-  margin-top: 10px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 13px; border-radius: 14px; font-size: 13px; font-weight: 700;
-  color: var(--frozen); border: 1px solid color-mix(in srgb, var(--frozen) 40%, var(--border));
-  background: color-mix(in srgb, var(--frozen) 8%, transparent);
-}
-/* Deliberately unassuming — this is an escape hatch, not an equal option to
-   Fait/Pas fait, and it must never look tempting enough to become the tap
-   people default to instead of answering. */
-.ritual-snooze-btn {
-  margin-top: 14px; width: 100%; text-align: center;
-  padding: 8px; font-size: 12.5px; font-weight: 600; color: var(--text-dim);
-}
-
-/* Free browsing, but only across cards already decided — nothing pending
-   ever gets a "skip without deciding" shortcut beyond the snooze above. */
-.ritual-nav { display: flex; gap: 10px; width: 100%; margin-top: 14px; }
-.ritual-nav button { flex: 1; }
-
 .ritual-veil {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   opacity: 0; transition: opacity .18s ease; z-index: 5;
@@ -795,6 +774,90 @@ button:disabled { opacity: .4; cursor: default; }
   color: #fff;
 }
 @keyframes veil-pop { from { transform: scale(.3) rotate(-14deg); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- Story (Aujourd'hui), Instagram-style ---------- */
+
+/* Full-bleed colour is the whole point — vitality decides it (vitalityStory()
+   in ui.js), not theme, not today's answer. The dark top/bottom scrim is
+   layered under the vitality gradient rather than relying on text-shadow
+   alone: the lightest gradient stop (morte's #AFAFAF, faiblit's #FFC46B)
+   would otherwise leave white text under-contrasted right where the fixed
+   header and buttons live. White text throughout, independent of the app's
+   own light/dark theme — a saturated gradient needs its own rules, not the
+   ones tuned for a plain surface. */
+.rs-story {
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, .34) 0%, rgba(0, 0, 0, 0) 24%, rgba(0, 0, 0, 0) 66%, rgba(0, 0, 0, .42) 100%),
+    var(--story-bg);
+  color: #fff;
+}
+.rs-story .ritual-quit { color: #fff; opacity: .85; }
+
+/* Two invisible strips, screen edge to screen edge, full height — tap
+   either to move a card without deciding this one. Left at stack level 0:
+   everything actually meant to be tapped (header, buttons) is lifted to 1
+   below, so an overlay positioned "above" them in the DOM never shadows a
+   real control just because position:absolute paints above static content
+   by default. */
+.rs-story-tap { position: absolute; top: 0; bottom: 0; width: 38%; z-index: 0; }
+.rs-story-tap-prev { left: 0; }
+.rs-story-tap-next { right: 0; }
+.rs-story .ritual-top,
+.rs-story .ritual-actions,
+.rs-story .rs-story-swipe-hint {
+  position: relative; z-index: 1;
+}
+
+.rs-story .ritual-progress span { background: rgba(255, 255, 255, .3); }
+.rs-story .ritual-progress span.done { background: #fff; box-shadow: none; }
+.rs-story .ritual-progress span.now { background: rgba(255, 255, 255, .75); }
+
+.rs-story-head { display: flex; align-items: center; gap: 8px; }
+.rs-story-icon { display: inline-flex; flex: 0 0 auto; opacity: .9; }
+.rs-story-name {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13px; font-weight: 700; opacity: .9;
+}
+
+/* text-shadow, not filter: drop-shadow — filter establishes its own
+   stacking context, which would paint this above the tap zones (stack
+   level 0) regardless of DOM order, turning the emoji into a small dead
+   zone for tap-to-navigate. */
+.rs-story-tier-emoji { font-size: 40px; line-height: 1; text-shadow: 0 4px 14px rgba(0, 0, 0, .35); }
+.rs-story-tier-label {
+  margin-top: 10px; font-size: 12px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+  opacity: .88;
+}
+.rs-story-title {
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 32px; font-weight: 700;
+  line-height: 1.1; letter-spacing: -.02em; margin-top: 6px; text-wrap: balance; max-width: 16ch;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, .22);
+}
+
+.rs-story-vitality { width: 100%; max-width: 280px; margin-top: 22px; }
+.rs-story-vitality-row {
+  display: flex; justify-content: space-between; font-size: 12px; font-weight: 700;
+  opacity: .88; margin-bottom: 6px;
+}
+.rs-story-vitality-track { height: 6px; border-radius: 999px; background: rgba(255, 255, 255, .28); overflow: hidden; }
+.rs-story-vitality-fill { height: 100%; border-radius: inherit; background: #fff; }
+
+.rs-story-stats { display: flex; gap: 10px; width: 100%; max-width: 280px; margin-top: 16px; }
+/* Plain translucent background, deliberately no backdrop-filter: it would
+   establish its own stacking context and paint above the tap zones (stack
+   level 0) regardless of DOM order, turning each chip into a small dead
+   zone for tap-to-navigate — the same trap as the tier emoji above. */
+.rs-story-stat {
+  flex: 1; padding: 10px 8px; border-radius: 14px; background: rgba(255, 255, 255, .18);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.rs-story-stat .v { font-size: 18px; font-weight: 800; }
+.rs-story-stat .k { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; opacity: .82; }
+
+.rs-story .countdown, .rs-story .ritual-snooze-line { color: rgba(255, 255, 255, .88); border-color: rgba(255, 255, 255, .35); }
+.rs-story .countdown.is-urgent { color: #fff; background: rgba(0, 0, 0, .28); border-color: rgba(255, 255, 255, .55); }
+
+.rs-story-swipe-hint { margin-top: 14px; text-align: center; font-size: 12px; opacity: .72; }
 
 .summary-tallies { display: flex; gap: 10px; margin-top: 28px; }
 .tally {

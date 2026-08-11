@@ -185,8 +185,9 @@ function pushBanner() {
 // answered they fall in behind, still visible, as a plain record of the day
 // rather than something still owed. No numeric "3 restantes" anywhere — the
 // segmented bar at top says where you are without turning it into a score.
-// Précédent/Suivant move between cards freely, on every card, pending or
-// not — deciding one is never a condition for looking at the next.
+// Tap gauche/droite (or the swipe-down to leave) move between cards
+// freely, on every card, pending or not — deciding one is never a
+// condition for looking at the next.
 
 // Remembers position across a forced re-render (the background reconcile
 // can force one if something expires while you're mid-story) so a 30s tick
@@ -230,18 +231,6 @@ function screenToday() {
     if (at >= 0) index = at;
   }
   const totalCount = items.length;
-
-  // Auto-advance, Instagram-style — but paused (see mountReason/mountSummary
-  // and every handler below) the instant the user does anything, so it can
-  // never race a real decision or snatch the reason step away mid-tap.
-  // Always cleared at the top of a fresh mount() and rescheduled at the end,
-  // so simply moving to another card resets the clock for free.
-  let autoTimer = null;
-  function clearAuto() { clearTimeout(autoTimer); autoTimer = null; }
-  function scheduleAuto(host) {
-    clearAuto();
-    autoTimer = setTimeout(() => { index++; mount(host); }, 7000);
-  }
 
   function mount(host) {
     if (index >= items.length) { todayCursorHabitId = null; return mountSummary(host); }
@@ -291,7 +280,7 @@ function screenToday() {
         <div class="ritual-top">
           <div class="ritual-progress">
             ${Array.from({ length: totalCount }, (_, i) =>
-              `<span class="${i < index ? 'done' : i === index ? 'now' : ''}" ${i === index ? 'style="--auto:7s"' : ''}></span>`).join('')}
+              `<span class="${i < index ? 'done' : i === index ? 'now' : ''}"></span>`).join('')}
           </div>
           <div class="rs-story-head">
             <span class="rs-story-icon" aria-hidden="true">${icon(theme.id, 15)}</span>
@@ -321,39 +310,32 @@ function screenToday() {
           ${snoozeLine}
         </div>
 
-        ${pending ? `
-        <div class="ritual-actions">
+        ${pending
+          ? `<div class="ritual-actions">
           <button class="ritual-btn is-no" data-verdict="failed">${icon('cross', 22)}<span>Pas fait</span></button>
           <button class="ritual-btn is-yes" data-verdict="success">${icon('check', 22)}<span>Fait</span></button>
-        </div>
-        ${canFreeze(habit)
-          ? `<button class="ritual-freeze" data-verdict="frozen">${icon('snow', 16)} Geler ce jour (1× ce mois)</button>`
+        </div>`
+          : decalable
+          ? `<div class="ritual-actions single">
+          <button class="ritual-btn is-no" id="ritual-snooze">${icon('history', 22)}<span>Décaler à plus tard</span></button>
+        </div>`
           : ''}
-        ` : ''}
-        ${decalable ? `<button class="ritual-snooze-btn" id="ritual-snooze">Décaler à plus tard aujourd'hui</button>` : ''}
-        <div class="ritual-nav">
-          <button class="btn-secondary" id="ritual-prev" ${index === 0 ? 'disabled' : ''}>${icon('left', 18)} Précédent</button>
-          <button class="btn-secondary" id="ritual-next">Suivant ${icon('right', 18)}</button>
-        </div>
         <p class="rs-story-swipe-hint">glisse vers le bas pour revenir ⌄</p>
       </div>`;
 
     const stage = host.querySelector('.ritual');
 
     stage.querySelector('#ritual-quit').addEventListener('click', () => {
-      clearAuto();
       todayCursorHabitId = null;
       navigate('/home');
     });
 
     // Moving on to another card is always free — deciding this one is never
     // a condition for it, pending or not. Only the actions below actually
-    // resolve (or snooze) this specific check. The two tap zones (mirroring
-    // Précédent/Suivant, Instagram-style) share the same rules.
+    // resolve (or snooze) this specific check. Tap left/right is the only
+    // way to move between cards now — no more Précédent/Suivant buttons.
     const goPrev = () => { if (index === 0) return; index--; mount(host); };
     const goNext = () => { index++; mount(host); };
-    stage.querySelector('#ritual-prev').addEventListener('click', goPrev);
-    stage.querySelector('#ritual-next').addEventListener('click', goNext);
     stage.querySelector('.rs-story-tap-prev').addEventListener('click', goPrev);
     stage.querySelector('.rs-story-tap-next').addEventListener('click', goNext);
 
@@ -365,7 +347,6 @@ function screenToday() {
       if (e.target.closest('button')) return;
       dragStartY = e.clientY;
       dragging = true;
-      clearAuto();
     });
     stage.addEventListener('pointermove', e => {
       if (!dragging) return;
@@ -384,17 +365,13 @@ function screenToday() {
       }
       stage.style.transform = '';
       stage.style.opacity = '';
-      scheduleAuto(host);
     };
     stage.addEventListener('pointerup', endDrag);
     stage.addEventListener('pointercancel', endDrag);
 
-    if (!decalable) { scheduleAuto(host); return; }
-
     const snoozeBtn = stage.querySelector('#ritual-snooze');
     if (snoozeBtn) {
       snoozeBtn.addEventListener('click', () => {
-        clearAuto();
         openSnoozeSheet(check, () => {
           index++;
           mount(host);
@@ -402,51 +379,91 @@ function screenToday() {
       });
     }
 
+    // The veil + shake/shatter FX used to fire the instant "Pas fait" was
+    // tapped. Now it fires only once the outcome is actually settled: on
+    // "Fait", on "Geler", and on confirming "Pas fait" for real — either
+    // directly below (nothing else to offer) or from inside the choice
+    // step in mountFailChoice(). Takes the live stage explicitly rather
+    // than closing over the card's own, since by the time a choice made
+    // inside mountFailChoice settles, the card's stage is long gone.
+    function settleVerdict(verdict, liveStage, btn) {
+      if (verdict === 'frozen') {
+        freezeCheck(check.id);
+        vibrate(12);
+      } else if (verdict === 'success') {
+        markCheck(check.id, verdict);
+        vibrate(25);
+        if (btn) fxBurstFrom(btn, { count: 54, speed: 8 });
+      } else {
+        // Commit happens on the reason step so the answer and its reason
+        // land as one write instead of two.
+        vibrate([10, 40, 60]);
+        fxShake(liveStage, 'hard');
+        const r = liveStage.getBoundingClientRect();
+        fxShatter(r.left + r.width / 2, r.top + r.height * 0.42);
+      }
+
+      const veil = document.createElement('div');
+      veil.className = `ritual-veil is-${verdict}`;
+      veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 72);
+      liveStage.appendChild(veil);
+      requestAnimationFrame(() => veil.classList.add('show'));
+
+      setTimeout(() => {
+        if (verdict === 'failed') return mountReason(host, check);
+        index++;
+        mount(host);
+      }, 640);
+    }
+
     stage.querySelectorAll('[data-verdict]').forEach(btn => {
       btn.addEventListener('click', () => {
-        clearAuto();
-        const verdict = btn.dataset.verdict;
         stage.querySelectorAll('button').forEach(b => { b.disabled = true; });
-
-        if (verdict === 'frozen') {
-          freezeCheck(check.id);
-          vibrate(12);
-        } else if (verdict === 'success') {
-          markCheck(check.id, verdict);
-          vibrate(25);
-          fxBurstFrom(btn, { count: 54, speed: 8 });
-        } else {
-          // Commit happens on the reason step so the answer and its reason
-          // land as one write instead of two.
-          vibrate([10, 40, 60]);
-          fxShake(stage, 'hard');
-          const r = stage.getBoundingClientRect();
-          fxShatter(r.left + r.width / 2, r.top + r.height * 0.42);
-        }
-
-        const veil = document.createElement('div');
-        veil.className = `ritual-veil is-${verdict}`;
-        veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 72);
-        stage.appendChild(veil);
-        requestAnimationFrame(() => veil.classList.add('show'));
-
-        setTimeout(() => {
-          if (verdict === 'failed') return mountReason(host, check);
-          index++;
-          mount(host);
-        }, 640);
+        const verdict = btn.dataset.verdict;
+        // "Pas fait" never commits straight from the main card when there's
+        // another way to not-do it today — Geler and Décaler move in
+        // behind it instead of sitting on the card as their own buttons.
+        if (verdict === 'failed' && (canFreeze(habit) || decalable)) return mountFailChoice();
+        settleVerdict(verdict, stage, btn);
       });
     });
 
-    scheduleAuto(host);
+    // Reached only from "Pas fait" when Geler and/or Décaler are actually on
+    // offer — same choice, in three equally-weighted buttons instead of a
+    // small link nobody was meant to reach for. Skipped entirely otherwise:
+    // the click handler above settles "Pas fait" directly in that case.
+    function mountFailChoice() {
+      host.innerHTML = `
+        <div class="ritual reason-step rs-interstitial">
+          <div class="ritual-body">
+            <p class="ritual-prompt">Pas fait</p>
+            <h2 class="ritual-title">Comment ça ?</h2>
+            <div class="ritual-actions single">
+              <button class="ritual-btn is-no" data-verdict="failed">${icon('cross', 22)}<span>Pas fait</span></button>
+              ${canFreeze(habit) ? `<button class="ritual-btn" data-verdict="frozen">${icon('snow', 22)}<span>Geler ce jour</span></button>` : ''}
+              ${decalable ? `<button class="ritual-btn" id="fc-snooze">${icon('history', 22)}<span>Décaler à plus tard</span></button>` : ''}
+            </div>
+          </div>
+        </div>`;
+
+      const fcStage = host.querySelector('.ritual');
+      fcStage.querySelectorAll('[data-verdict]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          fcStage.querySelectorAll('button').forEach(b => { b.disabled = true; });
+          settleVerdict(btn.dataset.verdict, fcStage, btn);
+        });
+      });
+      const fcSnooze = fcStage.querySelector('#fc-snooze');
+      if (fcSnooze) fcSnooze.addEventListener('click', () => {
+        openSnoozeSheet(check, () => { index++; mount(host); });
+      });
+    }
   }
 
   // Optional, one tap, always skippable — the point is to learn what the
   // failures are made of, not to interrogate anyone. A pause, not a card of
-  // its own — plain reskinned chrome, no per-habit colour, and no
-  // auto-advance while it's up.
+  // its own — plain reskinned chrome, no per-habit colour.
   function mountReason(host, check) {
-    clearAuto();
     host.innerHTML = `
       <div class="ritual reason-step rs-interstitial">
         <div class="ritual-body">
@@ -472,7 +489,6 @@ function screenToday() {
   }
 
   function mountSummary(host) {
-    clearAuto();
     const today = todayTally();
     const total = today.kept + today.broken + today.frozen;
     const perfect = total > 0 && today.broken === 0;
