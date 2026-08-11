@@ -231,6 +231,18 @@ function screenToday() {
   }
   const totalCount = items.length;
 
+  // Auto-advance, Instagram-style — but paused (see mountReason/mountSummary
+  // and every handler below) the instant the user does anything, so it can
+  // never race a real decision or snatch the reason step away mid-tap.
+  // Always cleared at the top of a fresh mount() and rescheduled at the end,
+  // so simply moving to another card resets the clock for free.
+  let autoTimer = null;
+  function clearAuto() { clearTimeout(autoTimer); autoTimer = null; }
+  function scheduleAuto(host) {
+    clearAuto();
+    autoTimer = setTimeout(() => { index++; mount(host); }, 7000);
+  }
+
   function mount(host) {
     if (index >= items.length) { todayCursorHabitId = null; return mountSummary(host); }
 
@@ -246,6 +258,20 @@ function screenToday() {
     const decalable = pending || (check.status === 'failed' && !check.reopened);
     todayCursorHabitId = habit.id;
     const stats = habitStats(habit);
+    const theme = themeById(habit.theme);
+    const tier = tierFor(stats.daysAlive, stats.vitality);
+    const vitState = stats.vitalityState || 'pleine';
+    // The screen's own colour, not a stand-in card's — same rule as
+    // everywhere else since PR #36: vitality decides it, not theme, not
+    // today's answer. Only the pending bands below (red/amber/green) speak
+    // to today specifically.
+    const story = vitalityStory(vitState);
+
+    let timeBand = '';
+    if (pending) {
+      const elapsed = rangeElapsed(habit, check.date);
+      timeBand = elapsed < 1 / 3 ? 'green' : elapsed < 2 / 3 ? 'amber' : 'red';
+    }
 
     const snoozeLine = check.snooze_count
       ? `<p class="ritual-snooze-line">Repoussée ${check.snooze_count} fois aujourd'hui</p>`
@@ -253,23 +279,42 @@ function screenToday() {
     const statusLine = pending ? '' : `
       <p class="ritual-status is-${check.status}">${STATUS_LABEL[check.status] || check.status}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</p>`;
 
-    // The card here skips its own status glyph (noStatus) — today's state is
-    // already the countdown chip or the status line right below it, and
-    // repeating it as a glyph on the card too would just double the story up
-    // on itself.
+    // No stand-in card here any more — the story shows the real numbers
+    // (tier, vitality, taux, jours) directly. band-*/vit-*/tier-* land on
+    // the story root itself, the same vocabulary .pcard used to carry.
     host.innerHTML = `
-      <div class="ritual">
+      <div class="ritual rs-story vit-${vitState} tier-${tier.id} ${timeBand ? 'band-' + timeBand : ''}"
+        data-habit="${habit.id}" style="--story-bg:${story.gradient}">
+        <div class="rs-story-tap rs-story-tap-prev" data-tap="prev" aria-hidden="true"></div>
+        <div class="rs-story-tap rs-story-tap-next" data-tap="next" aria-hidden="true"></div>
+
         <div class="ritual-top">
-          <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           <div class="ritual-progress">
             ${Array.from({ length: totalCount }, (_, i) =>
-              `<span class="${i < index ? 'done' : i === index ? 'now' : ''}"></span>`).join('')}
+              `<span class="${i < index ? 'done' : i === index ? 'now' : ''}" ${i === index ? 'style="--auto:7s"' : ''}></span>`).join('')}
+          </div>
+          <div class="rs-story-head">
+            <span class="rs-story-icon" aria-hidden="true">${icon(theme.id, 15)}</span>
+            <span class="rs-story-name">${esc(habit.title)}</span>
+            <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           </div>
         </div>
 
         <div class="ritual-body">
-          ${pending ? '<p class="ritual-prompt">Tu avais promis</p>' : ''}
-          <div class="ritual-card">${habitCard(habit, stats, { habitId: habit.id, noStatus: true })}</div>
+          <div class="rs-story-tier-emoji" aria-hidden="true">${tier.emoji}</div>
+          <span class="rs-story-tier-label">${tier.emoji} ${tier.label}</span>
+          <h2 class="rs-story-title">${esc(habit.title)}</h2>
+
+          <div class="rs-story-vitality">
+            <div class="rs-story-vitality-row"><span>Vitalité</span><span>${Math.round(stats.vitality ?? 100)}%</span></div>
+            <div class="rs-story-vitality-track"><div class="rs-story-vitality-fill" style="width:${Math.max(2, Math.min(100, stats.vitality ?? 100))}%"></div></div>
+          </div>
+
+          <div class="rs-story-stats">
+            <div class="rs-story-stat"><span class="v">${stats.rate === null ? '—' : stats.rate + '%'}</span><span class="k">Taux</span></div>
+            <div class="rs-story-stat"><span class="v">${daysCount(stats.daysAlive)}</span><span class="k">Jours</span></div>
+          </div>
+
           ${pending ? countdownChip(check) : statusLine}
           ${snoozeLine}
         </div>
@@ -288,32 +333,78 @@ function screenToday() {
           <button class="btn-secondary" id="ritual-prev" ${index === 0 ? 'disabled' : ''}>${icon('left', 18)} Précédent</button>
           <button class="btn-secondary" id="ritual-next">Suivant ${icon('right', 18)}</button>
         </div>
+        <p class="rs-story-swipe-hint">glisse vers le bas pour revenir ⌄</p>
       </div>`;
 
-    host.querySelector('#ritual-quit').addEventListener('click', () => { todayCursorHabitId = null; navigate('/home'); });
+    const stage = host.querySelector('.ritual');
+
+    stage.querySelector('#ritual-quit').addEventListener('click', () => {
+      clearAuto();
+      todayCursorHabitId = null;
+      navigate('/home');
+    });
 
     // Moving on to another card is always free — deciding this one is never
     // a condition for it, pending or not. Only the actions below actually
-    // resolve (or snooze) this specific check.
-    host.querySelector('#ritual-prev').addEventListener('click', () => { index--; mount(host); });
-    host.querySelector('#ritual-next').addEventListener('click', () => { index++; mount(host); });
+    // resolve (or snooze) this specific check. The two tap zones (mirroring
+    // Précédent/Suivant, Instagram-style) share the same rules.
+    const goPrev = () => { if (index === 0) return; index--; mount(host); };
+    const goNext = () => { index++; mount(host); };
+    stage.querySelector('#ritual-prev').addEventListener('click', goPrev);
+    stage.querySelector('#ritual-next').addEventListener('click', goNext);
+    stage.querySelector('.rs-story-tap-prev').addEventListener('click', goPrev);
+    stage.querySelector('.rs-story-tap-next').addEventListener('click', goNext);
 
-    if (!decalable) return;
+    // Swipe down to leave, like closing an Instagram story — a live
+    // translateY + fade while dragging, a snap back under the ~90px
+    // threshold, a real exit past it.
+    let dragStartY = null, dragging = false;
+    stage.addEventListener('pointerdown', e => {
+      if (e.target.closest('button')) return;
+      dragStartY = e.clientY;
+      dragging = true;
+      clearAuto();
+    });
+    stage.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const dy = Math.max(0, e.clientY - dragStartY);
+      stage.style.transform = dy ? `translateY(${dy}px)` : '';
+      stage.style.opacity = dy ? String(1 - Math.min(0.6, dy / 300)) : '';
+    });
+    const endDrag = e => {
+      if (!dragging) return;
+      dragging = false;
+      const dy = Math.max(0, (e.clientY ?? dragStartY) - dragStartY);
+      if (dy > 90) {
+        todayCursorHabitId = null;
+        navigate('/home');
+        return;
+      }
+      stage.style.transform = '';
+      stage.style.opacity = '';
+      scheduleAuto(host);
+    };
+    stage.addEventListener('pointerup', endDrag);
+    stage.addEventListener('pointercancel', endDrag);
 
-    const snoozeBtn = host.querySelector('#ritual-snooze');
+    if (!decalable) { scheduleAuto(host); return; }
+
+    const snoozeBtn = stage.querySelector('#ritual-snooze');
     if (snoozeBtn) {
-      snoozeBtn.addEventListener('click', () => openSnoozeSheet(check, () => {
-        index++;
-        mount(host);
-      }));
+      snoozeBtn.addEventListener('click', () => {
+        clearAuto();
+        openSnoozeSheet(check, () => {
+          index++;
+          mount(host);
+        });
+      });
     }
 
-    host.querySelectorAll('[data-verdict]').forEach(btn => {
+    stage.querySelectorAll('[data-verdict]').forEach(btn => {
       btn.addEventListener('click', () => {
+        clearAuto();
         const verdict = btn.dataset.verdict;
-        host.querySelectorAll('button').forEach(b => { b.disabled = true; });
-
-        const stage = host.querySelector('.ritual');
+        stage.querySelectorAll('button').forEach(b => { b.disabled = true; });
 
         if (verdict === 'frozen') {
           freezeCheck(check.id);
@@ -344,13 +435,18 @@ function screenToday() {
         }, 640);
       });
     });
+
+    scheduleAuto(host);
   }
 
   // Optional, one tap, always skippable — the point is to learn what the
-  // failures are made of, not to interrogate anyone.
+  // failures are made of, not to interrogate anyone. A pause, not a card of
+  // its own — plain reskinned chrome, no per-habit colour, and no
+  // auto-advance while it's up.
   function mountReason(host, check) {
+    clearAuto();
     host.innerHTML = `
-      <div class="ritual reason-step">
+      <div class="ritual reason-step rs-interstitial">
         <div class="ritual-body">
           <p class="ritual-prompt">Pourquoi ?</p>
           <h2 class="ritual-title">Une raison, en un tap.</h2>
@@ -374,6 +470,7 @@ function screenToday() {
   }
 
   function mountSummary(host) {
+    clearAuto();
     const today = todayTally();
     const total = today.kept + today.broken + today.frozen;
     const perfect = total > 0 && today.broken === 0;
@@ -382,7 +479,7 @@ function screenToday() {
     }
 
     host.innerHTML = `
-      <div class="ritual ritual-summary">
+      <div class="ritual ritual-summary rs-interstitial">
         <div class="ritual-body">
           <p class="ritual-prompt">Aujourd'hui</p>
           <h2 class="ritual-title">${perfect ? 'Rien à te reprocher.' : today.kept === 0 && total > 0 ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>
@@ -466,17 +563,16 @@ function openSnoozeSheet(check, onSnoozed) {
 // ---------- Mon miroir ----------
 
 function screenHome() {
-  const score = globalScore();
-  const shown = score === null ? 0 : score;
-  // The reflection degrades as the score drops — the mirror stops being clear.
-  const blur = (1 - shown / 100) * 7;
-  // No score yet isn't the same as a bad one — nothing to fracture over.
-  const crackOpacity = score === null || shown >= 70 ? 0 : Math.min(0.85, (70 - shown) / 70);
-
-  const R = 104, C = 2 * Math.PI * R;
-  const dash = C * (1 - shown / 100);
-  const label = score === null ? '—' : `${score}%`;
-  const isLow = score !== null && score < 50;
+  // The hero used to show the lifetime score. Insta-story style now: a
+  // small ring for *today* only, tap to open the story, swipe down to
+  // return — the lifetime picture lives in Historique, not repeated here.
+  const items = todayItems();
+  const totalToday = items.length;
+  const keptToday = items.filter(x => x.check.status === 'success').length;
+  const todayPct = totalToday ? Math.round((keptToday / totalToday) * 100) : null;
+  const R = 32, C = 2 * Math.PI * R;
+  const ringOffset = todayPct === null ? C : C * (1 - todayPct / 100);
+  const streak = store.habits.length ? Math.max(0, ...store.habits.map(h => habitStats(h).streak)) : 0;
 
   const cards = store.habits.length
     ? `<section class="deck">
@@ -494,122 +590,147 @@ function screenHome() {
 
   // "Terminées" is not the cemetery: reaching a fixed end date on schedule
   // is a natural completion, not a death, and doesn't belong in the same
-  // abandoned/neglect framing.
+  // abandoned/neglect framing. Both used to be accordions folded onto this
+  // screen; each now gets a real page of its own (see screenCemetery /
+  // screenFinished below) and this is just a link into it.
   const buried = store.cemetery.filter(h => h.death_cause !== 'completed');
   const finished = store.cemetery.filter(h => h.death_cause === 'completed');
 
-  const cemetery = buried.length
-    ? `<section class="cemetery">
-         <button class="cemetery-toggle" id="cemetery-toggle" aria-expanded="false">
-           <span class="section-glyph" aria-hidden="true">🪦</span> Cimetière <span class="deck-count">${buried.length}</span>
-           <span class="cemetery-chevron">${icon('right', 14)}</span>
-         </button>
-         <div class="yard" id="cemetery-grid" hidden>
-           <div class="yard-moon" aria-hidden="true"></div>
-           <div class="deck-grid cemetery-grid">
-             ${buried.map(h => habitCard(h, habitStats(h), {
-               compact: true, habitId: h.id, dead: true,
-               deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: h.death_cause,
-             })).join('')}
-           </div>
-         </div>
-       </section>`
-    : '';
-
-  const finishedBlock = finished.length
-    ? `<section class="finished">
-         <button class="finished-toggle" id="finished-toggle" aria-expanded="false">
-           <span class="section-glyph" aria-hidden="true">🏆</span> Terminées <span class="deck-count">${finished.length}</span>
-           <span class="finished-chevron">${icon('right', 14)}</span>
-         </button>
-         <div class="shelf" id="finished-grid" hidden>
-           <div class="deck-grid finished-grid">
-             ${finished.map(h => habitCard(h, habitStats(h), {
-               compact: true, habitId: h.id, finished: true,
-               finishedDate: formatDay(h.deleted_at?.slice(0, 10)),
-             })).join('')}
-           </div>
-         </div>
+  const moreLinks = (buried.length || finished.length)
+    ? `<section class="rs-more">
+         ${buried.length ? `
+         <button class="rs-more-link" data-nav="/cemetery">
+           <span class="section-glyph" aria-hidden="true">🪦</span>
+           <span class="rs-more-link-label">Cimetière</span>
+           <span class="deck-count">${buried.length}</span>
+           ${icon('right', 16)}
+         </button>` : ''}
+         ${finished.length ? `
+         <button class="rs-more-link" data-nav="/finished">
+           <span class="section-glyph" aria-hidden="true">🏆</span>
+           <span class="rs-more-link-label">Terminées</span>
+           <span class="deck-count">${finished.length}</span>
+           ${icon('right', 16)}
+         </button>` : ''}
        </section>`
     : '';
 
   const html = `
-    <div class="mirror-hero ${isLow ? 'is-low' : ''}" style="--blur:${blur.toFixed(2)}px">
-      <div class="mirror-ring">
-        <div class="mirror-aura" aria-hidden="true"></div>
-        <svg class="ring" viewBox="0 0 232 232" aria-hidden="true">
-          <defs>
-            <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="${isLow ? 'var(--danger)' : 'var(--hot)'}" />
-              <stop offset="100%" stop-color="${isLow ? 'var(--hot)' : 'var(--success)'}" />
-            </linearGradient>
-          </defs>
-          <circle class="ring-track" cx="116" cy="116" r="${R}" />
-          <circle class="ring-value" cx="116" cy="116" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${C}" />
-        </svg>
-        <div class="mirror-face">
-          <div class="mirror-num">${score === null ? '—' : '0%'}</div>
-          <div class="mirror-reflect" aria-hidden="true">${label}</div>
-          <svg class="mirror-cracks" viewBox="0 0 232 232" style="opacity:${crackOpacity.toFixed(2)}" aria-hidden="true">
-            <path d="M116 96 L106 132 L127 148 L98 198" />
-            <path d="M106 132 L45 121" />
-            <path d="M127 148 L188 132" />
-            <path d="M98 198 L77 163" />
-            <path d="M127 148 L137 195" />
-            <path d="M106 132 L82 103" />
-          </svg>
-        </div>
+    <div class="rs-home-head">
+      <div>
+        <div class="rs-greeting">Bonjour <span aria-hidden="true">👋</span></div>
+        <div class="rs-subgreeting">Voyons où tu en es</div>
+      </div>
+      <div class="rs-home-head-actions">
+        ${streak ? `<div class="rs-streak">${icon('flame', 13)} ${streak}</div>` : ''}
+        <button class="rs-ob-replay" id="ob-replay" aria-label="Revoir la présentation">✨</button>
       </div>
     </div>
+
+    <button class="rs-today-banner" id="today-banner" aria-label="Voir Aujourd'hui">
+      <span class="rs-today-ring">
+        <svg viewBox="0 0 76 76" aria-hidden="true">
+          <circle class="rs-ring-track" cx="38" cy="38" r="${R}"></circle>
+          <circle class="rs-ring-value" cx="38" cy="38" r="${R}" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${C.toFixed(2)}"></circle>
+        </svg>
+        <span class="rs-today-pct">${todayPct === null ? '—' : todayPct + '%'}</span>
+      </span>
+      <span class="rs-today-copy">
+        <span class="rs-today-title">Aujourd'hui</span>
+        <span class="rs-today-sub">${totalToday === 0
+          ? "Rien de prévu aujourd'hui."
+          : `${keptToday} sur ${totalToday} promesse${totalToday > 1 ? 's' : ''} tenue${keptToday > 1 ? 's' : ''}. Tape pour continuer →`}</span>
+      </span>
+    </button>
+
     ${cards}
-    ${cemetery}
-    ${finishedBlock}`;
+    ${moreLinks}`;
 
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
     wire(host) {
-      // The ring fills and the figure counts up on arrival — the score is the
-      // headline, so it gets the entrance.
-      if (score !== null) {
-        fxCountUp(host.querySelector('.mirror-num'), score, { suffix: '%', duration: 1100 });
-        requestAnimationFrame(() => {
-          const ring = host.querySelector('.ring-value');
-          if (ring) ring.style.strokeDashoffset = dash;
-        });
-      }
+      requestAnimationFrame(() => {
+        const ring = host.querySelector('.rs-ring-value');
+        if (ring) ring.style.strokeDashoffset = ringOffset.toFixed(2);
+      });
       fxBindTilt(host);
       wireCardFocus(host, '.deck-grid .pcard[data-habit]', store.habits);
 
-      wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', buried, { dead: true });
-      wireCardFocus(host, '.finished-grid .pcard[data-habit]', finished, { finished: true });
-
-      const toggle = host.querySelector('#cemetery-toggle');
-      if (toggle) {
-        toggle.addEventListener('click', () => {
-          const grid = host.querySelector('#cemetery-grid');
-          const open = !grid.hidden;
-          grid.hidden = open;
-          toggle.setAttribute('aria-expanded', String(!open));
-          toggle.classList.toggle('is-open', !open);
-          if (!open) fxBindTilt(host);
-        });
-      }
-
-      const finishedToggle = host.querySelector('#finished-toggle');
-      if (finishedToggle) {
-        finishedToggle.addEventListener('click', () => {
-          const grid = host.querySelector('#finished-grid');
-          const open = !grid.hidden;
-          grid.hidden = open;
-          finishedToggle.setAttribute('aria-expanded', String(!open));
-          finishedToggle.classList.toggle('is-open', !open);
-          if (!open) fxBindTilt(host);
-        });
-      }
+      const banner = host.querySelector('#today-banner');
+      if (banner) banner.addEventListener('click', () => navigate('/today'));
+      const obBtn = host.querySelector('#ob-replay');
+      if (obBtn) obBtn.addEventListener('click', () => openOnboardingReplay());
 
       celebrateTierUps(host);
     },
   };
+}
+
+// Cimetière and Terminées each get a real page now instead of an accordion
+// folded onto Mon miroir — reached via the links at the bottom of the deck,
+// closed with the normal back button. The cards inside are untouched.
+function screenCemetery() {
+  const buried = store.cemetery.filter(h => h.death_cause !== 'completed');
+  const html = buried.length
+    ? `<div class="yard">
+         <div class="yard-moon" aria-hidden="true"></div>
+         <div class="deck-grid cemetery-grid">
+           ${buried.map(h => habitCard(h, habitStats(h), {
+             compact: true, habitId: h.id, dead: true,
+             deathDate: formatDay(h.deleted_at?.slice(0, 10)), deathCause: h.death_cause,
+           })).join('')}
+         </div>
+       </div>`
+    : `<div class="empty-rich">
+         <span class="rs-empty-glyph" aria-hidden="true">🪦</span>
+         <h3>Le cimetière est vide.</h3>
+         <p>Aucune promesse morte ou abandonnée pour l'instant.</p>
+       </div>`;
+
+  return {
+    title: 'Cimetière', tab: '/home', chrome: true, back: '/home', html,
+    wire(host) {
+      fxBindTilt(host);
+      wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', buried, { dead: true });
+    },
+  };
+}
+
+function screenFinished() {
+  const finished = store.cemetery.filter(h => h.death_cause === 'completed');
+  const html = finished.length
+    ? `<div class="shelf">
+         <div class="deck-grid finished-grid">
+           ${finished.map(h => habitCard(h, habitStats(h), {
+             compact: true, habitId: h.id, finished: true,
+             finishedDate: formatDay(h.deleted_at?.slice(0, 10)),
+           })).join('')}
+         </div>
+       </div>`
+    : `<div class="empty-rich">
+         <span class="rs-empty-glyph" aria-hidden="true">🏆</span>
+         <h3>Rien de terminé pour l'instant.</h3>
+         <p>Une promesse avec une date de fin atterrit ici une fois arrivée à son terme.</p>
+       </div>`;
+
+  return {
+    title: 'Terminées', tab: '/home', chrome: true, back: '/home', html,
+    wire(host) {
+      fxBindTilt(host);
+      wireCardFocus(host, '.finished-grid .pcard[data-habit]', finished, { finished: true });
+    },
+  };
+}
+
+// A replay of the same three slides shown at first sign-in, reachable any
+// time from the ✨ on Mon miroir. An overlay rather than a route: it isn't
+// a place in the app, just a thing you can look at again.
+function openOnboardingReplay() {
+  const overlay = document.createElement('div');
+  overlay.className = 'rs-ob-overlay';
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  screenOnboarding(close).mount(overlay);
 }
 
 // A tier now has to be earned on both age and vitality, so it can also be

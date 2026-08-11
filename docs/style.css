@@ -33,90 +33,131 @@
   font-display: swap;
   src: url('fonts/fraunces-700.woff2') format('woff2');
 }
+/* ---------- Redesign faces (2026 reskin) ---------- */
+@font-face {
+  font-family: 'Poppins';
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/poppins-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/poppins-800.woff2') format('woff2');
+}
+/* Variable file (weight axis 400–800, one file for every weight used). */
+@font-face {
+  font-family: 'Nunito';
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+  src: url('fonts/nunito-var.woff2') format('woff2');
+}
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Chrome tokens — every screen except the card itself (see the .pcard
+   override further down, which re-homes the ORIGINAL values you'd expect
+   here so the card never sees this repaint). One fixed look, matching the
+   Claude Design mock — not itself subject to prefers-color-scheme, unlike
+   the card it wraps. */
 :root {
-  --bg: #0a0810;
-  --bg-2: #100c1a;
-  --surface: #17121f;
-  --surface-2: #1f1829;
-  --border: #2f2440;
-  --text: #f4f0f8;
-  --text-dim: #9187a3;
+  --bg: #FAFAF6;
+  --bg-2: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #F1F0EA;
+  --border: #EFEEE7;
+  --text: #22261F;
+  --text-dim: #8B9188;
 
-  --success: #ffc53d;
-  --success-ink: #2a1a02;
-  --danger: #ff3b5c;
-  --danger-ink: #2a0410;
-  --hot: #ff2d95;
-  --violet: #8b5cf6;
-  --band-green: #1fdd6f;
-  --band-amber: #ff9d2e;
+  --success: #3DAE73;
+  --success-ink: #ffffff;
+  --danger: #FF7A59;
+  --danger-ink: #ffffff;
+  --hot: #FF7A59;
+  --violet: #7C6FE0;
+  --band-green: #3DAE73;
+  --band-amber: #FF7A59;
 
-  --no-data: #4a3f5c;
-  --no-data-ink: #ece7f2;
-  --frozen: #4fc3f7;
-  --frozen-ink: #04202c;
+  --no-data: #E4E2D8;
+  --no-data-ink: #8B9188;
+  --frozen: #3E9BDB;
+  --frozen-ink: #ffffff;
 
-  --glow-success: 0 0 28px #ffc53d66, 0 0 64px #ff2d9533;
-  --glow-danger: 0 0 28px #ff3b5c77, 0 0 64px #ff3b5c33;
-  --radius: 18px;
+  --glow-success: 0 8px 18px rgba(61,174,115,.3);
+  --glow-danger: 0 8px 18px rgba(255,122,89,.3);
+  --radius: 20px;
 
-  --card-ink-l: 70%;
-  --card-tint-l: 26%;
-  --card-tint-a: .7;
+  --card-ink-l: 42%;
+  --card-tint-l: 90%;
+  --card-tint-a: .85;
   --holo-a: .16;
-  --mesh-a: 1;
+  --mesh-a: 0;
 }
 
-/* The light ground is a deliberate repaint, not an inversion: accents are
-   darkened and re-saturated so they read as ink on paper, and the neon
-   mesh/holo layers are pulled back so the page doesn't turn to soup. */
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f7f3ec;
-    --bg-2: #fdfbf7;
-    --surface: #ffffff;
-    --surface-2: #f0eade;
-    --border: #ded4c4;
-    --text: #17121d;
-    --text-dim: #736a7e;
-
-    --success: #b06a00;
-    --success-ink: #fff8ec;
-    --danger: #d01f42;
-    --danger-ink: #fff2f5;
-    --hot: #d6157a;
-    --violet: #6d28d9;
-    --band-green: #14893f;
-    --band-amber: #c25a00;
-
-    --no-data: #ded6c8;
-    --no-data-ink: #675c4d;
-    --frozen: #0b7ea8;
-    --frozen-ink: #f0fbff;
-
-    --glow-success: 0 6px 22px #b06a0033;
-    --glow-danger: 0 6px 22px #d01f4233;
-
-    --card-ink-l: 42%;
-    --card-tint-l: 90%;
-    --card-tint-a: .85;
-    --holo-a: .08;
-    --mesh-a: .55;
-  }
+/* ---------- Redesign tokens (2026 reskin) ----------
+   A second, fixed palette for the app's chrome — shell, home, the Aujourd'hui
+   story, Historique, the new-promise flow, onboarding, Cimetière/Terminées
+   pages. Deliberately its own namespace rather than repainting --bg/--surface/
+   --success/etc: the collectible card keeps its original dark palette and its
+   own light/dark switch untouched (see .pcard below), so it must never read
+   these. This block sits outside both :root blocks above on purpose — one
+   fixed look, not itself subject to prefers-color-scheme. */
+:root {
+  --rs-bg: #FAFAF6;
+  --rs-surface: #ffffff;
+  --rs-surface-2: #F1F0EA;
+  --rs-track: #EFEEE7;
+  --rs-text: #22261F;
+  --rs-text-dim: #8B9188;
+  --rs-green: #3DAE73;
+  --rs-green-soft: #7ED9A8;
+  --rs-green-bg: #DFF3E6;
+  --rs-orange: #FF7A59;
+  --rs-orange-bg: #FDE7DD;
+  --rs-orange-tint: #FFF5F2;
+  --rs-purple: #7C6FE0;
+  --rs-purple-bg: #E9E4FB;
+  --rs-blue: #3E9BDB;
+  --rs-blue-bg: #E0F0FB;
+  --rs-gold-ink: #8a6a2f;
+  --rs-gold-bg: #FBEECB;
+  --rs-shadow-sm: 0 4px 10px rgba(30,30,20,.05);
+  --rs-shadow-md: 0 6px 16px rgba(30,30,20,.06);
+  --rs-shadow-lg: 0 10px 24px rgba(61,174,115,.28);
+  --rs-radius-sm: 14px;
+  --rs-radius: 20px;
+  --rs-radius-lg: 24px;
+  --rs-font-display: 'Poppins', -apple-system, sans-serif;
+  --rs-font-body: 'Nunito', -apple-system, sans-serif;
 }
+
+/* The reskin's chrome no longer has a light/dark switch of its own — one
+   fixed look, matching the mock. The card underneath it still does (see the
+   .pcard media block further down); that's the only thing left that
+   repaints for prefers-color-scheme now. */
 
 html, body { height: 100%; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--rs-bg);
+  color: var(--rs-text);
+  font-family: var(--rs-font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
 }
+/* The card is the one thing the reskin doesn't touch — it keeps its original
+   dark/neon identity (Inter body copy, Fraunces for its name) no matter what
+   font or background the screen around it is wearing. Belt-and-braces: most
+   of .pcard's own text already sets Inter/Fraunces explicitly, this just
+   guarantees nothing new inherited from a reskinned ancestor slips in. */
+.pcard, .pcard * {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+.pcard-name { font-family: 'Fraunces', Georgia, serif; }
 
 /* Drifting colour mesh — the page is never a flat slab. */
 body::before {
@@ -134,6 +175,10 @@ body::before {
   from { transform: translate3d(-3%, -2%, 0) scale(1); }
   to   { transform: translate3d(4%, 3%, 0) scale(1.12); }
 }
+/* The neon mesh belongs to the old dark ground it was tuned for — on the
+   reskin's flat cream page it would just be stray colour with nothing to
+   sit on top of. Off for good, not repainted. */
+body::before { display: none; }
 
 input, textarea, button, select { font-family: inherit; font-size: 16px; color: inherit; }
 button { cursor: pointer; background: none; border: none; }
@@ -173,7 +218,7 @@ button:disabled { opacity: .4; cursor: default; }
   backdrop-filter: blur(16px);
 }
 .topbar h1 {
-  flex: 1; font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 700;
+  flex: 1; font-family: var(--rs-font-display), Georgia, serif; font-size: 19px; font-weight: 700;
   letter-spacing: -.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -214,6 +259,7 @@ button:disabled { opacity: .4; cursor: default; }
 .card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 16px; margin-bottom: 12px;
+  box-shadow: var(--rs-shadow-md);
 }
 .section-label {
   font-size: 10.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
@@ -226,6 +272,36 @@ button:disabled { opacity: .4; cursor: default; }
 
 /* ---------- Collectible card ---------- */
 
+/* The card's own palette, re-homed here now that :root carries the reskin's
+   chrome colours instead — same values the app always used, still switching
+   with the system exactly as it did before. This is what makes "cards stay
+   exactly as they were" literally true rather than just visually similar. */
+.pcard {
+  --surface: #17121f;
+  --surface-2: #1f1829;
+  --border: #2f2440;
+  --text: #f4f0f8;
+  --text-dim: #9187a3;
+  --success: #ffc53d;
+  --danger: #ff3b5c;
+  --band-green: #1fdd6f;
+  --band-amber: #ff9d2e;
+  --holo-a: .16;
+}
+@media (prefers-color-scheme: light) {
+  .pcard {
+    --surface: #ffffff;
+    --surface-2: #f0eade;
+    --border: #ded4c4;
+    --text: #17121d;
+    --text-dim: #736a7e;
+    --success: #b06a00;
+    --danger: #d01f42;
+    --band-green: #14893f;
+    --band-amber: #c25a00;
+    --holo-a: .08;
+  }
+}
 .pcard {
   position: relative; overflow: hidden;
   border-radius: 20px; padding: 14px;
@@ -371,7 +447,7 @@ button:disabled { opacity: .4; cursor: default; }
 
 .pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .pcard-name {
-  font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 700;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 16px; font-weight: 700;
   line-height: 1.2; letter-spacing: -.01em; text-wrap: balance;
 }
 /* Today's state, in the one spot the eye reaches after the name. Sits on its
@@ -571,7 +647,7 @@ button:disabled { opacity: .4; cursor: default; }
   align-items: center; justify-content: center;
 }
 .mirror-num {
-  font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 68px;
+  font-family: var(--rs-font-display), Georgia, serif; font-weight: 700; font-size: 68px;
   letter-spacing: -.035em; line-height: 1;
   background: linear-gradient(160deg, var(--text), color-mix(in srgb, var(--success) 55%, var(--text)));
   -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -583,7 +659,7 @@ button:disabled { opacity: .4; cursor: default; }
   -webkit-background-clip: text; background-clip: text;
 }
 .mirror-reflect {
-  font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 68px;
+  font-family: var(--rs-font-display), Georgia, serif; font-weight: 700; font-size: 68px;
   letter-spacing: -.035em; line-height: 1; color: var(--text);
   transform: scaleY(-1); margin-top: 3px; opacity: .26;
   filter: blur(var(--blur, 0px));
@@ -621,7 +697,7 @@ button:disabled { opacity: .4; cursor: default; }
 .empty-rich { text-align: center; padding: 46px 20px; color: var(--text-dim); }
 .empty-rich .icn { margin: 0 auto 16px; color: var(--success); filter: drop-shadow(0 0 16px #ffc53d66); }
 .empty-rich h3 {
-  font-family: 'Fraunces', Georgia, serif; font-size: 22px; color: var(--text); margin-bottom: 8px;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 22px; color: var(--text); margin-bottom: 8px;
 }
 .empty-rich p { font-size: 14px; line-height: 1.55; max-width: 30ch; margin: 0 auto 20px; }
 .empty-rich .btn-primary, .empty-rich .btn-secondary { max-width: 280px; margin-inline: auto; }
@@ -646,7 +722,7 @@ button:disabled { opacity: .4; cursor: default; }
   margin-bottom: 14px;
 }
 .ritual-title {
-  font-family: 'Fraunces', Georgia, serif; font-size: 38px; font-weight: 700;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 38px; font-weight: 700;
   line-height: 1.08; letter-spacing: -.025em; margin-top: 12px; text-wrap: balance; max-width: 14ch;
 }
 /* The real card, not a stand-in icon — its own tier, série and fissures are
@@ -727,7 +803,7 @@ button:disabled { opacity: .4; cursor: default; }
   display: flex; flex-direction: column; gap: 2px;
 }
 .tally .n {
-  font-family: 'Fraunces', Georgia, serif; font-size: 36px; font-weight: 700; line-height: 1;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 36px; font-weight: 700; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .tally .l { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--text-dim); }
@@ -764,13 +840,13 @@ button:disabled { opacity: .4; cursor: default; }
 
 .hist-hero { text-align: center; padding: 14px 0 22px; }
 .hist-rate {
-  font-family: 'Fraunces', Georgia, serif; font-size: 82px; font-weight: 700; line-height: 1;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 82px; font-weight: 700; line-height: 1;
   letter-spacing: -.04em; font-variant-numeric: tabular-nums;
   background: linear-gradient(160deg, var(--text), var(--success));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 .hist-verdict {
-  font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 600;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 17px; font-weight: 600;
   margin-top: 12px; max-width: 26ch; margin-inline: auto; line-height: 1.35; text-wrap: balance;
 }
 
@@ -800,7 +876,7 @@ button:disabled { opacity: .4; cursor: default; }
 .week-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .week-cell { background: var(--surface-2); border-radius: 14px; padding: 15px; display: flex; flex-direction: column; gap: 2px; }
 .week-cell .n {
-  font-family: 'Fraunces', Georgia, serif; font-size: 30px; font-weight: 700; line-height: 1;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 30px; font-weight: 700; line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 .week-cell .l { font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-dim); }
@@ -817,7 +893,7 @@ button:disabled { opacity: .4; cursor: default; }
 .creator-steps span.active { background: var(--success); box-shadow: 0 0 12px var(--success); }
 .creator-steps span.done { background: color-mix(in srgb, var(--success) 45%, var(--surface-2)); }
 .step-title {
-  font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 600; margin: 0 0 12px;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 17px; font-weight: 600; margin: 0 0 12px;
 }
 
 .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 22px; }
@@ -912,7 +988,7 @@ button:disabled { opacity: .4; cursor: default; }
    leftover height — a submit button hundreds of pixels tall. */
 .auth-wrap .btn-primary { flex: none; }
 .auth-wrap h1 {
-  font-family: 'Fraunces', Georgia, serif; font-size: 46px; font-weight: 700; letter-spacing: -.03em;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 46px; font-weight: 700; letter-spacing: -.03em;
   background: linear-gradient(150deg, var(--text), var(--success) 60%, var(--hot));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
@@ -932,7 +1008,7 @@ button:disabled { opacity: .4; cursor: default; }
   color: var(--success); margin-bottom: 16px;
 }
 .onboard-slide h2 {
-  font-family: 'Fraunces', Georgia, serif; font-size: 40px; font-weight: 700;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 40px; font-weight: 700;
   letter-spacing: -.03em; line-height: 1.05; text-wrap: balance; margin-bottom: 16px;
 }
 .onboard-slide p { color: var(--text-dim); font-size: 15.5px; line-height: 1.6; max-width: 30ch; margin: 0 auto; }
@@ -948,7 +1024,7 @@ button:disabled { opacity: .4; cursor: default; }
 .month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .month-nav button { color: var(--text); padding: 6px 10px; display: flex; }
 .month-nav .label {
-  font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 700; text-transform: capitalize;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 19px; font-weight: 700; text-transform: capitalize;
 }
 .cal-wrap { animation: screen-in .34s ease; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
@@ -1000,7 +1076,7 @@ button:disabled { opacity: .4; cursor: default; }
 }
 @keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
 .modal-sheet h3 {
-  font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 700;
+  font-family: var(--rs-font-display), Georgia, serif; font-size: 22px; font-weight: 700;
   margin-bottom: 10px; text-wrap: balance; letter-spacing: -.01em;
 }
 .modal-sheet p { color: var(--text-dim); font-size: 14.5px; line-height: 1.55; margin-bottom: 22px; }
@@ -1267,4 +1343,86 @@ button:disabled { opacity: .4; cursor: default; }
 .card-focus-hint {
   text-align: center; font-size: 11.5px; color: var(--text-dim);
   margin-top: 12px; letter-spacing: .01em;
+}
+
+/* =====================================================================
+   Redesign components (2026 reskin)
+   Everything below is new chrome built for the reskin — shell, Mon miroir's
+   head and today-ring, the Cimetière/Terminées pages, and (further down as
+   each screen lands) Aujourd'hui's story, Historique, the new-promise flow
+   and onboarding. All of it reads var(--rs-*) or the flipped var(--surface)/
+   var(--text)/var(--success)/etc — never .pcard, which keeps its own
+   tokens (see the .pcard block above). ===================================== */
+
+/* ---------- Shell ---------- */
+.topbar h1 { font-weight: 800; letter-spacing: -.01em; }
+.tabbar button.active { color: var(--success); }
+.tabbar button.active::before { background: var(--success); box-shadow: none; }
+.tabbar button.active .tab-icon { filter: none; }
+
+/* ---------- Mon miroir: head + today ring ---------- */
+.rs-home-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.rs-greeting { font-family: var(--rs-font-display); font-weight: 800; font-size: 19px; color: var(--text); white-space: nowrap; }
+.rs-subgreeting { font-weight: 600; font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.rs-home-head-actions { display: flex; align-items: center; gap: 8px; }
+.rs-streak {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--rs-orange-bg); color: var(--rs-orange);
+  padding: 6px 10px; border-radius: 14px; font-weight: 700; font-size: 12px;
+}
+.rs-streak .icn { color: var(--rs-orange); }
+.rs-ob-replay {
+  width: 34px; height: 34px; border-radius: 50%; background: var(--surface-2);
+  color: var(--success); font-size: 14px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.rs-today-banner {
+  width: 100%; text-align: left;
+  display: flex; align-items: center; gap: 16px;
+  background: linear-gradient(135deg, var(--rs-green), var(--rs-green-soft));
+  border-radius: var(--rs-radius-lg); padding: 18px;
+  margin-bottom: 22px;
+  box-shadow: var(--rs-shadow-lg);
+  transition: transform .15s ease;
+}
+.rs-today-banner:active { transform: scale(.98); }
+.rs-today-ring { position: relative; width: 74px; height: 74px; flex: none; }
+.rs-today-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.rs-ring-track { fill: none; stroke: rgba(255,255,255,.35); stroke-width: 5; }
+.rs-ring-value {
+  fill: none; stroke: #fff; stroke-width: 5; stroke-linecap: round;
+  transition: stroke-dashoffset 1.1s cubic-bezier(.16,1,.3,1);
+}
+.rs-today-pct {
+  position: absolute; inset: 8px; border-radius: 50%; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--rs-font-display); font-weight: 800; font-size: 15px; color: var(--rs-green);
+}
+.rs-today-copy { color: #fff; min-width: 0; }
+.rs-today-title { display: block; font-family: var(--rs-font-display); font-weight: 800; font-size: 15px; }
+.rs-today-sub { display: block; font-weight: 600; font-size: 12px; opacity: .92; margin-top: 2px; }
+
+/* ---------- Cimetière / Terminées links + pages ---------- */
+.rs-more { margin-top: 26px; display: flex; flex-direction: column; gap: 8px; }
+.rs-more-link {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  background: var(--surface); border-radius: var(--rs-radius); padding: 14px 16px;
+  box-shadow: var(--rs-shadow-sm); color: var(--text);
+}
+.rs-more-link-label { flex: 1; font-weight: 800; font-size: 13.5px; text-align: left; }
+.rs-more-link .deck-count { background: var(--surface-2); }
+.rs-more-link .icn { color: var(--text-dim); }
+.rs-empty-glyph { display: block; font-size: 40px; line-height: 1; margin-bottom: 16px; }
+
+/* Cimetière/Terminées are now whole pages rather than accordions, so the
+   yard/shelf panel is the first thing in the screen — the small top margin
+   they had for sitting under a toggle button reads fine as normal breathing
+   room here too, nothing to override. */
+
+/* ---------- Onboarding replay overlay ---------- */
+.rs-ob-overlay {
+  position: fixed; inset: 0; z-index: 960;
+  background: var(--bg); overflow-y: auto;
+  animation: fade-in .2s ease;
 }
