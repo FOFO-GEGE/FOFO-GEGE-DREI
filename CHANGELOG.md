@@ -51,3 +51,10 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   (mêmes marques transparentes pour une habitude neuve, même
   hauteur). `tests/completed-promises.spec.js` mis à jour. Fichiers :
   `ui.js`, `tests/completed-promises.spec.js`.
+- Étape intermédiaire « Comment ça ? » supprimée : « Pas fait » mène
+  directement à « Pourquoi ? », Geler et Décaler ajoutés à la suite
+  des puces de raison sur cette même page au lieu d'un écran séparé
+  — corrige l'ambiguïté « ça a changé d'écran, c'est déjà enregistré
+  ? ». `settleVerdict()` devient une fonction sœur de `mount()`
+  (Geler peut être déclenché depuis `mountReason()`). Fichiers :
+  `screens.js`, `style.css`.

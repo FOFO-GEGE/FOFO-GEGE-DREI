@@ -378,91 +378,60 @@ function screenToday() {
       });
     }
 
-    // The veil + shake/shatter FX used to fire the instant "Pas fait" was
-    // tapped. Now it fires only once the outcome is actually settled: on
-    // "Fait", on "Geler", and on confirming "Pas fait" for real — either
-    // directly below (nothing else to offer) or from inside the choice
-    // step in mountFailChoice(). Takes the live stage explicitly rather
-    // than closing over the card's own, since by the time a choice made
-    // inside mountFailChoice settles, the card's stage is long gone.
-    function settleVerdict(verdict, liveStage, btn) {
-      if (verdict === 'frozen') {
-        freezeCheck(check.id);
-        vibrate(12);
-      } else if (verdict === 'success') {
-        markCheck(check.id, verdict);
-        vibrate(25);
-        if (btn) fxBurstFrom(btn, { count: 54, speed: 8 });
-      } else {
-        // Commit happens on the reason step so the answer and its reason
-        // land as one write instead of two.
-        vibrate([10, 40, 60]);
-        fxShake(liveStage, 'hard');
-        const r = liveStage.getBoundingClientRect();
-        fxShatter(r.left + r.width / 2, r.top + r.height * 0.42);
-      }
-
-      const veil = document.createElement('div');
-      veil.className = `ritual-veil is-${verdict}`;
-      veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 72);
-      liveStage.appendChild(veil);
-      requestAnimationFrame(() => veil.classList.add('show'));
-
-      setTimeout(() => {
-        if (verdict === 'failed') return mountReason(host, check);
-        index++;
-        mount(host);
-      }, 640);
-    }
-
     stage.querySelectorAll('[data-verdict]').forEach(btn => {
       btn.addEventListener('click', () => {
         stage.querySelectorAll('button').forEach(b => { b.disabled = true; });
-        const verdict = btn.dataset.verdict;
-        // "Pas fait" never commits straight from the main card when there's
-        // another way to not-do it today — Geler and Décaler move in
-        // behind it instead of sitting on the card as their own buttons.
-        if (verdict === 'failed' && (canFreeze(habit) || decalable)) return mountFailChoice();
-        settleVerdict(verdict, stage, btn);
+        settleVerdict(host, btn.dataset.verdict, check, stage, btn, habit, decalable);
       });
     });
+  }
 
-    // Reached only from "Pas fait" when Geler and/or Décaler are actually on
-    // offer — same choice, in three equally-weighted buttons instead of a
-    // small link nobody was meant to reach for. Skipped entirely otherwise:
-    // the click handler above settles "Pas fait" directly in that case.
-    function mountFailChoice() {
-      host.innerHTML = `
-        <div class="ritual reason-step rs-interstitial">
-          <div class="ritual-body">
-            <p class="ritual-prompt">Pas fait</p>
-            <h2 class="ritual-title">Comment ça ?</h2>
-            <div class="ritual-actions single">
-              <button class="ritual-btn is-no" data-verdict="failed">${icon('cross', 22)}<span>Pas fait</span></button>
-              ${canFreeze(habit) ? `<button class="ritual-btn" data-verdict="frozen">${icon('snow', 22)}<span>Geler ce jour</span></button>` : ''}
-              ${decalable ? `<button class="ritual-btn" id="fc-snooze">${icon('history', 22)}<span>Décaler à plus tard</span></button>` : ''}
-            </div>
-          </div>
-        </div>`;
-
-      const fcStage = host.querySelector('.ritual');
-      fcStage.querySelectorAll('[data-verdict]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          fcStage.querySelectorAll('button').forEach(b => { b.disabled = true; });
-          settleVerdict(btn.dataset.verdict, fcStage, btn);
-        });
-      });
-      const fcSnooze = fcStage.querySelector('#fc-snooze');
-      if (fcSnooze) fcSnooze.addEventListener('click', () => {
-        openSnoozeSheet(check, () => { index++; mount(host); });
-      });
+  // The veil + shake/shatter FX that plays once an outcome is actually
+  // settled: on "Fait", on "Geler" (from the main card, or from the reason
+  // step below when Geler rides along there), and on committing "Pas fait"
+  // itself. A sibling of mount() rather than nested in it, since "Geler"
+  // can now also fire from mountReason()'s own stage, long after the card
+  // that triggered this is gone — takes the live stage and check
+  // explicitly instead of closing over either.
+  function settleVerdict(host, verdict, check, liveStage, btn, habit, decalable) {
+    if (verdict === 'frozen') {
+      freezeCheck(check.id);
+      vibrate(12);
+    } else if (verdict === 'success') {
+      markCheck(check.id, verdict);
+      vibrate(25);
+      if (btn) fxBurstFrom(btn, { count: 54, speed: 8 });
+    } else {
+      // Commit happens on the reason step so the answer and its reason
+      // land as one write instead of two.
+      vibrate([10, 40, 60]);
+      fxShake(liveStage, 'hard');
+      const r = liveStage.getBoundingClientRect();
+      fxShatter(r.left + r.width / 2, r.top + r.height * 0.42);
     }
+
+    const veil = document.createElement('div');
+    veil.className = `ritual-veil is-${verdict}`;
+    veil.innerHTML = icon(verdict === 'success' ? 'check' : verdict === 'frozen' ? 'snow' : 'cross', 72);
+    liveStage.appendChild(veil);
+    requestAnimationFrame(() => veil.classList.add('show'));
+
+    setTimeout(() => {
+      if (verdict === 'failed') return mountReason(host, check, habit, decalable);
+      index++;
+      mount(host);
+    }, 640);
   }
 
   // Optional, one tap, always skippable — the point is to learn what the
-  // failures are made of, not to interrogate anyone. A pause, not a card of
-  // its own — plain reskinned chrome, no per-habit colour.
-  function mountReason(host, check) {
+  // failures are made of, not to interrogate anyone. Geler and Décaler ride
+  // along on this same page, right after the reason chips, instead of a
+  // separate "Comment ça ?" step in between: one screen, not two, and
+  // tapping "Pas fait" reads as "still choosing" rather than "already
+  // recorded". Both omitted when unavailable (gel déjà pris ce mois,
+  // etc.) — same rule as before, just relocated here.
+  function mountReason(host, check, habit, decalable) {
+    const canFrz = canFreeze(habit);
     host.innerHTML = `
       <div class="ritual reason-step rs-interstitial">
         <div class="ritual-body">
@@ -471,12 +440,18 @@ function screenToday() {
           <div class="reason-grid">
             ${REASONS.map(r => `<button class="reason-chip" data-reason="${r.id}">${esc(r.label)}</button>`).join('')}
           </div>
+          ${canFrz || decalable ? `
+          <div class="ritual-actions single reason-alt-actions">
+            ${canFrz ? `<button class="ritual-btn" data-verdict="frozen">${icon('snow', 22)}<span>Geler ce jour</span></button>` : ''}
+            ${decalable ? `<button class="ritual-btn" id="reason-snooze">${icon('history', 22)}<span>Décaler à plus tard</span></button>` : ''}
+          </div>` : ''}
         </div>
         <div class="ritual-actions single">
           <button class="btn-secondary" id="reason-skip">Ne pas préciser</button>
         </div>
       </div>`;
 
+    const stage = host.querySelector('.ritual');
     const commit = reason => {
       markCheck(check.id, 'failed', reason);
       index++;
@@ -485,6 +460,16 @@ function screenToday() {
     host.querySelectorAll('[data-reason]').forEach(b =>
       b.addEventListener('click', () => commit(b.dataset.reason)));
     host.querySelector('#reason-skip').addEventListener('click', () => commit(null));
+
+    const freezeBtn = host.querySelector('[data-verdict="frozen"]');
+    if (freezeBtn) freezeBtn.addEventListener('click', () => {
+      host.querySelectorAll('button').forEach(b => { b.disabled = true; });
+      settleVerdict(host, 'frozen', check, stage, freezeBtn, habit, decalable);
+    });
+    const snoozeBtn = host.querySelector('#reason-snooze');
+    if (snoozeBtn) snoozeBtn.addEventListener('click', () => {
+      openSnoozeSheet(check, () => { index++; mount(host); });
+    });
   }
 
   function mountSummary(host) {

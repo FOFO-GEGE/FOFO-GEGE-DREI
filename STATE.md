@@ -17,11 +17,13 @@ empaquetage Capacitor pour iOS natif.
 - Aujourd'hui : story plein écran façon Instagram (une carte à la
   fois, couleur pilotée par la vitalité), tri par urgence, tap
   gauche/droite ou glisser vers le bas pour naviguer/quitter, premier
-  écran à l'ouverture de l'app. Pas fait/Fait seuls visibles ; Geler
-  et Décaler regroupés derrière « Pas fait » (même ergonomie de
-  bouton). « Décaler » (report same-day, une fois par jour) reste
-  offert seul sur une carte déjà décidée mais réouvrable. Bande des 7
-  derniers jours sous Taux/Jours sur la carte.
+  écran à l'ouverture de l'app. Pas fait/Fait seuls visibles sur la
+  carte ; « Pas fait » mène directement à « Pourquoi ? », avec Geler
+  et Décaler ajoutés à la suite des raisons sur cette même page (même
+  ergonomie de bouton) quand disponibles — rien n'est enregistré tant
+  que ce n'est pas choisi. « Décaler » (report same-day, une fois par
+  jour) reste offert seul sur une carte déjà décidée mais réouvrable.
+  Bande des 7 derniers jours sous Taux/Jours sur la carte.
 - Vitalité (jauge de vie) + mort autonome + résurrection unique.
 - Couleur de carte pilotée par la vitalité ; statut du jour en glyphe.
 - Paliers (âge + vitalité) avec badges emoji.
@@ -36,18 +38,20 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : cartes du deck (Mon miroir) de hauteur inégale entre
-lignes — une promesse avec moins de 2 jours échus dans la fenêtre de
-7 jours n'affichait pas du tout la bande, rendant sa carte plus
-courte que ses voisines et cassant l'alignement des lignes suivantes.
-`weekStripHTML()` affiche maintenant toujours la bande dès qu'un
-tableau `week` existe (habitude toute neuve : presque tout en
-« before », transparent, mais la structure — donc la hauteur — reste
-la même). Reste absente uniquement quand l'appelant ne calcule pas de
-`week` du tout (aperçu/carte synthétique). `tests/completed-promises.spec.js`
-mis à jour (l'ancienne assertion attendait l'inverse).
+Description : l'étape intermédiaire « Comment ça ? » (Pas fait/Geler/
+Décaler en 3 boutons, sur son propre écran) est supprimée. « Pas
+fait » mène maintenant directement à « Pourquoi ? » ; Geler et
+Décaler sont ajoutés à la suite des puces de raison sur cette même
+page, omis si indisponibles (gel déjà pris ce mois, etc.). Un seul
+écran au lieu de deux — corrige une ambiguïté remontée par
+l'utilisateur (taper « Pas fait » changeait d'écran avant que quoi
+que ce soit soit enregistré, ce qui pouvait laisser croire que
+c'était déjà acté). `settleVerdict()` sorti de `mount()` pour devenir
+une fonction sœur (Geler peut désormais être déclenché depuis
+`mountReason()`, bien après que la carte d'origine a disparu).
+`mountFailChoice()` supprimé.
 
-Fichiers concernés : `ui.js`, `tests/completed-promises.spec.js`.
+Fichiers concernés : `screens.js`, `style.css`.
 
 Fichiers concernés : `screens.js`, `style.css`.
 
@@ -66,7 +70,18 @@ sur iOS.
   `tests/completed-promises.spec.js` échoue aussi déjà, sur
   `.finished-toggle` introuvable. Ces specs ciblent une architecture
   antérieure (`.ritual-card .pcard`, navigation par onglet) déjà
-  remplacée — à mettre à jour, hors périmètre ici.
+  remplacée — à mettre à jour, hors périmètre ici. C'est la dette la
+  plus risquée du lot : toute la fenêtre de réponse, Décaler et le
+  flow général tournent sans filet automatique depuis un moment.
+- Navigation prev/next de la story (tap gauche/droite) au clavier ou
+  lecteur d'écran impossible : ce sont deux `<div aria-hidden="true">`
+  sans `tabindex` ni `keydown`, pas de vrais boutons. Répondre à
+  chaque carte reste possible (Fait/Pas fait sont de vrais boutons),
+  seul le parcours libre entre cartes ne l'est pas.
+- Tabbar orphelin sur l'écran Aujourd'hui vide (`chrome:true` mais
+  `/today` absent de `TABS` dans `app.js`) : aucun onglet ne s'allume.
+  Mineur, rare (seulement si l'app s'ouvre sans rien à faire
+  aujourd'hui).
 
 ## Décisions techniques récentes
 
