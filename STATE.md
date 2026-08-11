@@ -38,13 +38,25 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : tabbar orphelin corrigé sur l'écran Aujourd'hui vide.
-Les deux états vides (« Aucune promesse » et « Repos aujourd'hui »)
-utilisaient `tab: '/today'`, absent de `TABS` → aucun onglet actif.
-Corrigé en `tab: '/home'` : l'onglet Miroir s'allume, cohérent avec
-le bouton « Voir mon miroir » proposé sur ces mêmes écrans.
+Description : deux dettes techniques comblées en parallèle.
 
-Fichiers concernés : `screens.js`.
+1. **Tests cassés** — `ritual-queue.spec.js`, `answer-window.spec.js`
+   et `flow.spec.js` ciblaient l'ancienne architecture par onglets
+   (`[data-nav="/today"]`, `.ritual-card .pcard`, `#ritual-next/prev`).
+   Réécrits pour la story actuelle : navigation via hash, `.rs-story`,
+   zones de tap, flow Pas fait → Pourquoi via `mountReason()`.
+
+2. **Accessibilité** — les zones de tap gauche/droite de la story
+   étaient des `<div aria-hidden>` ; converties en `<button>` avec
+   `aria-label` (« Carte précédente » / « Carte suivante »,
+   « Voir mon miroir » sur le résumé). Navigables au clavier (Tab +
+   Entrée/Espace) et lisibles par lecteur d'écran. CSS reset complet
+   sur ces boutons pour éviter toute régression visuelle ; `outline`
+   uniquement sur `:focus-visible`. Guard swipe-down mis à jour pour
+   que `[data-tap]` ne soit pas exclu malgré la conversion en button.
+
+Fichiers concernés : `screens.js`, `style.css`, `tests/ritual-queue.spec.js`,
+`tests/answer-window.spec.js`, `tests/flow.spec.js`.
 
 ## Problèmes connus
 
@@ -64,11 +76,6 @@ sur iOS.
   remplacée — à mettre à jour, hors périmètre ici. C'est la dette la
   plus risquée du lot : toute la fenêtre de réponse, Décaler et le
   flow général tournent sans filet automatique depuis un moment.
-- Navigation prev/next de la story (tap gauche/droite) au clavier ou
-  lecteur d'écran impossible : ce sont deux `<div aria-hidden="true">`
-  sans `tabindex` ni `keydown`, pas de vrais boutons. Répondre à
-  chaque carte reste possible (Fait/Pas fait sont de vrais boutons),
-  seul le parcours libre entre cartes ne l'est pas.
 
 ## Décisions techniques récentes
 

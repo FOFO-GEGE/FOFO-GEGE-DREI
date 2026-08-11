@@ -274,8 +274,8 @@ function screenToday() {
     host.innerHTML = `
       <div class="ritual rs-story vit-${vitState} tier-${tier.id} ${timeBand ? 'band-' + timeBand : ''}"
         data-habit="${habit.id}" style="--story-bg:${story.gradient}">
-        <div class="rs-story-tap rs-story-tap-prev" data-tap="prev" aria-hidden="true"></div>
-        <div class="rs-story-tap rs-story-tap-next" data-tap="next" aria-hidden="true"></div>
+        <button class="rs-story-tap rs-story-tap-prev" data-tap="prev" aria-label="Carte précédente"></button>
+        <button class="rs-story-tap rs-story-tap-next" data-tap="next" aria-label="Carte suivante"></button>
 
         <div class="ritual-top">
           <div class="ritual-progress">
@@ -343,7 +343,9 @@ function screenToday() {
     // threshold, a real exit past it.
     let dragStartY = null, dragging = false;
     stage.addEventListener('pointerdown', e => {
-      if (e.target.closest('button')) return;
+      // Skip swipe-down for action buttons; tap zones are buttons too but
+      // should still allow a swipe-down if the user drags from the side.
+      if (e.target.closest('button') && !e.target.closest('[data-tap]')) return;
       dragStartY = e.clientY;
       dragging = true;
     });
@@ -489,7 +491,7 @@ function screenToday() {
 
     host.innerHTML = `
       <div class="ritual rs-story ritual-summary" style="--story-bg:${dayStory.gradient}">
-        <div class="rs-story-tap rs-story-tap-next" data-tap="next" aria-hidden="true"></div>
+        <button class="rs-story-tap rs-story-tap-next" data-tap="next" aria-label="Voir mon miroir"></button>
         <div class="ritual-body">
           <p class="ritual-prompt">Aujourd'hui</p>
           <h2 class="rs-story-title">${perfect ? 'Rien à te reprocher.' : blanche ? 'Une journée blanche.' : 'Voilà les faits.'}</h2>
