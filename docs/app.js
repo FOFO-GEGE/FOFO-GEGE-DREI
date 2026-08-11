@@ -1,8 +1,11 @@
 // Shell, router and boot. The shell is built once; navigating only swaps the
 // screen host, so tab changes are instant and never re-fetch.
 
+// Aujourd'hui is no longer a tab: it's reached from the ring on Mon miroir
+// and left by swiping down, story-style — a place you visit, not a section
+// of the app you live in. The tabbar itself is hidden while it's open (see
+// setChrome), so this list only ever has to describe the other three.
 const TABS = [
-  { id: '/today', icon: 'today', label: "Aujourd'hui" },
   { id: '/home', icon: 'mirror', label: 'Miroir' },
   { id: '/new', icon: 'plus', label: 'Nouvelle' },
   { id: '/history', icon: 'history', label: 'Historique' },
@@ -73,7 +76,9 @@ function navigate(path) {
 }
 
 function resolveScreen() {
-  const hash = location.hash.replace(/^#/, '') || '/today';
+  // Mon miroir is the front door now that Aujourd'hui isn't a tab — the
+  // ring on this screen is the only ordinary way into the story.
+  const hash = location.hash.replace(/^#/, '') || '/home';
   const habit = hash.match(/^\/habit\/(.+)$/);
   if (habit) return screenHabitDetail(habit[1]);
   switch (hash) {
@@ -81,11 +86,13 @@ function resolveScreen() {
     case '/home': return screenHome();
     case '/new': return screenNewHabit();
     case '/history': return screenHistory();
+    case '/cemetery': return screenCemetery();
+    case '/finished': return screenFinished();
     // Ma semaine was folded into Historique, which now covers every period
     // rather than a fixed rolling week. Old links land there instead of
     // dead-ending on the default screen.
     case '/week': return { redirect: '/history' };
-    default: return { redirect: '/today' };
+    default: return { redirect: '/home' };
   }
 }
 

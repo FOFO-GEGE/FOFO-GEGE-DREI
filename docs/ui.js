@@ -47,6 +47,23 @@ function themeById(id) {
   return THEMES.find(t => t.id === id) || { id: 'autre', label: 'Autre', hue: 40, suggestions: [] };
 }
 
+// The Aujourd'hui story is full-bleed colour, one card at a time — but what
+// sets that colour is the same thing that colours the card everywhere else
+// since PR #36: vitality, not theme and not today's answer. A dying promise
+// reads as urgent here precisely because the screen itself goes red, not
+// just a badge on it. Same soft diagonal-gradient treatment as the Claude
+// Design mock, keyed by vitality state instead of the mock's per-item theme.
+const VITALITY_STORY = {
+  pleine:   { gradient: 'linear-gradient(165deg,#7ED9A8,#2E8F60)', accent: '#2E8F60' },
+  faiblit:  { gradient: 'linear-gradient(165deg,#FFC46B,#C97B14)', accent: '#C97B14' },
+  malade:   { gradient: 'linear-gradient(165deg,#FFB07A,#D6642E)', accent: '#D6642E' },
+  mourante: { gradient: 'linear-gradient(165deg,#FF9A76,#D6392A)', accent: '#D6392A' },
+  morte:    { gradient: 'linear-gradient(165deg,#AFAFAF,#6B6B6B)', accent: '#6B6B6B' },
+};
+function vitalityStory(state) {
+  return VITALITY_STORY[state] || VITALITY_STORY.pleine;
+}
+
 // ---------- Collectible card ----------
 
 // minVitality gates the tier as much as minDays does — age alone used to be
