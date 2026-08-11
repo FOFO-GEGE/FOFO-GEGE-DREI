@@ -199,7 +199,7 @@ function screenToday() {
 
   if (!store.habits.length) {
     return {
-      title: "Aujourd'hui", tab: '/today', chrome: true,
+      title: "Aujourd'hui", tab: '/home', chrome: true,
       html: notifBanner + `<div class="empty-rich">
           ${icon('spark', 40)}
           <h3>Aucune promesse.</h3>
@@ -214,7 +214,7 @@ function screenToday() {
   if (!items.length) {
     todayCursorHabitId = null;
     return {
-      title: "Aujourd'hui", tab: '/today', chrome: true,
+      title: "Aujourd'hui", tab: '/home', chrome: true,
       html: notifBanner + `<div class="empty-rich">
           ${icon('spark', 40)}
           <h3>Repos aujourd'hui.</h3>
