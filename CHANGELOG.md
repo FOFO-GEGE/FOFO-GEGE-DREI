@@ -33,3 +33,11 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   jours plus visible sur fond coloré (anneau clair + lettres
   éclaircies), texte « glisse vers le bas pour revenir » retiré
   (geste conservé). Fichiers : `screens.js`, `style.css`.
+- Espace ajouté entre Taux/Jours et la bande des 7 jours sur la story
+  (collés — `.ritual-body` n'a pas le `gap` que `.pcard` a). Fichier :
+  `style.css`.
+- Écran de fin de story (« Voilà les faits ») habillé comme les
+  cartes qui le précèdent au lieu du chrome plat générique : fond
+  coloré selon l'issue du jour (réutilise `vitalityStory()`), tap à
+  droite ajouté pour sortir vers Mon miroir (bouton conservé aussi).
+  Fichiers : `screens.js`, `style.css`.

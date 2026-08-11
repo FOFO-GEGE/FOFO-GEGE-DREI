@@ -860,6 +860,9 @@ button:disabled { opacity: .4; cursor: default; }
 
 .rs-story .countdown, .rs-story .ritual-snooze-line { color: rgba(255, 255, 255, .88); border-color: rgba(255, 255, 255, .35); }
 .rs-story .countdown.is-urgent { color: #fff; background: rgba(0, 0, 0, .28); border-color: rgba(255, 255, 255, .55); }
+/* Used by the closing summary card only — every other rs-story screen has
+   its own header instead of a .ritual-prompt. */
+.rs-story .ritual-prompt { color: rgba(255, 255, 255, .8); }
 
 /* The week strip's own colours (kept/broken/frozen/…) can land close in
    lightness to whichever vitality gradient is behind them — a green "kept"

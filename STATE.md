@@ -36,12 +36,16 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : espace ajouté entre Taux/Jours et la bande des 7 jours
-sur la story (collés — `.ritual-body` n'a pas le `gap` que `.pcard`
-a, donc rien ne les séparait là où le deck en profitait gratuitement).
-`margin-top` scopé à `.rs-story .pcard-week`, sans effet sur le deck.
+Description : l'écran de fin de story (« Voilà les faits »/mountSummary)
+habillé comme les cartes qui le précèdent au lieu du chrome plat
+générique (`rs-interstitial`) qu'il partageait avec « Pourquoi ? ».
+Fond plein écran coloré selon l'issue du jour, en réutilisant
+`vitalityStory()` (pleine=parfait, mourante=journée blanche,
+faiblit=mitigé) — pas de nouvelle palette. Titre en `.rs-story-title`.
+Tap à droite ajouté (en plus du bouton « Voir mon miroir » qui reste)
+pour sortir vers Mon miroir, cohérent avec le reste de la story.
 
-Fichiers concernés : `style.css`.
+Fichiers concernés : `screens.js`, `style.css`.
 
 ## Problèmes connus
 
