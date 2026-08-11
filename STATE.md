@@ -38,22 +38,13 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : l'étape intermédiaire « Comment ça ? » (Pas fait/Geler/
-Décaler en 3 boutons, sur son propre écran) est supprimée. « Pas
-fait » mène maintenant directement à « Pourquoi ? » ; Geler et
-Décaler sont ajoutés à la suite des puces de raison sur cette même
-page, omis si indisponibles (gel déjà pris ce mois, etc.). Un seul
-écran au lieu de deux — corrige une ambiguïté remontée par
-l'utilisateur (taper « Pas fait » changeait d'écran avant que quoi
-que ce soit soit enregistré, ce qui pouvait laisser croire que
-c'était déjà acté). `settleVerdict()` sorti de `mount()` pour devenir
-une fonction sœur (Geler peut désormais être déclenché depuis
-`mountReason()`, bien après que la carte d'origine a disparu).
-`mountFailChoice()` supprimé.
+Description : tabbar orphelin corrigé sur l'écran Aujourd'hui vide.
+Les deux états vides (« Aucune promesse » et « Repos aujourd'hui »)
+utilisaient `tab: '/today'`, absent de `TABS` → aucun onglet actif.
+Corrigé en `tab: '/home'` : l'onglet Miroir s'allume, cohérent avec
+le bouton « Voir mon miroir » proposé sur ces mêmes écrans.
 
-Fichiers concernés : `screens.js`, `style.css`.
-
-Fichiers concernés : `screens.js`, `style.css`.
+Fichiers concernés : `screens.js`.
 
 ## Problèmes connus
 
@@ -78,10 +69,6 @@ sur iOS.
   sans `tabindex` ni `keydown`, pas de vrais boutons. Répondre à
   chaque carte reste possible (Fait/Pas fait sont de vrais boutons),
   seul le parcours libre entre cartes ne l'est pas.
-- Tabbar orphelin sur l'écran Aujourd'hui vide (`chrome:true` mais
-  `/today` absent de `TABS` dans `app.js`) : aucun onglet ne s'allume.
-  Mineur, rare (seulement si l'app s'ouvre sans rien à faire
-  aujourd'hui).
 
 ## Décisions techniques récentes
 

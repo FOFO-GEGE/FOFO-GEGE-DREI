@@ -58,3 +58,9 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
   ? ». `settleVerdict()` devient une fonction sœur de `mount()`
   (Geler peut être déclenché depuis `mountReason()`). Fichiers :
   `screens.js`, `style.css`.
+- Tabbar orphelin corrigé : les deux états vides d'Aujourd'hui
+  (« Aucune promesse » et « Repos aujourd'hui ») renvoyaient
+  `tab: '/today'` mais `/today` est absent de `TABS` — aucun onglet
+  ne s'allumait. Corrigé en `tab: '/home'` (onglet Miroir actif,
+  cohérent avec le bouton « Voir mon miroir » présent sur ces deux
+  écrans). Fichier : `screens.js`.
