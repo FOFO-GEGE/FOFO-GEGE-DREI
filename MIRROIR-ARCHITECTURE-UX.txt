@@ -1,0 +1,360 @@
+MIRROIR — ARCHITECTURE GLOBALE UX
+
+                              MIRROIR
+                                 │
+                ┌────────────────┼────────────────┐
+                │                │                │
+                ↓                ↓                ↓
+           AUJOURD'HUI       PROMESSES         RÉALITÉ
+                │                │                │
+                │                ↓                ↓
+                │          Créer / modifier    Historique
+                │                │                │
+                │                ↓                ↓
+                │          Ponctuelle /       Tendances
+                │            récurrente          │
+                │                                ↓
+                │                         "Ce que tu fais
+                │                          réellement"
+                │
+                ↓
+         Engagements du jour
+                │
+                ├───────────────┐
+                ↓               ↓
+              OUI              NON
+                │               │
+                └───────┬───────┘
+                        ↓
+                    ENREGISTRÉ
+                        │
+                        ↓
+                 Retour immédiat
+
+
+PAGE AUJOURD'HUI
+
+                         MIRROIR
+                            │
+                    ┌───────┴───────┐
+                    ↓               ↓
+                 AUJOURD'HUI      PROFIL
+                    │
+                    ↓
+              ┌──────────────┐
+              │   AUJOURD'HUI │
+              │   11 AOÛT     │
+              └───────┬──────┘
+                      │
+          ┌───────────┼───────────┐
+          ↓           ↓           ↓
+       09:00        18:30       23:00
+          │           │           │
+          ↓           ↓           ↓
+       Promesse     Promesse    Promesse
+          │           │           │
+          ↓           ↓           ↓
+        ✓ OUI       ? EN ATTENTE  ✕ NON
+          │           │
+          │           ↓
+          │       ┌───────────┐
+          │       │  OUI / NON│
+          │       └───────────┘
+          │
+          └───────────────────────┐
+                                  ↓
+                         + ME FAIRE UNE PROMESSE
+
+
+NOTIFICATION — INTERFACE QUOTIDIENNE
+
+                       NOTIFICATION
+                            │
+                            ↓
+             ┌──────────────────────────┐
+             │ Tu avais promis de       │
+             │ courir 30 minutes        │
+             │                          │
+             │ Est-ce que tu l'as fait ?│
+             └────────────┬─────────────┘
+                          │
+                    ┌─────┴─────┐
+                    ↓           ↓
+                   OUI         NON
+                    │           │
+                    └─────┬─────┘
+                          ↓
+                     ENREGISTRÉ
+                          │
+                          ↓
+                    Notification
+                      disparaît
+
+
+CRÉER UNE PROMESSE
+
+                    + PROMESSE
+                         │
+                         ↓
+              ┌────────────────────┐
+              │ Qu'est-ce que tu   │
+              │ te promets ?       │
+              │                    │
+              │ [________________] │
+              └─────────┬──────────┘
+                        ↓
+                      QUAND ?
+                        │
+              ┌─────────┴─────────┐
+              ↓                   ↓
+         AUJOURD'HUI          RÉCURRENT
+              │                   │
+              ↓                   ↓
+           Heure              Fréquence
+              │                   │
+              └─────────┬─────────┘
+                        ↓
+                     RAPPEL
+                        │
+                        ↓
+                 ┌─────────────┐
+                 │ 18:30 🔔    │
+                 └──────┬──────┘
+                        ↓
+                    CONFIRMER
+                        │
+                        ↓
+                PROMESSE CRÉÉE
+                        │
+                        ↓
+                   AUJOURD'HUI
+
+
+MODIFIER UNE PROMESSE
+
+                    PROMESSE
+                       │
+          ┌────────────┼────────────┐
+          ↓            ↓            ↓
+       CONTENU        QUAND       RAPPEL
+          │            │            │
+          ↓            ↓            ↓
+   "Courir 30min"   18:30        🔔 18:30
+          │            │            │
+          └────────────┼────────────┘
+                       ↓
+                 ┌───────────┐
+                 │ MODIFIER  │
+                 └─────┬─────┘
+                       │
+                       ↓
+                    SUPPRIMER
+
+
+RÉPONSE À UNE PROMESSE — OUI / NON
+
+                    PROMESSE
+                        │
+                        ↓
+             "Tu l'avais promis."
+                        │
+                        ↓
+               "Est-ce fait ?"
+                        │
+               ┌────────┴────────┐
+               ↓                 ↓
+              OUI               NON
+               │                 │
+               ↓                 ↓
+           ✓ RESPECTÉ        ✕ NON RESPECTÉ
+               │                 │
+               └────────┬────────┘
+                        ↓
+                    ENREGISTRÉ
+                        │
+                        ↓
+                      FIN
+
+
+APRÈS UN NON
+
+                       NON
+                        │
+                        ↓
+                 NON RESPECTÉ
+                        │
+              ┌─────────┴─────────┐
+              ↓                   ↓
+          TERMINER             OPTIONNEL
+                                  │
+                                  ↓
+                            "Pourquoi ?"
+                                  │
+             ┌─────────┬──────────┼──────────┬─────────┐
+             ↓         ↓          ↓          ↓
+          Oublié   Pas le temps  Pas envie  Autre
+
+
+PAGE PROMESSES
+
+                       PROMESSES
+                           │
+              ┌────────────┴────────────┐
+              ↓                         ↓
+          EN COURS                   TERMINÉES
+              │                         │
+              ↓                         ↓
+       ┌──────────────┐          ┌──────────────┐
+       │ Courir 30min │          │ Lire 20min   │
+       │ 18:30 🔔     │          │ ✓             │
+       └──────────────┘          └──────────────┘
+              │
+              ↓
+        Modifier / arrêter
+
+              + Nouvelle promesse
+
+
+PAGE RÉALITÉ
+
+                         RÉALITÉ
+                            │
+             ┌──────────────┴──────────────┐
+             ↓                             ↓
+          CETTE SEMAINE                 CETTE PÉRIODE
+             │                             │
+             ↓                             ↓
+        8 promesses                   Historique
+        6 respectées
+        2 non
+             │
+             ↓
+           75 %
+             │
+             ↓
+       ┌───────────────┐
+       │ TES PATTERNS  │
+       └───────┬───────┘
+               ↓
+      "Tu réussis davantage
+       quand tu programmes
+       tes promesses avant 20h."
+
+
+HISTORIQUE
+
+                      HISTORIQUE
+                          │
+             ┌────────────┴────────────┐
+             ↓                         ↓
+          CALENDRIER                LISTE
+             │                         │
+             ↓                         ↓
+       ● ● ✓ ✕ ●                  11 août
+       ● ✓ ✓ ● ✕                  ✓ Courir
+       ✓ ✓ ● ●                    ✕ Pas d'alcool
+             │
+             └────────────┬────────────┘
+                          ↓
+                     DÉTAIL
+                          │
+                          ↓
+                  Promesse donnée
+                          │
+                          ↓
+                    Réponse réelle
+
+
+PROFIL / RÉGLAGES
+
+                       PROFIL
+                         │
+          ┌──────────────┼──────────────┐
+          ↓              ↓              ↓
+      Notifications    Apparence      Données
+          │              │              │
+          ↓              ↓              ↓
+       Horaires       Clair/Sombre    Exporter
+       Autorisations                  Supprimer
+
+
+NAVIGATION GLOBALE
+
+                         MIRROIR
+                            │
+          ┌─────────────────┼─────────────────┐
+          ↓                 ↓                 ↓
+      AUJOURD'HUI       PROMESSES           RÉALITÉ
+          │                 │                 │
+          ↓                 ↓                 ↓
+      Aujourd'hui       En cours           Cette semaine
+      OUI / NON         Récurrentes         Historique
+      + Promesse        Terminées           Patterns
+                            │
+                            ↓
+                       + PROMESSE
+
+                         ⚙ PROFIL
+                         (secondaire)
+
+
+PARCOURS UTILISATEUR COMPLET
+
+                    PREMIÈRE UTILISATION
+                            │
+                            ↓
+                 "Qu'est-ce que tu
+                    te promets ?"
+                            │
+                            ↓
+                     Créer promesse
+                            │
+                            ↓
+                       Choisir heure
+                            │
+                            ↓
+                          FIN
+                            │
+                            │
+                    ────────┼────────
+                            │
+                            ↓
+                       NOTIFICATION
+                            │
+                            ↓
+                     "Tu l'as fait ?"
+                            │
+                    ┌───────┴───────┐
+                    ↓               ↓
+                   OUI             NON
+                    │               │
+                    └───────┬───────┘
+                            ↓
+                       ENREGISTRÉ
+                            │
+                            │
+                    ────────┼────────
+                            │
+                            ↓
+                        RÉALITÉ
+                            │
+                            ↓
+                  "Voilà ce que tu fais
+                     réellement."
+
+
+BOUCLE DIRECTRICE
+
+              CRÉER
+                ↓
+             PROMETTRE
+                ↓
+             RAPPEL
+                ↓
+             RÉPONDRE
+                ↓
+            ENREGISTRER
+                ↓
+             OBSERVER
+                ↓
+              RÉALITÉ
