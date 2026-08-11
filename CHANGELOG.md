@@ -44,3 +44,10 @@ Pour l'historique antérieur à ce fichier, voir `git log`.
 - `.ritual-status` (« Non tenu » etc. sur une carte déjà décidée)
   alignée sur `.countdown` : `margin-top` ajouté, ne collait plus la
   bande des 7 jours. Fichier : `style.css`.
+- Cartes du deck de hauteur inégale entre lignes : une promesse avec
+  moins de 2 jours échus n'affichait pas la bande des 7 jours du
+  tout, la rendant plus courte que ses voisines. `weekStripHTML()`
+  affiche maintenant toujours la bande dès qu'un `week` existe
+  (mêmes marques transparentes pour une habitude neuve, même
+  hauteur). `tests/completed-promises.spec.js` mis à jour. Fichiers :
+  `ui.js`, `tests/completed-promises.spec.js`.

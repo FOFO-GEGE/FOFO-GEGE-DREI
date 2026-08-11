@@ -36,13 +36,18 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : `.ritual-status` (pastille « Non tenu »/« Tenu »/« Gelé »
-sur une carte déjà décidée) n'avait pas de `margin-top`, contrairement
-à `.countdown` (son équivalent pour une carte en attente) qui en a un
-— collé à la bande des 7 jours juste au-dessus. Aligné sur
-`.countdown` : `margin-top: 14px` ajouté.
+Description : cartes du deck (Mon miroir) de hauteur inégale entre
+lignes — une promesse avec moins de 2 jours échus dans la fenêtre de
+7 jours n'affichait pas du tout la bande, rendant sa carte plus
+courte que ses voisines et cassant l'alignement des lignes suivantes.
+`weekStripHTML()` affiche maintenant toujours la bande dès qu'un
+tableau `week` existe (habitude toute neuve : presque tout en
+« before », transparent, mais la structure — donc la hauteur — reste
+la même). Reste absente uniquement quand l'appelant ne calcule pas de
+`week` du tout (aperçu/carte synthétique). `tests/completed-promises.spec.js`
+mis à jour (l'ancienne assertion attendait l'inverse).
 
-Fichiers concernés : `style.css`.
+Fichiers concernés : `ui.js`, `tests/completed-promises.spec.js`.
 
 Fichiers concernés : `screens.js`, `style.css`.
 
