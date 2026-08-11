@@ -14,9 +14,14 @@ empaquetage Capacitor pour iOS natif.
 - Fenêtre de réponse configurable par promesse (remplace l'ancienne
   fenêtre fixe d'1h), avec rappels échelonnés.
 - Réponse Fait / Pas fait (+ raison), ou silence = échec (`expired`).
-- Aujourd'hui : file rituelle une carte à la fois, tri par urgence,
-  navigation libre, « Décaler » (report same-day, une fois par jour),
-  bande des 7 derniers jours sous Taux/Jours sur la carte.
+- Aujourd'hui : story plein écran façon Instagram (une carte à la
+  fois, couleur pilotée par la vitalité), tri par urgence, tap
+  gauche/droite ou glisser vers le bas pour naviguer/quitter, premier
+  écran à l'ouverture de l'app. Pas fait/Fait seuls visibles ; Geler
+  et Décaler regroupés derrière « Pas fait » (même ergonomie de
+  bouton). « Décaler » (report same-day, une fois par jour) reste
+  offert seul sur une carte déjà décidée mais réouvrable. Bande des 7
+  derniers jours sous Taux/Jours sur la carte.
 - Vitalité (jauge de vie) + mort autonome + résurrection unique.
 - Couleur de carte pilotée par la vitalité ; statut du jour en glyphe.
 - Paliers (âge + vitalité) avec badges emoji.
@@ -27,25 +32,36 @@ empaquetage Capacitor pour iOS natif.
 
 ## Fonctionnalités en cours
 
-Refonte de la story Aujourd'hui (plein écran façon Instagram stories,
-actions Pas fait/Geler/Décaler unifiées sous un seul bouton, sans
-minuteur d'avance automatique, tap gauche/droite à rendre
-fonctionnel, story comme premier écran à l'ouverture) : cadrée avec
-l'utilisateur, en attente de feu vert avant implémentation.
+Aucune à cette date.
 
 ## Dernière évolution
 
-Description : bande des 7 derniers jours repositionnée en bas de la
-carte, après Taux/Jours — sur la carte du deck (`habitCard()`, où
-elle était plus haut, sous VIE) et sur la carte de la story
-Aujourd'hui (nouvel ajout, réutilisant `lastWeekOf()` et le composant
-`.pcard-week`). `weekStripHTML()` factorisée dans `ui.js`, partagée
-par les deux au lieu d'être dupliquée. Seul changement CSS :
-`width:100%` sur `.pcard-week` pour qu'il s'étire correctement hors
-du contexte `.pcard` (qui le faisait par `align-items:stretch`
-implicite).
+Description : refonte de la story Aujourd'hui façon Instagram
+stories.
+- Fond plein écran = couleur de vitalité (`--story-bg`), tout le CSS
+  `.rs-story-*` écrit (n'existait pas du tout avant — le HTML était
+  posé mais jamais stylé).
+- Seuls Fait/Pas fait visibles sur la carte. Geler et Décaler ne sont
+  plus des boutons permanents : « Pas fait » ouvre une étape
+  (`mountFailChoice()`) avec Pas fait/Geler/Décaler en boutons de
+  même ergonomie (`.ritual-btn`) — Geler et/ou Décaler omis s'ils ne
+  sont pas disponibles (gel déjà pris ce mois, etc.). Précédent/
+  Suivant retirés (redondants avec le tap gauche/droite).
+- Tap gauche/droite pour changer de carte : rendu réellement
+  fonctionnel (zones existaient en JS mais sans CSS, donc sans effet).
+- Minuteur d'avance automatique (7s) supprimé entièrement.
+- Story = écran par défaut à l'ouverture (`resolveScreen()` dans
+  `app.js`), plus Mon miroir.
+- Glisser vers le bas pour quitter : préservé, vérifié après la
+  réorganisation des boutons.
 
-Fichiers concernés : `ui.js`, `screens.js`, `style.css`.
+Piège rencontré et documenté : `backdrop-filter`/`filter` sur un
+élément à l'intérieur de la zone de tap créent leur propre contexte
+d'empilement et passent au-dessus des zones de tap (z-index 0) quel
+que soit l'ordre DOM, les rendant mortes par endroits — remplacés par
+`text-shadow` et un fond translucide simple.
+
+Fichiers concernés : `screens.js`, `app.js`, `style.css`.
 
 ## Problèmes connus
 
@@ -54,14 +70,15 @@ Oui/Non sur notification web, Web Push nécessite l'installation sur
 iOS, livraison push non vérifiée bout en bout, `vibrate()` inopérant
 sur iOS.
 
-- `tests/ritual-queue.spec.js` et `tests/completed-promises.spec.js`
-  échouent déjà sur la branche de base (vérifié par comparaison avant/
-  après les changements ci-dessus, aucun rapport avec eux) :
-  `[data-nav="/today"]` n'existe plus dans la tabbar (Aujourd'hui
-  n'est plus un onglet, cf. commentaire `app.js`) et `.finished-toggle`
-  est introuvable. Les deux specs ciblent une architecture antérieure
-  (`.ritual-card .pcard`) déjà remplacée par la story plein écran
-  actuelle (`rs-story`) — à mettre à jour, hors périmètre ici.
+- `tests/ritual-queue.spec.js`, `tests/answer-window.spec.js`,
+  `tests/flow.spec.js` échouent déjà sur la branche de base (vérifié
+  par comparaison avant/après les changements ci-dessus, aucun
+  rapport avec eux) : `[data-nav="/today"]` n'existe plus dans la
+  tabbar (Aujourd'hui n'est plus un onglet, cf. commentaire `app.js`).
+  `tests/completed-promises.spec.js` échoue aussi déjà, sur
+  `.finished-toggle` introuvable. Ces specs ciblent une architecture
+  antérieure (`.ritual-card .pcard`, navigation par onglet) déjà
+  remplacée — à mettre à jour, hors périmètre ici.
 
 ## Décisions techniques récentes
 
@@ -88,3 +105,8 @@ rappels web par `@capacitor/local-notifications` (`registerActionTypes`).
 - Une seule résurrection possible par promesse.
 - « Décaler » ne réouvre un jour qu'une seule fois.
 - Création rapide d'une promesse, réponse Fait/Pas fait simple.
+- Dans `.rs-story` : pas de `backdrop-filter`/`filter` sur un élément
+  posé dans la zone de tap (`.ritual-body` et alentours) — ça crée un
+  contexte d'empilement qui passe au-dessus de `.rs-story-tap-*`
+  (z-index 0) et tue le tap à cet endroit précis. `text-shadow` et un
+  fond translucide simple à la place.
