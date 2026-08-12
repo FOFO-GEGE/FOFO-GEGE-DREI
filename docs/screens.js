@@ -615,6 +615,7 @@ function screenHome() {
   const R = 32, C = 2 * Math.PI * R;
   const ringOffset = todayPct === null ? C : C * (1 - todayPct / 100);
   const streak = store.habits.length ? Math.max(0, ...store.habits.map(h => habitStats(h).streak)) : 0;
+  const pendingFirst = items.find(x => x.check.status === 'created');
 
   const cards = store.habits.length
     ? `<section class="deck">
@@ -642,6 +643,25 @@ function screenHome() {
       </div>
     </div>
 
+    ${pendingFirst ? (() => {
+      const { habit, check } = pendingFirst;
+      const left = minutesLeft(check);
+      const theme = themeById(habit.theme);
+      return `
+      <section class="rs-urgent-zone">
+        <div class="section-label">À répondre maintenant</div>
+        <button class="rs-urgent-card" id="today-banner" aria-label="Voir Aujourd'hui">
+          <div class="rs-urgent-bg" aria-hidden="true"></div>
+          <div class="rs-urgent-top">
+            <span class="rs-urgent-badge">● Fenêtre ouverte</span>
+            ${left !== null ? `<span class="rs-urgent-timer">→ ${left} min</span>` : ''}
+          </div>
+          <span class="rs-urgent-icon" aria-hidden="true">${icon(theme.id, 28)}</span>
+          <div class="rs-urgent-name">${esc(habit.title)}</div>
+          ${storyWeekHTML(habit)}
+        </button>
+      </section>`;
+    })() : `
     <button class="rs-today-banner" id="today-banner" aria-label="Voir Aujourd'hui">
       <span class="rs-today-ring">
         <svg viewBox="0 0 76 76" aria-hidden="true">
@@ -656,7 +676,7 @@ function screenHome() {
           ? "Rien de prévu aujourd'hui."
           : `${keptToday} sur ${totalToday} promesse${totalToday > 1 ? 's' : ''} tenue${keptToday > 1 ? 's' : ''}. Tape pour continuer →`}</span>
       </span>
-    </button>
+    </button>`}
 
     ${cards}`;
 

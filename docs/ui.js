@@ -272,6 +272,7 @@ function habitCard(habit, stats, opts = {}) {
       style="--frac-seed:${fracSeed}; --vitality:${stats.vitality ?? 100}"
       ${opts.habitId ? `data-habit="${opts.habitId}"` : ''}>
       <div class="pcard-sheen" aria-hidden="true"></div>
+      <span class="pcard-lvl-icon" aria-hidden="true">${tier.emoji}</span>
       <header class="pcard-head">
         <h3 class="pcard-name">${esc(habit.title || 'Ta promesse')}</h3>
         ${status && !opts.noStatus ? `<span class="pcard-status" role="img" title="${esc(status.label)}" aria-label="${esc(status.label)}">${status.glyph}</span>` : ''}
