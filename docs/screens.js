@@ -12,27 +12,52 @@ const MONTH_LABELS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 
 const SURPRISE_MESSAGES = ['Jour parfait.', 'Tu tiens le rythme.', 'Plus régulier que la moyenne cette semaine.'];
 
-// Week strip for the story screen: fixed Mon–Sun order, today highlighted.
-function storyWeekHTML(habit) {
+// Mon–Sun slots for the current week, shared by the story's own week strip
+// and the urgent card's colored dots so the two never disagree about what a
+// day means. Delegates to dayState() (store.js) — the single place that
+// translates a raw check.status ('success'/'failed'/'frozen'/'created')
+// into the app's display vocabulary ('kept'/'broken'/'frozen'/'pending'/
+// 'unknown'/'rest'/'before'). Slots built directly from check.status used
+// to skip that translation and leak the raw values into is-${state}
+// classes that don't exist in CSS (is-success, is-failed, …), so every
+// decided day rendered as a blank, uncoloured mark.
+function currentWeekSlots(habit) {
   const todayIso = todayStr();
   const jsDay = new Date(todayIso + 'T12:00:00').getDay(); // 0=Dim..6=Sam
   const toMon = jsDay === 0 ? -6 : 1 - jsDay;             // décalage vers le Lundi
   const LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
   const byDate = new Map(store.checks.filter(c => c.habit_id === habit.id).map(c => [c.date, c]));
-  const slots = LABELS.map((label, i) => {
+  return LABELS.map((label, i) => {
     const iso = shiftDays(todayIso, toMon + i);
-    const check = byDate.get(iso);
-    let state;
-    if (iso > todayIso) state = 'before';
-    else if (!check) state = habit.start_date && iso < habit.start_date ? 'before' : 'rest';
-    else state = check.status;
+    const state = dayState(habit, iso, byDate.get(iso), todayIso);
     return { date: iso, state, label };
   });
-  const W = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', rest: 'repos', before: '' };
-  const aria = `Cette semaine : ${slots.filter(s => s.state !== 'before').map(s => W[s.state] || s.state).join(', ')}.`;
+}
+
+const WEEK_STATE_WORDS = { kept: 'tenu', broken: 'pas tenu', frozen: 'gelé', pending: 'en cours', rest: 'repos', unknown: 'sans réponse', before: '' };
+
+// Week strip for the story screen: fixed Mon–Sun order, today highlighted.
+function storyWeekHTML(habit) {
+  const todayIso = todayStr();
+  const slots = currentWeekSlots(habit);
+  const aria = `Cette semaine : ${slots.filter(s => s.state !== 'before').map(s => WEEK_STATE_WORDS[s.state] || s.state).join(', ')}.`;
   return `<div class="pcard-week" role="img" aria-label="${esc(aria)}">
     <div class="pcard-week-days">${slots.map(s => `<span class="pcard-day is-${s.state}"></span>`).join('')}</div>
     <div class="pcard-week-dow">${slots.map(s => `<span class="${s.date === todayIso ? 'is-today' : ''}">${s.label}</span>`).join('')}</div>
+  </div>`;
+}
+
+// Colored dots version for the urgent card only (mockup style) — same
+// week, same states, different mark. Today always reads as "today"
+// (white) regardless of its state, even if already decided, so the eye
+// finds "you are here" before it reads the history around it.
+const WEEK_DOT_CLASS = { kept: 'd-ok', broken: 'd-ko', frozen: 'd-frozen', pending: 'd-pending', rest: 'd-rest', unknown: 'd-unknown', before: 'd-before' };
+function weekDotsHTML(habit) {
+  const todayIso = todayStr();
+  const slots = currentWeekSlots(habit);
+  const aria = `Cette semaine : ${slots.filter(s => s.state !== 'before').map(s => WEEK_STATE_WORDS[s.state] || s.state).join(', ')}.`;
+  return `<div class="rs-urgent-dots" role="img" aria-label="${esc(aria)}">
+    ${slots.map(s => `<span class="d ${s.date === todayIso ? 'd-today' : (WEEK_DOT_CLASS[s.state] || '')}">${s.label}</span>`).join('')}
   </div>`;
 }
 
@@ -679,7 +704,7 @@ function screenHome() {
             </div>
             <span class="rs-urgent-icon" aria-hidden="true">${icon(theme.id, 28)}</span>
             <div class="rs-urgent-name">${esc(habit.title)}</div>
-            ${storyWeekHTML(habit)}
+            ${weekDotsHTML(habit)}
           </button>
           <div class="rs-urgent-actions">
             <button class="rs-urgent-btn-fait" id="urgent-fait" data-check="${check.id}">${icon('check', 15)} Fait</button>
