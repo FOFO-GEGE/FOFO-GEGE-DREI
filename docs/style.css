@@ -1571,18 +1571,46 @@ button:disabled { opacity: .4; cursor: default; }
 /* ---------- Urgent card (fenêtre ouverte) ---------- */
 .rs-urgent-zone { padding: 0 0 10px; }
 .rs-urgent-card {
-  width: 100%; text-align: left; border-radius: 22px; padding: 16px;
-  position: relative; overflow: hidden; display: block;
+  border-radius: 22px; padding: 16px;
+  position: relative; overflow: hidden;
   border: 1px solid rgba(61,174,115,.35);
   margin-bottom: 22px;
 }
-.rs-urgent-card:active { transform: scale(.98); }
+.rs-urgent-open {
+  width: 100%; text-align: left; display: block;
+  background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+  transition: transform .15s ease;
+}
+.rs-urgent-open:active { transform: scale(.98); }
 .rs-urgent-bg {
   position: absolute; inset: 0; z-index: 0;
   background:
     radial-gradient(ellipse at 80% 20%, rgba(255,200,60,.18) 0%, transparent 55%),
     radial-gradient(ellipse at 20% 90%, rgba(61,174,115,.22) 0%, transparent 50%),
     linear-gradient(145deg, #0e1f18 0%, #0a150f 100%);
+}
+/* Floating light particles — same idea as the mockup's orb1/orb2, tuned to
+   drift gently rather than distract from the countdown above them. */
+.rs-urgent-orb1, .rs-urgent-orb2 {
+  position: absolute; border-radius: 50%; z-index: 0; pointer-events: none;
+}
+.rs-urgent-orb1 {
+  width: 60px; height: 60px; top: 8px; right: 30px;
+  background: radial-gradient(circle, rgba(255,200,60,.35), transparent 70%);
+  animation: urgent-orb-float-1 4s ease-in-out infinite;
+}
+.rs-urgent-orb2 {
+  width: 40px; height: 40px; bottom: 10px; left: 20px;
+  background: radial-gradient(circle, rgba(61,174,115,.3), transparent 70%);
+  animation: urgent-orb-float-2 3.5s ease-in-out infinite;
+}
+@keyframes urgent-orb-float-1 {
+  0%, 100% { transform: translate(0,0) scale(1); opacity: .6; }
+  50% { transform: translate(6px,-8px) scale(1.2); opacity: 1; }
+}
+@keyframes urgent-orb-float-2 {
+  0%, 100% { transform: translate(0,0); opacity: .3; }
+  50% { transform: translate(-5px,6px); opacity: .7; }
 }
 .rs-urgent-top {
   display: flex; justify-content: space-between; align-items: center;
@@ -1605,6 +1633,20 @@ button:disabled { opacity: .4; cursor: default; }
   margin-bottom: 12px; position: relative; z-index: 1;
 }
 .rs-urgent-card .pcard-week { position: relative; z-index: 1; }
+.rs-urgent-actions {
+  display: flex; gap: 8px; margin-top: 12px; position: relative; z-index: 1;
+}
+.rs-urgent-btn-fait, .rs-urgent-btn-pas {
+  flex: 1; font-size: 13px; font-weight: 800; border-radius: 12px; padding: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.rs-urgent-btn-fait { background: #3DAE73; color: #071a0e; border: none; }
+.rs-urgent-btn-fait:active { transform: scale(.96); }
+.rs-urgent-btn-pas {
+  background: rgba(255,255,255,.05); color: #999;
+  border: .5px solid rgba(255,255,255,.15); font-weight: 600;
+}
+.rs-urgent-btn-pas:active { transform: scale(.96); }
 
 /* ---------- Cimetière / Terminées links + pages ---------- */
 .rs-more { margin-top: 26px; display: flex; flex-direction: column; gap: 8px; }
