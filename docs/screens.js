@@ -617,11 +617,29 @@ function screenHome() {
   const streak = store.habits.length ? Math.max(0, ...store.habits.map(h => habitStats(h).streak)) : 0;
   const pendingFirst = items.find(x => x.check.status === 'created');
 
+  // Build today's check lookup for mini-card status
+  const checkByHabit = new Map(items.map(x => [x.habit.id, x.check]));
+
+  // Mini-cards in carousel pages of 4
+  const PAGE_SIZE = 4;
+  const allMinis = store.habits.map(h => {
+    const s = habitStats(h);
+    return miniCard(h, s, { check: checkByHabit.get(h.id) });
+  });
+  const pages = [];
+  for (let i = 0; i < allMinis.length; i += PAGE_SIZE) {
+    pages.push(allMinis.slice(i, i + PAGE_SIZE));
+  }
+  const totalPages = pages.length;
+
   const cards = store.habits.length
     ? `<section class="deck">
          <h4 class="section-label">Tes cartes <span class="deck-count">${store.habits.length}</span></h4>
-         <div class="deck-grid">
-           ${store.habits.map(h => habitCard(h, habitStats(h), { compact: true, habitId: h.id })).join('')}
+         <div class="deck-carousel" id="deck-carousel">
+           <div class="deck-carousel-track">
+             ${pages.map((pg, pi) => `<div class="deck-carousel-page">${pg.join('')}</div>`).join('')}
+           </div>
+           ${totalPages > 1 ? `<div class="deck-carousel-dots">${pages.map((_, i) => `<span class="${i === 0 ? 'is-on' : ''}" data-page="${i}"></span>`).join('')}</div>` : ''}
          </div>
        </section>`
     : `<div class="empty-rich">
@@ -687,8 +705,34 @@ function screenHome() {
         const ring = host.querySelector('.rs-ring-value');
         if (ring) ring.style.strokeDashoffset = ringOffset.toFixed(2);
       });
-      fxBindTilt(host);
-      wireCardFocus(host, '.deck-grid .pcard[data-habit]', store.habits);
+
+      // Mini-card tap → detail
+      host.querySelectorAll('.mini-card[data-habit]').forEach(el => {
+        el.addEventListener('click', () => {
+          const h = store.habits.find(x => x.id === el.dataset.habit);
+          if (h) navigate('/detail/' + h.id);
+        });
+      });
+
+      // Carousel swipe
+      const carousel = host.querySelector('#deck-carousel');
+      if (carousel) {
+        const track = carousel.querySelector('.deck-carousel-track');
+        const dots = carousel.querySelectorAll('.deck-carousel-dots span');
+        let page = 0;
+        const maxPage = totalPages - 1;
+        const goTo = (p) => {
+          page = Math.max(0, Math.min(maxPage, p));
+          track.style.transform = `translateX(-${page * 100}%)`;
+          dots.forEach((d, i) => d.classList.toggle('is-on', i === page));
+        };
+        dots.forEach(d => d.addEventListener('click', () => goTo(+d.dataset.page)));
+        // Touch swipe
+        let sx = 0, dx = 0;
+        carousel.addEventListener('touchstart', e => { sx = e.touches[0].clientX; dx = 0; }, { passive: true });
+        carousel.addEventListener('touchmove', e => { dx = e.touches[0].clientX - sx; }, { passive: true });
+        carousel.addEventListener('touchend', () => { if (Math.abs(dx) > 40) goTo(page + (dx < 0 ? 1 : -1)); });
+      }
 
       const banner = host.querySelector('#today-banner');
       if (banner) banner.addEventListener('click', () => navigate('/today'));
