@@ -288,20 +288,7 @@ button:disabled { opacity: .4; cursor: default; }
   --band-amber: #ff9d2e;
   --holo-a: .16;
 }
-@media (prefers-color-scheme: light) {
-  .pcard {
-    --surface: #ffffff;
-    --surface-2: #f0eade;
-    --border: #ded4c4;
-    --text: #17121d;
-    --text-dim: #736a7e;
-    --success: #b06a00;
-    --danger: #d01f42;
-    --band-green: #14893f;
-    --band-amber: #c25a00;
-    --holo-a: .08;
-  }
-}
+/* No light-mode override — cards stay dark à la mockup */
 .pcard {
   position: relative; overflow: hidden;
   border-radius: 20px; padding: 14px;
@@ -329,12 +316,11 @@ button:disabled { opacity: .4; cursor: default; }
    earned it. Theme shows through the icon alone, as before. */
 .pcard.vit-pleine {
   background:
-    radial-gradient(ellipse at 80% 20%, rgba(61,174,115,.22) 0%, transparent 55%),
-    radial-gradient(ellipse at 20% 90%, rgba(255,200,60,.13) 0%, transparent 50%),
-    color-mix(in srgb, var(--band-green) 38%, var(--surface));
-  border-color: var(--band-green);
+    radial-gradient(ellipse at 80% 20%, rgba(61,174,115,.2) 0%, transparent 55%),
+    linear-gradient(135deg, #0e1f14, #0a1510);
+  border-color: #1a3020;
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
-    0 0 24px color-mix(in srgb, var(--band-green) 40%, transparent);
+    0 0 24px rgba(61,174,115,.25);
 }
 /* Faiblit and malade share a band on purpose. They are two steps of one
    slide, and the gauge already separates them by width — splitting them by
@@ -342,25 +328,25 @@ button:disabled { opacity: .4; cursor: default; }
 .pcard.vit-faiblit,
 .pcard.vit-malade {
   background:
-    radial-gradient(ellipse at 30% 70%, rgba(255,180,30,.18) 0%, transparent 55%),
-    color-mix(in srgb, var(--band-amber) 38%, var(--surface));
-  border-color: var(--band-amber);
+    radial-gradient(ellipse at 30% 70%, rgba(255,180,30,.15) 0%, transparent 55%),
+    linear-gradient(135deg, #181100, #111000);
+  border-color: #2a1f00;
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
-    0 0 24px color-mix(in srgb, var(--band-amber) 40%, transparent);
+    0 0 24px rgba(255,180,30,.2);
 }
 .pcard.vit-mourante {
   background:
-    radial-gradient(ellipse at 50% 50%, rgba(200,50,40,.22) 0%, transparent 60%),
-    color-mix(in srgb, var(--danger) 36%, var(--surface));
-  border-color: var(--danger);
+    radial-gradient(ellipse at 50% 50%, rgba(200,50,40,.2) 0%, transparent 60%),
+    linear-gradient(135deg, #1a0808, #120505);
+  border-color: #2e0e0e;
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
-    0 0 24px color-mix(in srgb, var(--danger) 40%, transparent);
+    0 0 24px rgba(200,50,40,.2);
 }
 .pcard.vit-morte {
   background:
-    radial-gradient(ellipse at 70% 30%, rgba(100,130,180,.18) 0%, transparent 60%),
-    color-mix(in srgb, var(--text-dim) 20%, var(--surface));
-  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
+    radial-gradient(ellipse at 70% 30%, rgba(100,130,180,.2) 0%, transparent 60%),
+    linear-gradient(135deg, #10121a, #0d0f18);
+  border-color: #1a2030;
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12;
 }
 
