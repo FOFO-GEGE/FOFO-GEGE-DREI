@@ -738,7 +738,14 @@ function screenHome() {
         carousel.addEventListener('touchmove', e => {
           dx = e.touches[0].clientX - sx;
           dy = e.touches[0].clientY - sy;
-          if (!swiping && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) swiping = true;
+          // A real tap always drifts a few px before touchend fires — a low
+          // threshold here misreads that as the start of a swipe, and once
+          // touchmove calls preventDefault() the browser drops the click
+          // event for the whole gesture, even if the drag never actually
+          // reaches the 40px needed to flip a page. Require a clearer,
+          // mostly-horizontal drag before committing to swipe mode so a
+          // plain tap on a mini-card still opens it.
+          if (!swiping && Math.abs(dx) > 18 && Math.abs(dx) > Math.abs(dy) * 1.5) swiping = true;
           if (swiping) e.preventDefault();
         }, { passive: false });
         carousel.addEventListener('touchend', () => {

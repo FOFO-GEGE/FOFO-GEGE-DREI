@@ -38,7 +38,30 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : redesign home + corrections écran story.
+Description : fix ouverture des mini-cartes (carrousel Mon miroir) sur
+appareil tactile réel.
+
+Le seuil de détection swipe-vs-tap (`Math.abs(dx) > 10`) était trop bas :
+un vrai doigt dérive de quelques px pendant un simple tap, ce qui
+faisait basculer en mode `swiping` et appeler `preventDefault()` dans
+`touchmove` — geste qui, sur un vrai navigateur mobile, supprime le
+`click` de compatibilité pour toute la séquence tactile. Comme le
+déplacement (10-40px) restait sous le seuil de bascule de page
+(`> 40`), le tap ne faisait plus rien : ni ouverture de carte, ni swipe.
+Seuil relevé à 18px + ratio horizontal renforcé (`dx > dy * 1.5`) avant
+de committer au mode swipe, pour laisser passer un tap normal.
+
+Note : non reproductible avec les outils de test disponibles ici (le
+tap tactile synthétique de Chromium/CDP ne simule pas cette suppression
+du clic par `preventDefault()`, contrairement à un vrai navigateur
+mobile) — fix basé sur le comportement documenté des navigateurs, à
+confirmer sur appareil réel.
+
+Fichier concerné : `docs/screens.js` (`screenHome`, wiring du carrousel).
+
+---
+
+Description précédente : redesign home + corrections écran story.
 
 1. **Story** — `border-radius: 24px` + `overflow: hidden`, titre texte supprimé
    du header, countdown positif sans icône (« Il reste X min pour répondre »),
