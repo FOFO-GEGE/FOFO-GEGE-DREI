@@ -165,6 +165,52 @@ function weekStripHTML(rawWeek) {
     </div>`;
 }
 
+// ---------- Mini-card (home grid, mockup style) ----------
+// Compact: emoji + name + progress bar + status line + tier watermark.
+function miniCard(habit, stats, opts = {}) {
+  const theme = themeById(habit.theme);
+  const tier = tierFor(stats.daysAlive, stats.vitality);
+  const vitState = stats.vitalityState || 'pleine';
+  const rateNum = stats.total ? Math.round((stats.kept / stats.total) * 100) : 0;
+
+  // Status line: match the check's current state
+  const todayCheck = opts.check;
+  let statusText, statusCls, barCls;
+  if (vitState === 'mourante') {
+    statusText = `⚠ Fragile · ${rateNum}%`;
+    statusCls = 'mc-st-danger';
+    barCls = 'mc-bar-danger';
+  } else if (todayCheck && todayCheck.status === 'success') {
+    statusText = `✓ Fait · ${rateNum}%`;
+    statusCls = 'mc-st-ok';
+    barCls = 'mc-bar-ok';
+  } else if (todayCheck && todayCheck.status === 'created') {
+    statusText = `En cours · ${rateNum}%`;
+    statusCls = 'mc-st-ok';
+    barCls = 'mc-bar-ok';
+  } else if (todayCheck && todayCheck.status === 'failure') {
+    statusText = `✕ Pas fait · ${rateNum}%`;
+    statusCls = 'mc-st-danger';
+    barCls = 'mc-bar-danger';
+  } else {
+    statusText = `${rateNum}%`;
+    statusCls = 'mc-st-warn';
+    barCls = 'mc-bar-warn';
+  }
+
+  return `
+    <button class="mini-card vit-${vitState}" data-habit="${habit.id}">
+      <span class="mc-lvl-icon" aria-hidden="true">${tier.emoji}</span>
+      <div class="mc-content">
+        <span class="mc-emoji" aria-hidden="true">${icon(theme.id, 16)}</span>
+        <div class="mc-name">${esc(habit.title)}</div>
+        <div class="mc-bar"><div class="mc-fill ${barCls}" style="width:${Math.max(2, rateNum)}%"></div></div>
+        <div class="mc-status ${statusCls}">${statusText}</div>
+      </div>
+    </button>`;
+}
+
+// ---------- Full habit card ----------
 // stats: { rate, daysAlive, streak, best, kept, total }
 // opts.dead: the habit was abandoned or starved — greyed out, fissured,
 // frozen at its tier of death instead of showing progress toward a next one
