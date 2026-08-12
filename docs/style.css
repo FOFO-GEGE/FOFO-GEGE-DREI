@@ -328,7 +328,10 @@ button:disabled { opacity: .4; cursor: default; }
    everywhere else in the app, and a card that merely still has a pulse hasn't
    earned it. Theme shows through the icon alone, as before. */
 .pcard.vit-pleine {
-  background: color-mix(in srgb, var(--band-green) 38%, var(--surface));
+  background:
+    radial-gradient(ellipse at 80% 20%, rgba(61,174,115,.22) 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 90%, rgba(255,200,60,.13) 0%, transparent 50%),
+    color-mix(in srgb, var(--band-green) 38%, var(--surface));
   border-color: var(--band-green);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--band-green) 40%, transparent);
@@ -338,21 +341,34 @@ button:disabled { opacity: .4; cursor: default; }
    colour too would have needed a fourth hue, and the only one left was gold. */
 .pcard.vit-faiblit,
 .pcard.vit-malade {
-  background: color-mix(in srgb, var(--band-amber) 38%, var(--surface));
+  background:
+    radial-gradient(ellipse at 30% 70%, rgba(255,180,30,.18) 0%, transparent 55%),
+    color-mix(in srgb, var(--band-amber) 38%, var(--surface));
   border-color: var(--band-amber);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--band-amber) 40%, transparent);
 }
 .pcard.vit-mourante {
-  background: color-mix(in srgb, var(--danger) 36%, var(--surface));
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(200,50,40,.22) 0%, transparent 60%),
+    color-mix(in srgb, var(--danger) 36%, var(--surface));
   border-color: var(--danger);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12,
     0 0 24px color-mix(in srgb, var(--danger) 40%, transparent);
 }
 .pcard.vit-morte {
-  background: color-mix(in srgb, var(--text-dim) 20%, var(--surface));
+  background:
+    radial-gradient(ellipse at 70% 30%, rgba(100,130,180,.18) 0%, transparent 60%),
+    color-mix(in srgb, var(--text-dim) 20%, var(--surface));
   border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
   box-shadow: 0 8px 30px #00000047, inset 0 1px 0 #ffffff12;
+}
+
+/* Floating tier emoji watermark in card bg */
+.pcard-lvl-icon {
+  position: absolute; right: -4px; bottom: -6px;
+  font-size: 44px; opacity: .11; line-height: 1; user-select: none;
+  pointer-events: none; z-index: 0;
 }
 
 /* ---------- A card that has left the deck ----------
@@ -1496,6 +1512,39 @@ button:disabled { opacity: .4; cursor: default; }
 .rs-today-copy { color: #fff; min-width: 0; }
 .rs-today-title { display: block; font-family: var(--rs-font-display); font-weight: 800; font-size: 15px; }
 .rs-today-sub { display: block; font-weight: 600; font-size: 12px; opacity: .92; margin-top: 2px; }
+
+/* ---------- Urgent card (fenêtre ouverte) ---------- */
+.rs-urgent-zone { padding: 0 0 10px; }
+.rs-urgent-card {
+  width: 100%; text-align: left; border-radius: 22px; padding: 16px;
+  position: relative; overflow: hidden; display: block;
+  border: 1px solid rgba(61,174,115,.35);
+  margin-bottom: 22px;
+}
+.rs-urgent-card:active { transform: scale(.98); }
+.rs-urgent-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background:
+    radial-gradient(ellipse at 80% 20%, rgba(255,200,60,.18) 0%, transparent 55%),
+    radial-gradient(ellipse at 20% 90%, rgba(61,174,115,.22) 0%, transparent 50%),
+    linear-gradient(145deg, #0e1f18 0%, #0a150f 100%);
+}
+.rs-urgent-top {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 10px; position: relative; z-index: 1;
+}
+.rs-urgent-badge {
+  font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em;
+  background: rgba(61,174,115,.18); color: #3DAE73;
+  border: 0.5px solid rgba(61,174,115,.35); padding: 3px 9px; border-radius: 999px;
+}
+.rs-urgent-timer { font-size: 11px; color: #E6A032; font-weight: 700; }
+.rs-urgent-icon { display: block; margin-bottom: 5px; position: relative; z-index: 1; }
+.rs-urgent-name {
+  font-size: 19px; font-weight: 800; color: #fff; letter-spacing: -.02em;
+  margin-bottom: 12px; position: relative; z-index: 1;
+}
+.rs-urgent-card .pcard-week { position: relative; z-index: 1; }
 
 /* ---------- Cimetière / Terminées links + pages ---------- */
 .rs-more { margin-top: 26px; display: flex; flex-direction: column; gap: 8px; }
