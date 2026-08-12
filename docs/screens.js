@@ -285,6 +285,7 @@ function screenToday() {
       const elapsed = rangeElapsed(habit, check.date);
       timeBand = elapsed < 1 / 3 ? 'green' : elapsed < 2 / 3 ? 'amber' : 'red';
     }
+    const sinceMin = Math.floor((Date.now() - windowOpensAt(habit, check.date).getTime()) / 60000);
 
     const snoozeLine = check.snooze_count
       ? `<p class="ritual-snooze-line">Repoussée ${check.snooze_count} fois aujourd'hui</p>`
@@ -308,6 +309,7 @@ function screenToday() {
           </div>
           <div class="rs-story-head">
             <span class="rs-story-icon" aria-hidden="true">${icon(theme.id, 15)}</span>
+            <span class="rs-story-since">il y a ${sinceMin < 1 ? 'moins d\'1' : sinceMin} min</span>
             <button class="ritual-quit" id="ritual-quit" aria-label="Quitter">${icon('cross', 20)}</button>
           </div>
         </div>
