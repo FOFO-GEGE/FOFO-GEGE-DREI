@@ -706,11 +706,19 @@ function screenHome() {
         if (ring) ring.style.strokeDashoffset = ringOffset.toFixed(2);
       });
 
-      // Mini-card tap → card focus overlay
-      wireCardFocus(host, '.mini-card[data-habit]', store.habits);
-
-      // Carousel swipe + dots
+      // Carousel swipe + dots + card tap
       const carousel = host.querySelector('#deck-carousel');
+
+      // Mini-card tap → card focus (event delegation on carousel)
+      if (carousel) {
+        carousel.addEventListener('click', e => {
+          const card = e.target.closest('.mini-card[data-habit]');
+          if (!card) return;
+          const habit = store.habits.find(h => h.id === card.dataset.habit);
+          if (habit) openCardFocus(habit);
+        });
+      }
+
       if (carousel && totalPages > 1) {
         const track = carousel.querySelector('.deck-carousel-track');
         const dots = carousel.querySelectorAll('.deck-carousel-dots span');
