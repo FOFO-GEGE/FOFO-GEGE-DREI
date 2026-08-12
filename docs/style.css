@@ -822,15 +822,25 @@ button:disabled { opacity: .4; cursor: default; }
 
 /* ---------- Ritual ---------- */
 
+/* Fixed to the viewport rather than sized through the #screen-host/
+   .screen-inner chain — that chain has auto-height links (.screen-inner
+   has no explicit height of its own), so a percentage or min-height here
+   couldn't reliably resolve to "exactly one screen" and the real risk was
+   this ending up a hair taller than the viewport, which handed the extra
+   distance to whichever ancestor still had scroll room. The story is a
+   stack of cards you swap between, never a page you drag — inset:0 pins
+   it to the viewport outright and overflow:hidden makes swapping the
+   only way anything here moves. */
 .ritual {
-  position: relative; min-height: 100vh; display: flex; flex-direction: column;
+  position: fixed; inset: 0; overflow: hidden;
+  display: flex; flex-direction: column;
   padding: calc(16px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
   max-width: 480px; margin: 0 auto;
 }
 /* Column, not a row: the segmented bar is its own thin strip up top,
    habit identity + quit button form their own row right under it —
    stacking them was the missing piece once .rs-story-head existed. */
-.ritual-top { display: flex; flex-direction: column; gap: 10px; }
+.ritual-top { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
 .ritual-quit { color: var(--text-dim); padding: 6px; margin-left: -6px; }
 .ritual-progress { flex: 1; display: flex; gap: 4px; }
 .ritual-progress span { flex: 1; height: 4px; border-radius: 999px; background: var(--surface-2); }
@@ -855,7 +865,7 @@ button:disabled { opacity: .4; cursor: default; }
 .ritual-status.is-frozen { color: var(--frozen); border-color: color-mix(in srgb, var(--frozen) 40%, var(--border)); }
 .ritual-snooze-line { margin-top: 10px; font-size: 12px; color: var(--text-dim); }
 
-.ritual-actions { display: flex; gap: 10px; }
+.ritual-actions { display: flex; gap: 10px; flex-shrink: 0; }
 .ritual-actions.single { flex-direction: column; }
 .ritual-btn {
   flex: 1; display: flex; flex-direction: column; align-items: center; gap: 7px;
