@@ -668,16 +668,24 @@ function screenHome() {
       return `
       <section class="rs-urgent-zone">
         <div class="section-label">À répondre maintenant</div>
-        <button class="rs-urgent-card" id="today-banner" aria-label="Voir Aujourd'hui">
+        <div class="rs-urgent-card">
           <div class="rs-urgent-bg" aria-hidden="true"></div>
-          <div class="rs-urgent-top">
-            <span class="rs-urgent-badge">● Fenêtre ouverte</span>
-            ${left !== null ? `<span class="rs-urgent-timer">→ ${left} min</span>` : ''}
+          <div class="rs-urgent-orb1" aria-hidden="true"></div>
+          <div class="rs-urgent-orb2" aria-hidden="true"></div>
+          <button class="rs-urgent-open" id="today-banner" aria-label="Voir Aujourd'hui">
+            <div class="rs-urgent-top">
+              <span class="rs-urgent-badge">● Fenêtre ouverte</span>
+              ${left !== null ? `<span class="rs-urgent-timer">→ ${left} min</span>` : ''}
+            </div>
+            <span class="rs-urgent-icon" aria-hidden="true">${icon(theme.id, 28)}</span>
+            <div class="rs-urgent-name">${esc(habit.title)}</div>
+            ${storyWeekHTML(habit)}
+          </button>
+          <div class="rs-urgent-actions">
+            <button class="rs-urgent-btn-fait" id="urgent-fait" data-check="${check.id}">${icon('check', 15)} Fait</button>
+            <button class="rs-urgent-btn-pas" id="urgent-pas">${icon('cross', 15)} Pas fait</button>
           </div>
-          <span class="rs-urgent-icon" aria-hidden="true">${icon(theme.id, 28)}</span>
-          <div class="rs-urgent-name">${esc(habit.title)}</div>
-          ${storyWeekHTML(habit)}
-        </button>
+        </div>
       </section>`;
     })() : `
     <button class="rs-today-banner" id="today-banner" aria-label="Voir Aujourd'hui">
@@ -755,6 +763,26 @@ function screenHome() {
 
       const banner = host.querySelector('#today-banner');
       if (banner) banner.addEventListener('click', () => navigate('/today'));
+
+      // Urgent card actions — same writes as the story screen's own verdict
+      // buttons, reached directly from home instead of a detour through
+      // Aujourd'hui. Siblings of the open button, not nested in it, so
+      // there's no click-bubbling to guard against. "Pas fait" still lands
+      // on the story's own reason step rather than duplicating it here:
+      // todayItems() already puts this exact habit first, so /today opens
+      // straight onto it.
+      const urgentFait = host.querySelector('#urgent-fait');
+      if (urgentFait) {
+        urgentFait.addEventListener('click', () => {
+          markCheck(urgentFait.dataset.check, 'success');
+          vibrate(25);
+          fxBurstFrom(urgentFait, { count: 54, speed: 8 });
+          setTimeout(() => navigate('/home'), 640);
+        });
+      }
+      const urgentPas = host.querySelector('#urgent-pas');
+      if (urgentPas) urgentPas.addEventListener('click', () => navigate('/today'));
+
       const obBtn = host.querySelector('#ob-replay');
       if (obBtn) obBtn.addEventListener('click', () => openOnboardingReplay());
 
