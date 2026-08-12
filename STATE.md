@@ -1,6 +1,6 @@
 # MIRROIR — Current State
 
-Dernière mise à jour : 2026-08-11
+Dernière mise à jour : 2026-08-12
 
 ## État général
 
@@ -38,7 +38,28 @@ Aucune à cette date.
 
 ## Dernière évolution
 
-Description : deux dettes techniques comblées en parallèle.
+Description : redesign home + corrections écran story.
+
+1. **Story** — `border-radius: 24px` + `overflow: hidden`, titre texte supprimé
+   du header, countdown positif sans icône (« Il reste X min pour répondre »),
+   bande semaine fixe L M M J V S D (`storyWeekHTML`), « il y a X min » dans
+   le header.
+
+2. **Cartes home** — fonds enrichis par vitalité (radial gradients), emoji
+   palier en filigrane (`.pcard-lvl-icon`).
+
+3. **Widget urgent** — quand une fenêtre de réponse est ouverte, un bloc
+   « À répondre maintenant » (`.rs-urgent-card`) remplace le bandeau today
+   sur l'écran d'accueil, avec badge, timer, bande semaine.
+
+4. **Navigation** — Cimetière et Terminées déplacés sous Historique ;
+   section « Ce que tu n'as pas tenu » supprimée de l'historique.
+
+Fichiers concernés : `docs/style.css`, `docs/screens.js`, `docs/ui.js`.
+
+---
+
+Description précédente : deux dettes techniques comblées en parallèle.
 
 1. **Tests cassés** — `ritual-queue.spec.js`, `answer-window.spec.js`
    et `flow.spec.js` ciblaient l'ancienne architecture par onglets
