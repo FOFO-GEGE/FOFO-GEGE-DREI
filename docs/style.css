@@ -140,14 +140,17 @@
    .pcard media block further down); that's the only thing left that
    repaints for prefers-color-scheme now. */
 
-html, body { height: 100%; }
+/* Fixed app shell: html/body never scroll or bounce — topbar and tabbar
+   (siblings of .screen in #app's grid, see below) are then simply always
+   in view, nothing to keep "stuck" via position tricks. The one thing
+   allowed to move is .screen's own content, on its own scroll axis. */
+html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 body {
   background: var(--rs-bg);
   color: var(--rs-text);
   font-family: var(--rs-font-body), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
-  overflow-x: hidden;
 }
 /* The card is the one thing the reskin doesn't touch — it keeps its original
    dark/neon identity (Inter body copy, Fraunces for its name) no matter what
@@ -190,10 +193,15 @@ button:disabled { opacity: .4; cursor: default; }
 .fx-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 800; }
 
 #app {
-  max-width: 480px; margin: 0 auto; min-height: 100vh;
+  max-width: 480px; margin: 0 auto; height: 100%;
   display: grid; grid-template-rows: auto 1fr auto;
 }
-#app.no-chrome { display: block; }
+/* No #screen-host wrapper in this state (see renderSignedOut in app.js,
+   which mounts straight into #app) — #app itself is the scroll container
+   here instead of .screen. */
+#app.no-chrome {
+  display: block; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
 #app.no-chrome .topbar, #app.no-chrome .tabbar { display: none; }
 
 @keyframes fx-shake-kf {
@@ -226,7 +234,15 @@ button:disabled { opacity: .4; cursor: default; }
 .icon-btn { color: var(--text-dim); font-size: 13px; padding: 6px; display: flex; align-items: center; }
 .icon-btn[hidden] { display: none; }
 
-.screen { overflow-y: auto; overflow-x: hidden; padding: 18px 16px 24px; }
+/* min-height:0 opts this grid item out of the default content-based
+   automatic minimum size — without it a tall screen can force the whole
+   #app grid row to grow past the viewport instead of clipping here, which
+   is what let the page (and topbar/tabbar with it) scroll as one block
+   instead of just this content swiping in place. */
+.screen {
+  overflow-y: auto; overflow-x: hidden; padding: 18px 16px 24px;
+  min-height: 0; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
+}
 .screen-inner { animation: screen-in .34s cubic-bezier(.16,1,.3,1); }
 @keyframes screen-in { from { opacity: 0; transform: translateY(14px) scale(.985); } to { opacity: 1; transform: none; } }
 
