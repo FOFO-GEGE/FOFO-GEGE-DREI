@@ -642,6 +642,21 @@ function screenHome() {
   const streak = store.habits.length ? Math.max(0, ...store.habits.map(h => habitStats(h).streak)) : 0;
   const pendingFirst = items.find(x => x.check.status === 'created');
 
+  // Global vitality widget: average vitalityOf() across active habits (the
+  // app's own health metric, not a plain lifetime kept-rate — reuses
+  // vitalityOf() from store.js rather than recomputing a second score),
+  // today's kept/pending split as ring segments, and the best streak ever
+  // reached (habitStats().best — persisted, not the current one already
+  // shown in the header flame badge).
+  const globalVitality = store.habits.length
+    ? Math.round(store.habits.reduce((sum, h) => sum + vitalityOf(h), 0) / store.habits.length)
+    : null;
+  const bestStreak = store.habits.length ? Math.max(0, ...store.habits.map(h => habitStats(h).best)) : 0;
+  const pendingToday = items.filter(x => x.check.status === 'created').length;
+  const R2 = 28, C2 = 2 * Math.PI * R2;
+  const keptLen = totalToday ? C2 * (keptToday / totalToday) : 0;
+  const pendingLen = totalToday ? C2 * (pendingToday / totalToday) : 0;
+
   // Build today's check lookup for mini-card status
   const checkByHabit = new Map(items.map(x => [x.habit.id, x.check]));
 
@@ -685,6 +700,36 @@ function screenHome() {
         <button class="rs-ob-replay" id="ob-replay" aria-label="Revoir la présentation">✨</button>
       </div>
     </div>
+
+    ${store.habits.length ? `
+    <div class="rs-vital-wrap">
+      <div class="rs-vital-ring">
+        <svg viewBox="0 0 68 68" aria-hidden="true">
+          <circle class="rs-vital-track" cx="34" cy="34" r="${R2}"></circle>
+          ${totalToday ? `
+          <circle class="rs-vital-seg-kept" cx="34" cy="34" r="${R2}"
+            stroke-dasharray="${keptLen.toFixed(2)} ${(C2 - keptLen).toFixed(2)}" stroke-dashoffset="0"></circle>
+          <circle class="rs-vital-seg-wait" cx="34" cy="34" r="${R2}"
+            stroke-dasharray="${pendingLen.toFixed(2)} ${(C2 - pendingLen).toFixed(2)}" stroke-dashoffset="${(-keptLen).toFixed(2)}"></circle>
+          ` : ''}
+        </svg>
+        <div class="rs-vital-ring-txt">${totalToday ? `${keptToday}/${totalToday}` : '—'}</div>
+      </div>
+      <div class="rs-vital-info">
+        <div class="rs-vital-title">Vitalité globale</div>
+        <div class="rs-vital-big">${globalVitality === null ? '—' : globalVitality} <span>/ 100</span></div>
+        <div class="rs-vital-bar-lbl"><span>Globale</span><span>${globalVitality === null ? '—' : globalVitality + '%'}</span></div>
+        <div class="rs-vital-bar-track"><div class="rs-vital-bar-fill" style="width:${globalVitality ?? 0}%"></div></div>
+        <div class="rs-vital-bar-lbl rs-vital-bar-lbl-sm"><span>Aujourd'hui</span><span>${todayPct === null ? '—' : todayPct + '%'}</span></div>
+        <div class="rs-vital-bar-track rs-vital-bar-track-sm"><div class="rs-vital-bar-fill rs-vital-fill-amber" style="width:${todayPct ?? 0}%"></div></div>
+      </div>
+      <div class="rs-vital-divider"></div>
+      <div class="rs-vital-streak">
+        <div class="rs-vital-streak-lbl">Série</div>
+        <div class="rs-vital-streak-val">${bestStreak}j</div>
+        <div class="rs-vital-streak-sub">record</div>
+      </div>
+    </div>` : ''}
 
     ${pendingFirst ? (() => {
       const { habit, check } = pendingFirst;
