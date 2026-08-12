@@ -630,33 +630,6 @@ function screenHome() {
          <button class="btn-primary" data-nav="/new">Créer ma première carte</button>
        </div>`;
 
-  // "Terminées" is not the cemetery: reaching a fixed end date on schedule
-  // is a natural completion, not a death, and doesn't belong in the same
-  // abandoned/neglect framing. Both used to be accordions folded onto this
-  // screen; each now gets a real page of its own (see screenCemetery /
-  // screenFinished below) and this is just a link into it.
-  const buried = store.cemetery.filter(h => h.death_cause !== 'completed');
-  const finished = store.cemetery.filter(h => h.death_cause === 'completed');
-
-  const moreLinks = (buried.length || finished.length)
-    ? `<section class="rs-more">
-         ${buried.length ? `
-         <button class="rs-more-link" data-nav="/cemetery">
-           <span class="section-glyph" aria-hidden="true">🪦</span>
-           <span class="rs-more-link-label">Cimetière</span>
-           <span class="deck-count">${buried.length}</span>
-           ${icon('right', 16)}
-         </button>` : ''}
-         ${finished.length ? `
-         <button class="rs-more-link" data-nav="/finished">
-           <span class="section-glyph" aria-hidden="true">🏆</span>
-           <span class="rs-more-link-label">Terminées</span>
-           <span class="deck-count">${finished.length}</span>
-           ${icon('right', 16)}
-         </button>` : ''}
-       </section>`
-    : '';
-
   const html = `
     <div class="rs-home-head">
       <div>
@@ -685,8 +658,7 @@ function screenHome() {
       </span>
     </button>
 
-    ${cards}
-    ${moreLinks}`;
+    ${cards}`;
 
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
@@ -730,7 +702,7 @@ function screenCemetery() {
        </div>`;
 
   return {
-    title: 'Cimetière', tab: '/home', chrome: true, back: '/home', html,
+    title: 'Cimetière', tab: '/history', chrome: true, back: '/history', html,
     wire(host) {
       fxBindTilt(host);
       wireCardFocus(host, '.cemetery-grid .pcard[data-habit]', buried, { dead: true });
@@ -756,7 +728,7 @@ function screenFinished() {
        </div>`;
 
   return {
-    title: 'Terminées', tab: '/home', chrome: true, back: '/home', html,
+    title: 'Terminées', tab: '/history', chrome: true, back: '/history', html,
     wire(host) {
       fxBindTilt(host);
       wireCardFocus(host, '.finished-grid .pcard[data-habit]', finished, { finished: true });
@@ -1046,7 +1018,6 @@ function screenHistory() {
     if (scopeId !== null && !all.some(h => h.id === scopeId)) scopeId = null;
 
     const summary = periodSummary(periodDays, scopeId);
-    const failures = periodFailures(periodDays, scopeId);
     const insights = buildInsights(periodDays, scopeId);
     const scoped = periodChecks(periodDays, scopeId);
 
@@ -1093,17 +1064,24 @@ function screenHistory() {
          </section>`
       : '';
 
-    const failuresBlock = failures.length
-      ? `<section class="failures">
-           <h4 class="section-label">Ce que tu n'as pas tenu <span class="deck-count">${failures.length}</span></h4>
-           ${failures.map(({ check, habit }) => `
-             <div class="failure-row ${habit.active === false ? 'is-buried' : ''}" data-habit="${habit.id}">
-               ${icon(themeById(habit.theme).id, 18)}
-               <div class="failure-body">
-                 <span class="failure-title">${esc(habit.title)}</span>
-                 <span class="failure-meta">${formatDay(check.date)}${check.reason ? ` · ${esc(reasonLabel(check.reason))}` : check.expired ? ' · sans réponse' : ''}</span>
-               </div>
-             </div>`).join('')}
+    const buried = store.cemetery.filter(h => h.death_cause !== 'completed');
+    const finished = store.cemetery.filter(h => h.death_cause === 'completed');
+    const archiveLinks = (buried.length || finished.length)
+      ? `<section class="rs-more">
+           ${buried.length ? `
+           <button class="rs-more-link" data-nav="/cemetery">
+             <span class="section-glyph" aria-hidden="true">🪦</span>
+             <span class="rs-more-link-label">Cimetière</span>
+             <span class="deck-count">${buried.length}</span>
+             ${icon('right', 16)}
+           </button>` : ''}
+           ${finished.length ? `
+           <button class="rs-more-link" data-nav="/finished">
+             <span class="section-glyph" aria-hidden="true">🏆</span>
+             <span class="rs-more-link-label">Terminées</span>
+             <span class="deck-count">${finished.length}</span>
+             ${icon('right', 16)}
+           </button>` : ''}
          </section>`
       : '';
 
@@ -1121,7 +1099,6 @@ function screenHistory() {
       </div>
       ${timelineBlock}
       ${insightBlock}
-      ${failuresBlock}
       <div class="cal-wrap">
         <h4 class="section-label">Calendrier</h4>
         <div class="month-nav">
@@ -1140,7 +1117,8 @@ function screenHistory() {
         <div class="cal-legend">
           ${CAL_LEGEND.map(l => `<div class="cal-legend-item"><span class="cal-legend-swatch ${l.cls}"></span>${l.label}</div>`).join('')}
         </div>
-      </div>`;
+      </div>
+      ${archiveLinks}`;
 
     if (summary.rate !== null) fxCountUp(host.querySelector('.hist-rate'), summary.rate, { suffix: '%', duration: 900 });
     const cells = host.querySelectorAll('.week-cell .n');
@@ -1173,8 +1151,6 @@ function screenHistory() {
     });
     host.querySelectorAll('.cal-day[data-date]').forEach(el =>
       el.addEventListener('click', () => openDaySheet(el.dataset.date)));
-    host.querySelectorAll('.failure-row[data-habit]').forEach(el =>
-      el.addEventListener('click', () => navigate('/habit/' + el.dataset.habit)));
   }
 
   return { title: 'Historique', tab: '/history', chrome: true, mount };
