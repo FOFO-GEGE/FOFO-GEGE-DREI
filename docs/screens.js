@@ -706,32 +706,36 @@ function screenHome() {
         if (ring) ring.style.strokeDashoffset = ringOffset.toFixed(2);
       });
 
-      // Mini-card tap → detail
-      host.querySelectorAll('.mini-card[data-habit]').forEach(el => {
-        el.addEventListener('click', () => {
-          const h = store.habits.find(x => x.id === el.dataset.habit);
-          if (h) navigate('/detail/' + h.id);
-        });
-      });
+      // Mini-card tap → card focus overlay
+      wireCardFocus(host, '.mini-card[data-habit]', store.habits);
 
-      // Carousel swipe
+      // Carousel swipe + dots
       const carousel = host.querySelector('#deck-carousel');
-      if (carousel) {
+      if (carousel && totalPages > 1) {
         const track = carousel.querySelector('.deck-carousel-track');
         const dots = carousel.querySelectorAll('.deck-carousel-dots span');
-        let page = 0;
-        const maxPage = totalPages - 1;
+        let cur = 0;
+        const last = totalPages - 1;
         const goTo = (p) => {
-          page = Math.max(0, Math.min(maxPage, p));
-          track.style.transform = `translateX(-${page * 100}%)`;
-          dots.forEach((d, i) => d.classList.toggle('is-on', i === page));
+          cur = Math.max(0, Math.min(last, p));
+          track.style.transform = `translateX(-${cur * 100}%)`;
+          dots.forEach((d, i) => d.classList.toggle('is-on', i === cur));
         };
         dots.forEach(d => d.addEventListener('click', () => goTo(+d.dataset.page)));
-        // Touch swipe
-        let sx = 0, dx = 0;
-        carousel.addEventListener('touchstart', e => { sx = e.touches[0].clientX; dx = 0; }, { passive: true });
-        carousel.addEventListener('touchmove', e => { dx = e.touches[0].clientX - sx; }, { passive: true });
-        carousel.addEventListener('touchend', () => { if (Math.abs(dx) > 40) goTo(page + (dx < 0 ? 1 : -1)); });
+        let sx = 0, sy = 0, dx = 0, dy = 0, swiping = false;
+        carousel.addEventListener('touchstart', e => {
+          sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+          dx = 0; dy = 0; swiping = false;
+        }, { passive: true });
+        carousel.addEventListener('touchmove', e => {
+          dx = e.touches[0].clientX - sx;
+          dy = e.touches[0].clientY - sy;
+          if (!swiping && Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) swiping = true;
+          if (swiping) e.preventDefault();
+        }, { passive: false });
+        carousel.addEventListener('touchend', () => {
+          if (swiping && Math.abs(dx) > 40) goTo(cur + (dx < 0 ? 1 : -1));
+        });
       }
 
       const banner = host.querySelector('#today-banner');

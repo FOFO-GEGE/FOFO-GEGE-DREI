@@ -665,14 +665,15 @@ button:disabled { opacity: .4; cursor: default; }
 }
 
 /* ---------- Deck carousel ---------- */
-.deck-carousel { position: relative; overflow: hidden; }
+.deck-carousel { position: relative; overflow: hidden; width: 100%; }
 .deck-carousel-track {
   display: flex; transition: transform .35s cubic-bezier(.16,1,.3,1);
+  will-change: transform;
 }
 .deck-carousel-page {
-  min-width: 100%; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
-  padding: 0 2px;
-  flex-shrink: 0;
+  flex: 0 0 100%;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px;
+  box-sizing: border-box;
 }
 .deck-carousel-dots {
   display: flex; justify-content: center; gap: 6px; margin-top: 12px;
