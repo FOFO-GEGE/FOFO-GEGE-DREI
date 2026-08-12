@@ -689,6 +689,34 @@ function screenHome() {
          <button class="btn-primary" data-nav="/new">Créer ma première carte</button>
        </div>`;
 
+  // Quest carousel: THEMES[].suggestions (ui.js) minus titles already taken
+  // by a live habit, so a suggestion vanishes once adopted instead of
+  // dangling as a duplicate offer. Same source the creation flow's own
+  // suggestion chips already read from — nothing new to maintain here.
+  const ownTitles = new Set(store.habits.map(h => h.title.trim().toLowerCase()));
+  const quests = THEMES.flatMap(th =>
+    th.suggestions
+      .filter(title => !ownTitles.has(title.trim().toLowerCase()))
+      .map(title => ({ title, theme: th }))
+  );
+  const questPave = quests.length
+    ? `<section class="rs-quest-section">
+         <h4 class="section-label">Quêtes suggérées</h4>
+         <div class="rs-quest-pave" id="quest-pave">
+           ${quests.map((q, i) => `
+             <div class="rs-quest-slide ${i === 0 ? 'is-active' : ''}" data-quest-slide>
+               <span class="rs-quest-emoji" aria-hidden="true">${icon(q.theme.id, 26)}</span>
+               <div class="rs-quest-text">
+                 <div class="rs-quest-name">${esc(q.title)}</div>
+                 <div class="rs-quest-desc">${esc(q.theme.label)}</div>
+               </div>
+               <span class="rs-quest-tag" style="background:hsla(${q.theme.hue},70%,50%,.15);color:hsl(${q.theme.hue},70%,60%)">${esc(q.theme.label)}</span>
+               <button class="rs-quest-btn" data-quest-add="${i}" aria-label="Ajouter « ${esc(q.title)} »">+</button>
+             </div>`).join('')}
+         </div>
+       </section>`
+    : '';
+
   const html = `
     <div class="rs-home-head">
       <div>
@@ -774,7 +802,9 @@ function screenHome() {
       </span>
     </button>`}
 
-    ${cards}`;
+    ${cards}
+
+    ${questPave}`;
 
   return {
     title: 'Mon miroir', tab: '/home', chrome: true, html,
@@ -855,6 +885,36 @@ function screenHome() {
 
       const obBtn = host.querySelector('#ob-replay');
       if (obBtn) obBtn.addEventListener('click', () => openOnboardingReplay());
+
+      // Quest carousel: one slide at a time, auto-advance. No router-level
+      // unmount hook exists to key off, so the interval checks the slide
+      // is still attached to the document on every tick and clears itself
+      // the first time it isn't — self-contained, nothing added to the
+      // shared navigate()/paint() path for a single screen's own timer.
+      const pave = host.querySelector('#quest-pave');
+      if (pave) {
+        const slides = pave.querySelectorAll('[data-quest-slide]');
+        if (slides.length > 1) {
+          let qCur = 0;
+          const qTimer = setInterval(() => {
+            if (!pave.isConnected) { clearInterval(qTimer); return; }
+            const prev = qCur;
+            slides[prev].classList.remove('is-active');
+            slides[prev].classList.add('is-exit');
+            setTimeout(() => slides[prev].classList.remove('is-exit'), 600);
+            qCur = (qCur + 1) % slides.length;
+            slides[qCur].classList.add('is-active');
+          }, 2800);
+        }
+        pave.addEventListener('click', e => {
+          const btn = e.target.closest('[data-quest-add]');
+          if (!btn) return;
+          const q = quests[+btn.dataset.questAdd];
+          if (!q) return;
+          questPrefill = { title: q.title, theme: q.theme.id };
+          navigate('/new');
+        });
+      }
 
       celebrateTierUps(host);
     },
@@ -964,11 +1024,18 @@ const WINDOW_PRESETS = [
   { minutes: 480, label: '8 h' },
 ];
 
+// Set right before navigate('/new') by the quest carousel's + button, read
+// once at mount and cleared — a lighter way to seed the creation draft than
+// threading a param through the hash router for a single-use, same-session
+// handoff.
+let questPrefill = null;
+
 function screenNewHabit() {
   const draft = {
-    title: '', theme: '', type: 'daily', frequency: 3,
+    title: questPrefill?.title || '', theme: questPrefill?.theme || '', type: 'daily', frequency: 3,
     target_days: new Set([1, 2, 3, 4, 5, 6, 0]), reminder_time: '20:00', window_minutes: 60, end_date: '',
   };
+  questPrefill = null;
   let step = 0;
   const STEPS = 3;
 
